@@ -629,6 +629,102 @@ function LowPartition({
   )
 }
 
+const SKY_GLASS = '#c8e4f5'
+const FRAME = WOOD_DARK
+
+/** Modern office window — warm wood frame + soft daylight glass. */
+function ExteriorWindow({
+  position,
+  rotY = 0,
+  width = 1.35,
+  height = 1.05,
+}: {
+  position: [number, number, number]
+  rotY?: number
+  width?: number
+  height?: number
+}) {
+  const paneW = width - 0.12
+  const paneH = height - 0.12
+  return (
+    <group position={position} rotation={[0, rotY, 0]}>
+      {/* Outer frame */}
+      <mesh>
+        <boxGeometry args={[width, height, 0.08]} />
+        <meshStandardMaterial color={FRAME} {...SOFT} />
+      </mesh>
+      {/* Inner reveal */}
+      <mesh position={[0, 0, 0.02]}>
+        <boxGeometry args={[paneW + 0.04, paneH + 0.04, 0.04]} />
+        <meshStandardMaterial color={WOOD} {...SOFT} />
+      </mesh>
+      {/* Sky-tinted glass with soft daylight emissive */}
+      <mesh position={[0, 0, 0.05]}>
+        <boxGeometry args={[paneW, paneH, 0.03]} />
+        <meshStandardMaterial
+          color={SKY_GLASS}
+          emissive="#b8dcf0"
+          emissiveIntensity={0.35}
+          transparent
+          opacity={0.72}
+          roughness={0.18}
+          metalness={0.05}
+          depthWrite={false}
+        />
+      </mesh>
+      {/* Mullion cross */}
+      <mesh position={[0, 0, 0.065]}>
+        <boxGeometry args={[0.04, paneH, 0.02]} />
+        <FlatMat color={FRAME} />
+      </mesh>
+      <mesh position={[0, 0, 0.065]}>
+        <boxGeometry args={[paneW, 0.04, 0.02]} />
+        <FlatMat color={FRAME} />
+      </mesh>
+      {/* Soft sill */}
+      <mesh position={[0, -height / 2 - 0.03, 0.04]}>
+        <boxGeometry args={[width + 0.08, 0.05, 0.12]} />
+        <meshStandardMaterial color={DESK_TOP} {...SOFT} />
+      </mesh>
+    </group>
+  )
+}
+
+/** Slim interior glass panel between corridor and rooms. */
+function InteriorGlass({
+  position,
+  rotY = 0,
+  width = 1.1,
+  height = 1.2,
+}: {
+  position: [number, number, number]
+  rotY?: number
+  width?: number
+  height?: number
+}) {
+  return (
+    <group position={position} rotation={[0, rotY, 0]}>
+      <mesh position={[0, 0, 0]}>
+        <boxGeometry args={[width, height, 0.04]} />
+        <meshStandardMaterial color={FRAME} {...SOFT} />
+      </mesh>
+      <mesh position={[0, 0, 0.02]}>
+        <boxGeometry args={[width - 0.1, height - 0.1, 0.025]} />
+        <meshStandardMaterial
+          color={GLASS}
+          emissive="#dff0f8"
+          emissiveIntensity={0.18}
+          transparent
+          opacity={0.4}
+          roughness={0.2}
+          metalness={0.12}
+          depthWrite={false}
+        />
+      </mesh>
+    </group>
+  )
+}
+
 /** Count badge + soft pulse ring when Direzione has pending decisions. */
 function DecisionHotspotBadge({
   position,
@@ -958,6 +1054,7 @@ function OfficeBuilding({
         <meshStandardMaterial color="#e8dcc8" {...MATTE} />
       </mesh>
 
+      {/* Exterior walls */}
       <mesh position={[0, 1.05, -5.2]}>
         <boxGeometry args={[12.2, 2.1, 0.1]} />
         <meshStandardMaterial color={CREAM} {...SOFT} />
@@ -974,6 +1071,30 @@ function OfficeBuilding({
         <boxGeometry args={[12.2, 2.1, 0.08]} />
         <meshStandardMaterial color={BLUSH_WALL} {...SOFT} />
       </mesh>
+
+      {/* Exterior windows — soft daylight (camera sees +X/+Z corner) */}
+      {/* Back wall (−Z) */}
+      <ExteriorWindow position={[-3.6, 1.15, -5.12]} width={1.5} height={1.1} />
+      <ExteriorWindow position={[-1.2, 1.15, -5.12]} width={1.5} height={1.1} />
+      <ExteriorWindow position={[1.2, 1.15, -5.12]} width={1.5} height={1.1} />
+      <ExteriorWindow position={[3.6, 1.15, -5.12]} width={1.5} height={1.1} />
+      {/* Left wall (−X) facing Media / Commerce */}
+      <ExteriorWindow position={[-5.97, 1.15, -3.0]} rotY={Math.PI / 2} width={1.45} height={1.1} />
+      <ExteriorWindow position={[-5.97, 1.15, -0.2]} rotY={Math.PI / 2} width={1.45} height={1.1} />
+      <ExteriorWindow position={[-5.97, 1.15, 2.6]} rotY={Math.PI / 2} width={1.45} height={1.1} />
+      {/* Right wall (+X) facing SEO / Leads — most visible from fixed cam */}
+      <ExteriorWindow position={[5.97, 1.15, -3.0]} rotY={-Math.PI / 2} width={1.45} height={1.1} />
+      <ExteriorWindow position={[5.97, 1.15, -0.2]} rotY={-Math.PI / 2} width={1.45} height={1.1} />
+      <ExteriorWindow position={[5.97, 1.15, 2.6]} rotY={-Math.PI / 2} width={1.45} height={1.1} />
+      {/* Front wall (+Z) near Leadership */}
+      <ExteriorWindow position={[-2.4, 1.15, 5.12]} rotY={Math.PI} width={1.55} height={1.05} />
+      <ExteriorWindow position={[2.4, 1.15, 5.12]} rotY={Math.PI} width={1.55} height={1.05} />
+
+      {/* Soft interior glass toward corridor (reads between rooms) */}
+      <InteriorGlass position={[-1.55, 1.0, 0.35]} rotY={Math.PI / 2} width={1.4} height={1.25} />
+      <InteriorGlass position={[1.55, 1.0, 0.35]} rotY={Math.PI / 2} width={1.4} height={1.25} />
+      <InteriorGlass position={[-1.55, 1.0, -2.6]} rotY={Math.PI / 2} width={1.2} height={1.2} />
+      <InteriorGlass position={[1.55, 1.0, -2.6]} rotY={Math.PI / 2} width={1.2} height={1.2} />
 
       {/* Corridor props */}
       <Plant position={[0, 0, 1.7]} scale={1.05} />
