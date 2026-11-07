@@ -151,8 +151,8 @@ def run(
                 "channel": "seo",
                 "entity_type": "change_set",
                 "entity_id": change_set["id"],
-                "entity_name": f"{len(changes)} page change(s)",
-                "reason": f"SEO audit found issues on {len(changes)} URL(s)",
+                "entity_name": f"{len(changes)} pagine",
+                "reason": f"L’audit SEO ha trovato problemi su {len(changes)} URL",
                 "requires_approval": True,
                 "change_set": change_set,
             }

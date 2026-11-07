@@ -65,7 +65,7 @@ def test_job_specs_and_cli(tmp_path, monkeypatch, capsys):
     code = cli(["--job", "spend_daily", "--tenant", "demo"])
     assert code == 0
     out = capsys.readouterr().out
-    assert "spend_google" in out or "Google:" in out
+    assert "proposte" in out or "Approva" in out or "Google" in out
     assert "job=spend_daily" in out
 
     audit = (tmp_path / "demo" / "audit.jsonl").read_text(encoding="utf-8")

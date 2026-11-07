@@ -109,7 +109,11 @@ def skills_runner_node(state: AgentState) -> dict:
     timeline.done(
         run_id,
         "reporting",
-        f"{report.get('proposal_count', 0)} proposta/e nel report",
+        (
+            f"{report.get('proposal_count', 0)} proposte nel report"
+            if (report.get("proposal_count") or 0) != 1
+            else "1 proposta nel report"
+        ),
     )
 
     write_json_artifact(settings.monny_data_dir, tenant.tenant_id, "last_report.json", report)

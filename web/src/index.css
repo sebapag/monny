@@ -489,15 +489,163 @@ a {
   background: var(--tint-yellow-bold);
   color: var(--charcoal);
   animation: rise 360ms ease both;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
 }
 
 .approval-banner.pulse {
   box-shadow: 0 0 0 3px rgba(245, 215, 94, 0.35);
 }
 
-.approval-banner a {
+.approval-banner a,
+.banner-link {
   font-weight: 700;
   color: var(--brand-navy);
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.approval-primary {
+  border: 1px solid #e8d48a;
+  border-radius: var(--radius-lg);
+  padding: 0.85rem 0.9rem;
+  background: linear-gradient(180deg, var(--tint-yellow) 0%, var(--canvas) 55%);
+  margin-bottom: 0.75rem;
+}
+
+.approval-secondary {
+  opacity: 0.92;
+}
+
+.approval-next {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--steel);
+  margin-bottom: 0.35rem;
+}
+
+.approval-title {
+  display: block;
+  font-size: 0.98rem;
+  color: var(--brand-navy);
+  margin-bottom: 0.25rem;
+}
+
+.approval-reason {
+  margin: 0 0 0.55rem;
+  color: var(--slate);
+  font-size: 0.9rem;
+}
+
+.approval-explain {
+  display: grid;
+  gap: 0.55rem;
+  margin-bottom: 0.55rem;
+}
+
+.approval-explain p {
+  margin: 0.15rem 0 0;
+  font-size: 0.88rem;
+  color: var(--charcoal);
+}
+
+.approval-details {
+  margin: 0.35rem 0 0.15rem;
+  font-size: 0.82rem;
+  color: var(--slate);
+}
+
+.approval-details summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--steel);
+}
+
+.approval-details ul {
+  margin: 0.35rem 0 0;
+  padding-left: 1.1rem;
+}
+
+.approval-rest {
+  margin-top: 0.35rem;
+  padding-top: 0.35rem;
+  border-top: 1px solid var(--hairline);
+}
+
+/* —— First-run coach —— */
+.coach {
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-lg);
+  background: var(--surface-soft);
+  padding: 0.95rem 1rem;
+  margin-bottom: 0.85rem;
+}
+
+.coach h3 {
+  margin: 0 0 0.7rem;
+  font-size: 0.95rem;
+  color: var(--brand-navy);
+}
+
+.coach-steps {
+  margin: 0 0 0.9rem;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.55rem;
+}
+
+.coach-steps li {
+  display: grid;
+  gap: 0.1rem;
+  padding: 0.55rem 0.65rem;
+  border-radius: var(--radius-md);
+  background: var(--canvas);
+  border: 1px solid var(--hairline);
+}
+
+.coach-steps strong {
+  color: var(--brand-navy);
+  font-size: 0.9rem;
+}
+
+.coach-steps span {
+  color: var(--slate);
+  font-size: 0.84rem;
+}
+
+.coach-cta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.field-help {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--steel);
+  line-height: 1.35;
+}
+
+.secret-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.45rem 0.55rem;
+  border-radius: var(--radius-md);
+  background: var(--surface-soft);
+  border: 1px solid var(--hairline);
+  font-size: 0.88rem;
 }
 
 /* —— Skill rail (star of Agent UX) —— */

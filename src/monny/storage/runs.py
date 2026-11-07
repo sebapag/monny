@@ -221,7 +221,11 @@ class RunStore:
             if step:
                 step.status = "waiting" if approval_count else "done"
                 step.detail = (
-                    f"{approval_count} proposta/e in attesa della tua decisione"
+                    (
+                        f"{approval_count} proposte in attesa della tua decisione"
+                        if approval_count != 1
+                        else "1 proposta in attesa della tua decisione"
+                    )
                     if approval_count
                     else "Nessuna azione da approvare"
                 )

@@ -46,18 +46,18 @@ def hitl_node(state: AgentState) -> dict:
         {"approval_ids": approval_ids, "count": len(approval_ids), "run_id": run_id},
     )
 
-    if approval_ids:
-        reply_extra = (
-            f"\n\n{len(approval_ids)} proposta/e in attesa della tua decisione "
-            f"(ids: {', '.join(approval_ids[:3])}{'…' if len(approval_ids) > 3 else ''})."
-        )
-        status = "awaiting_approval"
-    else:
-        reply_extra = "\n\nNessuna azione da approvare."
-        status = "completed"
-
     report = state.get("report") or {}
-    reply = (report.get("markdown") or "Fatto.") + reply_extra
+    n = len(approval_ids)
+    if approval_ids:
+        status = "awaiting_approval"
+        label = "proposta" if n == 1 else "proposte"
+        reply = (
+            f"Ho preparato {n} {label} da revisionare. "
+            "Apri il pannello Approvazioni e scegli Approva o Rifiuta."
+        )
+    else:
+        status = "completed"
+        reply = "Analisi completata. Non ci sono azioni da approvare al momento."
 
     if run_id:
         runs = get_run_store(settings.monny_data_dir)

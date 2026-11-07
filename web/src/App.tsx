@@ -19,6 +19,14 @@ import {
   putTenant,
   startRun,
 } from './api'
+import {
+  friendlyAgentReply,
+  friendlyDecideNote,
+  friendlySkillDetail,
+  plainApproval,
+  runHasUserTurns,
+  skillLabel,
+} from './labels'
 import './index.css'
 
 type View = 'agent' | 'admin'
@@ -28,6 +36,7 @@ type Msg = {
   report?: Report | null
   timeline?: TimelineStep[]
   runStatus?: string
+  coach?: boolean
 }
 
 const TENANT_KEY = 'monny.tenantId'
@@ -58,7 +67,7 @@ function SkillRail({
         <div className="skill-rail-head">
           <span className="skill-pulse" aria-hidden />
           <div>
-            <strong>{active?.label ?? 'Monny'}</strong>
+            <strong>{active?.label ?? skillLabel(active?.skill || 'planner')}</strong>
             <p>{run.status_line}</p>
           </div>
         </div>
@@ -71,8 +80,8 @@ function SkillRail({
           >
             <span className="skill-dot" aria-hidden />
             <div>
-              <strong>{step.label}</strong>
-              <span>{step.detail}</span>
+              <strong>{step.label || skillLabel(step.skill)}</strong>
+              <span>{friendlySkillDetail(step.skill, step.detail)}</span>
             </div>
           </li>
         ))}
@@ -81,44 +90,145 @@ function SkillRail({
   )
 }
 
+function CoachCard({ onPick }: { onPick: (draft: string) => void }) {
+  return (
+    <div className="coach" data-testid="first-run-coach">
+      <h3>Come funziona (3 passi)</h3>
+      <ol className="coach-steps">
+        <li>
+          <strong>Scegli un’azione</strong>
+          <span>Usa i pulsanti sotto o scrivi cosa vuoi controllare.</span>
+        </li>
+        <li>
+          <strong>Guarda le skill</strong>
+          <span>Monny ti mostra in tempo reale cosa sta facendo.</span>
+        </li>
+        <li>
+          <strong>Approva o rifiuta</strong>
+          <span>Niente parte senza di te: ogni proposta aspetta la tua ok.</span>
+        </li>
+      </ol>
+      <div className="coach-cta">
+        <button
+          type="button"
+          className="btn btn-primary"
+          onClick={() => onPick('report spend ultimi 7 giorni')}
+        >
+          Controlla le ads
+        </button>
+        <button
+          type="button"
+          className="btn btn-ghost"
+          onClick={() => onPick('seo audit of priority pages')}
+        >
+          Controlla SEO
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function ApprovalCard({
+  approval,
+  primary,
+  onDecide,
+}: {
+  approval: Approval
+  primary?: boolean
+  onDecide: (id: string, decision: 'approved' | 'rejected') => void
+}) {
+  const plain = plainApproval(approval)
+  return (
+    <div
+      className={`approval ${primary ? 'approval-primary' : 'approval-secondary'}`}
+      id={primary ? 'first-approval' : undefined}
+    >
+      {primary && <div className="approval-next">Prossimo passo</div>}
+      <div>
+        <strong className="approval-title">{plain.title}</strong>
+        <p className="approval-reason">{plain.reasonLine}</p>
+        {primary && (
+          <div className="approval-explain">
+            <div>
+              <span className="muted">Perché</span>
+              <p>{plain.why}</p>
+            </div>
+            <div>
+              <span className="muted">Cosa succede se Approvi</span>
+              <p>{plain.ifApprove}</p>
+            </div>
+          </div>
+        )}
+        {plain.details.length > 0 && (
+          <details className="approval-details">
+            <summary>Dettagli</summary>
+            <ul>
+              {plain.details.map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+            </ul>
+          </details>
+        )}
+      </div>
+      <div className="approval-actions">
+        <button
+          className="btn btn-ok"
+          onClick={() => onDecide(approval.id, 'approved')}
+        >
+          Approva
+        </button>
+        <button
+          className="btn btn-danger"
+          onClick={() => onDecide(approval.id, 'rejected')}
+        >
+          Rifiuta
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function SpendPanel({ channels }: { channels: SpendDiagnosis[] }) {
   if (!channels.length) return null
   return (
     <div className="report-block">
-      <h3>Spend diagnosis</h3>
+      <h3>Riepilogo ads</h3>
       {channels.map((ch) => (
         <div key={ch.channel} className="channel-block">
           <div className="channel-head">
-            <strong>{ch.channel}</strong>
+            <strong>{ch.channel === 'google' ? 'Google Ads' : ch.channel === 'meta' ? 'Meta Ads' : ch.channel}</strong>
             <span>
-              €{ch.totals.spend} spend · €{ch.totals.waste_spend} waste (
+              Spesa €{ch.totals.spend} · poco efficace €{ch.totals.waste_spend} (
               {ch.totals.waste_spend_pct}%)
             </span>
           </div>
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Campaign</th>
-                <th>ROAS</th>
-                <th>CPA</th>
-                <th>Spend</th>
-                <th>Conv.</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {ch.campaigns.map((c) => (
-                <tr key={`${ch.channel}-${c.id}`} className={c.flags?.length ? 'row-warn' : ''}>
-                  <td>{c.name}</td>
-                  <td>{c.roas}</td>
-                  <td>{c.cpa}</td>
-                  <td>€{c.spend}</td>
-                  <td>{c.conversions}</td>
-                  <td>{c.flags?.length ? c.flags.join(', ') : 'ok'}</td>
+          <details className="approval-details">
+            <summary>Dettagli campagne</summary>
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Campagna</th>
+                  <th>ROAS</th>
+                  <th>CPA</th>
+                  <th>Spesa</th>
+                  <th>Conv.</th>
+                  <th></th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {ch.campaigns.map((c) => (
+                  <tr key={`${ch.channel}-${c.id}`} className={c.flags?.length ? 'row-warn' : ''}>
+                    <td>{c.name}</td>
+                    <td>{c.roas}</td>
+                    <td>{c.cpa}</td>
+                    <td>€{c.spend}</td>
+                    <td>{c.conversions}</td>
+                    <td>{c.flags?.length ? c.flags.join(', ') : 'ok'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </details>
         </div>
       ))}
     </div>
@@ -129,13 +239,13 @@ function SeoPanel({ changes }: { changes: SeoChange[] }) {
   if (!changes.length) return null
   return (
     <div className="report-block">
-      <h3>SEO change set</h3>
+      <h3>Suggerimenti SEO</h3>
       {changes.map((change) => (
         <div key={change.url} className="seo-change">
           <div className="seo-url">{change.url}</div>
           <div className="seo-diff">
             <div>
-              <span className="muted">title</span>
+              <span className="muted">titolo</span>
               <div className="before">{change.before.title || '(vuoto)'}</div>
               <div className="after">{change.after.title}</div>
             </div>
@@ -156,6 +266,10 @@ function SeoPanel({ changes }: { changes: SeoChange[] }) {
   )
 }
 
+function FieldHelp({ children }: { children: string }) {
+  return <p className="field-help">{children}</p>
+}
+
 function AdminForm({
   detail,
   onSave,
@@ -171,26 +285,31 @@ function AdminForm({
   const set = <K extends keyof TenantConfig>(key: K, value: TenantConfig[K]) =>
     setCfg((c) => ({ ...c, [key]: value }))
 
+  const secretStatus = (ref: string) =>
+    detail.secrets.find((s) => s.secret_ref === ref)?.configured
+
   return (
     <div className="form-grid">
       <div className="field">
-        <label>Nome visualizzato</label>
+        <label>Nome del negozio</label>
         <input
           value={cfg.display_name}
           onChange={(e) => set('display_name', e.target.value)}
         />
+        <FieldHelp>Come compare Monny nell’header e nei report.</FieldHelp>
       </div>
 
-      <div className="section-title">Shopify</div>
+      <div className="section-title">Negozio Shopify</div>
       <div className="field-row">
         <div className="field">
-          <label>Dominio shop</label>
+          <label>Dominio negozio</label>
           <input
             value={cfg.shopify.shop_domain}
             onChange={(e) =>
               set('shopify', { ...cfg.shopify, shop_domain: e.target.value })
             }
           />
+          <FieldHelp>Es. mio-negozio.myshopify.com</FieldHelp>
         </div>
         <div className="field">
           <label>Versione API</label>
@@ -200,121 +319,89 @@ function AdminForm({
               set('shopify', { ...cfg.shopify, api_version: e.target.value })
             }
           />
-        </div>
-        <div className="field">
-          <label>Token secret_ref</label>
-          <input
-            value={cfg.shopify.auth.secret_ref}
-            onChange={(e) =>
-              set('shopify', {
-                ...cfg.shopify,
-                auth: { secret_ref: e.target.value },
-              })
-            }
-          />
+          <FieldHelp>Lascia il default se non sei sicuro.</FieldHelp>
         </div>
       </div>
-
-      <div className="section-title">Google Ads</div>
-      <div className="field-row">
-        <div className="field">
-          <label>Customer ID</label>
-          <input
-            value={cfg.ads.google?.customer_id ?? ''}
-            onChange={(e) =>
-              set('ads', {
-                ...cfg.ads,
-                google: {
-                  customer_id: e.target.value,
-                  login_customer_id: cfg.ads.google?.login_customer_id ?? null,
-                  secret_ref: cfg.ads.google?.secret_ref ?? 'GOOGLE_ADS_DEMO',
-                },
-              })
-            }
-          />
-        </div>
-        <div className="field">
-          <label>secret_ref</label>
-          <input
-            value={cfg.ads.google?.secret_ref ?? ''}
-            onChange={(e) =>
-              set('ads', {
-                ...cfg.ads,
-                google: {
-                  customer_id: cfg.ads.google?.customer_id ?? '',
-                  login_customer_id: cfg.ads.google?.login_customer_id ?? null,
-                  secret_ref: e.target.value,
-                },
-              })
-            }
-          />
-        </div>
+      <div className="secret-status-row">
+        <span>Accesso Shopify</span>
+        <span className={`pill ${secretStatus(cfg.shopify.auth.secret_ref) ? 'ok' : 'miss'}`}>
+          {secretStatus(cfg.shopify.auth.secret_ref) ? 'Configurato' : 'Mancante'}
+        </span>
       </div>
 
-      <div className="section-title">Meta Ads</div>
-      <div className="field-row">
-        <div className="field">
-          <label>Ad account ID</label>
-          <input
-            value={cfg.ads.meta?.ad_account_id ?? ''}
-            onChange={(e) =>
-              set('ads', {
-                ...cfg.ads,
-                meta: {
-                  ad_account_id: e.target.value,
-                  secret_ref: cfg.ads.meta?.secret_ref ?? 'META_ADS_DEMO',
-                },
-              })
-            }
-          />
-        </div>
-        <div className="field">
-          <label>secret_ref</label>
-          <input
-            value={cfg.ads.meta?.secret_ref ?? ''}
-            onChange={(e) =>
-              set('ads', {
-                ...cfg.ads,
-                meta: {
-                  ad_account_id: cfg.ads.meta?.ad_account_id ?? '',
-                  secret_ref: e.target.value,
-                },
-              })
-            }
-          />
-        </div>
+      <div className="section-title">Account Google Ads</div>
+      <div className="field">
+        <label>ID cliente Google Ads</label>
+        <input
+          value={cfg.ads.google?.customer_id ?? ''}
+          onChange={(e) =>
+            set('ads', {
+              ...cfg.ads,
+              google: {
+                customer_id: e.target.value,
+                login_customer_id: cfg.ads.google?.login_customer_id ?? null,
+                secret_ref: cfg.ads.google?.secret_ref ?? 'GOOGLE_ADS_DEMO',
+              },
+            })
+          }
+        />
+        <FieldHelp>Il numero account che vedi in Google Ads.</FieldHelp>
+      </div>
+      <div className="secret-status-row">
+        <span>Credenziali Google Ads</span>
+        <span
+          className={`pill ${secretStatus(cfg.ads.google?.secret_ref || '') ? 'ok' : 'miss'}`}
+        >
+          {secretStatus(cfg.ads.google?.secret_ref || '') ? 'Configurato' : 'Mancante'}
+        </span>
       </div>
 
-      <div className="section-title">Sito / SEO</div>
+      <div className="section-title">Account Meta Ads</div>
+      <div className="field">
+        <label>ID account pubblicitario</label>
+        <input
+          value={cfg.ads.meta?.ad_account_id ?? ''}
+          onChange={(e) =>
+            set('ads', {
+              ...cfg.ads,
+              meta: {
+                ad_account_id: e.target.value,
+                secret_ref: cfg.ads.meta?.secret_ref ?? 'META_ADS_DEMO',
+              },
+            })
+          }
+        />
+        <FieldHelp>Di solito inizia con act_…</FieldHelp>
+      </div>
+      <div className="secret-status-row">
+        <span>Credenziali Meta</span>
+        <span
+          className={`pill ${secretStatus(cfg.ads.meta?.secret_ref || '') ? 'ok' : 'miss'}`}
+        >
+          {secretStatus(cfg.ads.meta?.secret_ref || '') ? 'Configurato' : 'Mancante'}
+        </span>
+      </div>
+
+      <div className="section-title">Sito e SEO</div>
       <div className="field-row">
         <div className="field">
-          <label>URL base</label>
+          <label>Indirizzo del sito</label>
           <input
             value={cfg.site.base_url}
             onChange={(e) => set('site', { ...cfg.site, base_url: e.target.value })}
           />
+          <FieldHelp>URL pubblico del tuo e-commerce.</FieldHelp>
         </div>
         <div className="field">
-          <label>URL sitemap</label>
+          <label>Sitemap (opzionale)</label>
           <input
             value={cfg.site.sitemap_url ?? ''}
             onChange={(e) => set('site', { ...cfg.site, sitemap_url: e.target.value })}
           />
         </div>
-        <div className="field">
-          <label>Adapter CMS</label>
-          <select
-            value={cfg.site.cms_adapter}
-            onChange={(e) => set('site', { ...cfg.site, cms_adapter: e.target.value })}
-          >
-            <option value="shopify_online_store">shopify_online_store</option>
-            <option value="generic_http">generic_http</option>
-            <option value="git_content">git_content</option>
-          </select>
-        </div>
       </div>
       <div className="field">
-        <label>URL prioritarie (una per riga)</label>
+        <label>Pagine da controllare per prime (una per riga)</label>
         <textarea
           rows={4}
           value={(cfg.site.priority_urls ?? []).join('\n')}
@@ -328,9 +415,10 @@ function AdminForm({
             })
           }
         />
+        <FieldHelp>Home, collezioni e landing più importanti.</FieldHelp>
       </div>
 
-      <div className="section-title">Policy / HITL</div>
+      <div className="section-title">Regole di sicurezza</div>
       <label className="check-row">
         <input
           type="checkbox"
@@ -339,11 +427,11 @@ function AdminForm({
             set('policy', { ...cfg.policy, hitl_default: e.target.checked })
           }
         />
-        Propose-then-approve di default
+        Chiedi sempre conferma prima di applicare cambiamenti
       </label>
       <div className="field-row">
         <div className="field">
-          <label>ROAS minimo</label>
+          <label>ROAS minimo accettabile</label>
           <input
             type="number"
             step="0.1"
@@ -361,9 +449,10 @@ function AdminForm({
               })
             }
           />
+          <FieldHelp>Sotto questa soglia Monny propone un intervento.</FieldHelp>
         </div>
         <div className="field">
-          <label>CPA massimo</label>
+          <label>CPA massimo accettabile</label>
           <input
             type="number"
             step="0.1"
@@ -383,7 +472,7 @@ function AdminForm({
           />
         </div>
         <div className="field">
-          <label>Delta budget max %</label>
+          <label>Taglio budget max %</label>
           <input
             type="number"
             value={cfg.policy.spend.max_budget_delta_pct}
@@ -397,32 +486,22 @@ function AdminForm({
               })
             }
           />
+          <FieldHelp>Limite alla riduzione proposta in un solo passo.</FieldHelp>
         </div>
-      </div>
-
-      <div>
-        <div className="section-title">Secret ref (questo tenant)</div>
-        <p className="status-line">
-          I valori vivono in env / secret manager, mai incollati in git.
-        </p>
-        {detail.secrets.map((s) => (
-          <div key={s.secret_ref} className="secret-row">
-            <code>{s.secret_ref}</code>
-            <span className={`pill ${s.configured ? 'ok' : 'miss'}`}>
-              {s.configured ? 'configured' : 'missing'}
-            </span>
-          </div>
-        ))}
       </div>
 
       <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center' }}>
         <button className="btn btn-primary" disabled={busy} onClick={() => void onSave(cfg)}>
-          {busy ? 'Salvataggio…' : 'Salva tenant.yaml'}
+          {busy ? 'Salvataggio…' : 'Salva configurazione'}
         </button>
-        <span className="status-line">File: {detail.path}</span>
+        {savePathHint(detail.path)}
       </div>
     </div>
   )
+}
+
+function savePathHint(path: string) {
+  return <span className="status-line">Salvato in {path.split('/').slice(-2).join('/')}</span>
 }
 
 function App() {
@@ -434,13 +513,8 @@ function App() {
     () => localStorage.getItem(TENANT_KEY) || 'demo',
   )
   const [threadId, setThreadId] = useState<string | undefined>()
-  const [messages, setMessages] = useState<Msg[]>([
-    {
-      role: 'agent',
-      text: 'Monny è in dry-run. Cambia tenant dall’header. Prova spend, SEO, promo o lead warming: vedrai le skill attivarsi in tempo reale.',
-    },
-  ])
-  const [draft, setDraft] = useState('report spend ultimi 7 giorni')
+  const [messages, setMessages] = useState<Msg[]>([])
+  const [draft, setDraft] = useState('')
   const [busy, setBusy] = useState(false)
   const [approvals, setApprovals] = useState<Approval[]>([])
   const [lastDecide, setLastDecide] = useState<string | null>(null)
@@ -519,6 +593,9 @@ function App() {
     [tenants, tenantId],
   )
   const tenantLabel = tenantMeta?.display_name ?? tenantId
+  const hasUserTurns = runHasUserTurns(messages)
+  const primaryApproval = approvals[0]
+  const otherApprovals = approvals.slice(1)
 
   const switchTenant = (id: string) => {
     if (id === tenantId) return
@@ -527,19 +604,21 @@ function App() {
     setLastDecide(null)
     setHighlightApprovals(false)
     setLiveRun(null)
-    setMessages([
-      {
-        role: 'agent',
-        text: `Passato al tenant “${id}”. Chiedi un report spend, un audit SEO, uno stub promo o lead warming.`,
-      },
-    ])
+    setMessages([])
+    setDraft('')
   }
 
-  const send = async () => {
-    if (!draft.trim() || busy) return
+  const scrollToApprovals = () => {
+    setHighlightApprovals(false)
+    const el = document.getElementById('first-approval') || document.getElementById('approvals')
+    el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
+  const send = async (override?: string) => {
+    const text = (override ?? draft).trim()
+    if (!text || busy) return
     setBusy(true)
     setError(null)
-    const text = draft.trim()
     setMessages((m) => [...m, { role: 'user', text }])
     setDraft('')
     try {
@@ -564,7 +643,7 @@ function App() {
         ...m,
         {
           role: 'agent',
-          text: current.reply || current.status_line || 'Fatto.',
+          text: friendlyAgentReply(current.reply, current.report, current.status),
           report: current.report,
           timeline: current.steps,
           runStatus: current.status,
@@ -579,7 +658,6 @@ function App() {
       }
       await loadArtifacts(tenantId)
       await refreshTenants()
-      // Keep rail briefly on HITL, then settle to compact history in thread
       if (current.status !== 'awaiting_approval') {
         setTimeout(() => setLiveRun(null), 800)
       }
@@ -596,9 +674,11 @@ function App() {
     try {
       const result = await decideApproval(id, decision)
       setLastDecide(
-        decision === 'approved'
-          ? `Approvato ${result.action_type}: ${result.apply_result?.status ?? 'ok'}`
-          : `Rifiutato ${result.action_type}`,
+        friendlyDecideNote(
+          result.action_type,
+          decision,
+          String(result.apply_result?.status ?? ''),
+        ),
       )
       setLiveRun(null)
       await refreshApprovals(tenantId)
@@ -614,7 +694,7 @@ function App() {
     setBusy(true)
     try {
       const res = await putTenant(tenantId, config)
-      setSaveNote(`Saved to ${res.path}`)
+      setSaveNote(`Configurazione salvata (${res.path.split('/').slice(-2).join('/')}).`)
       const detail = await getTenant(tenantId)
       setTenantDetail(detail)
       await refreshTenants()
@@ -637,7 +717,7 @@ function App() {
           <span className="brand-tag">workspace</span>
         </div>
         <div className="tenant-switch">
-          <label htmlFor="global-tenant">Tenant</label>
+          <label htmlFor="global-tenant">Negozio</label>
           <select
             id="global-tenant"
             value={tenantId}
@@ -645,14 +725,14 @@ function App() {
           >
             {tenants.map((t) => (
               <option key={t.tenant_id} value={t.tenant_id}>
-                {t.display_name} ({t.tenant_id})
-                {t.pending_approvals ? ` · ${t.pending_approvals} pending` : ''}
+                {t.display_name}
+                {t.pending_approvals ? ` · ${t.pending_approvals} da decidere` : ''}
               </option>
             ))}
           </select>
           {tenantMeta && (
-            <span className="pill miss">
-              secrets {tenantMeta.secrets_configured ?? 0}/{tenantMeta.secrets_total ?? 0}
+            <span className={`pill ${(tenantMeta.secrets_configured ?? 0) > 0 ? 'ok' : 'miss'}`}>
+              {(tenantMeta.secrets_configured ?? 0) > 0 ? 'Accessi ok' : 'Accessi da completare'}
             </span>
           )}
         </div>
@@ -681,8 +761,8 @@ function App() {
               <div>
                 <h1>Agent</h1>
                 <p>
-                  Console operativa per <strong>{tenantLabel}</strong>. Le skill si attivano
-                  in evidenza; le proposte restano in attesa della tua decisione.
+                  Ti guido su spend e SEO per <strong>{tenantLabel}</strong>. Tu scegli
+                  l’azione, Monny propone, tu decidi.
                 </p>
               </div>
             </section>
@@ -695,10 +775,13 @@ function App() {
 
             {approvals.length > 0 && (
               <div className={`approval-banner ${highlightApprovals ? 'pulse' : ''}`}>
-                <strong>{approvals.length} approvazione/i in sospeso</strong> per {tenantId}.{' '}
-                <a href="#approvals" onClick={() => setHighlightApprovals(false)}>
-                  Rivedi →
-                </a>
+                <strong>
+                  Hai {approvals.length}{' '}
+                  {approvals.length === 1 ? 'decisione' : 'decisioni'} da prendere
+                </strong>
+                <button type="button" className="banner-link" onClick={scrollToApprovals}>
+                  Vai alla prima
+                </button>
               </div>
             )}
 
@@ -711,56 +794,67 @@ function App() {
                     className="btn btn-ghost"
                     onClick={() => setDraft('report spend ultimi 7 giorni')}
                   >
-                    Report spend
+                    Controlla le ads
                   </button>
                   <button
                     type="button"
                     className="btn btn-ghost"
                     onClick={() => setDraft('seo audit of priority pages')}
                   >
-                    Audit SEO
+                    Controlla SEO
                   </button>
                   <button
                     type="button"
                     className="btn btn-ghost"
                     onClick={() => setDraft('propose shopify promo discount')}
                   >
-                    Stub promo
+                    Prova promo
                   </button>
                   <button
                     type="button"
                     className="btn btn-ghost"
                     onClick={() => setDraft('lead warming sequence stub')}
                   >
-                    Stub lead
+                    Prova lead
                   </button>
                 </div>
-                <div className="chat-log">
-                  {messages.map((m, i) => (
-                    <div key={`${m.role}-${i}`} className={`bubble ${m.role}`}>
-                      {m.text}
-                      {m.timeline && m.timeline.length > 0 && (
-                        <div className="thread-timeline">
-                          <SkillRail
-                            compact
-                            run={{
-                              id: `hist-${i}`,
-                              tenant_id: tenantId,
-                              thread_id: threadId || '',
-                              goal: '',
-                              status: m.runStatus || 'completed',
-                              status_line: '',
-                              steps: m.timeline,
-                              approval_ids: [],
-                              created_at: '',
-                              updated_at: '',
-                            }}
-                          />
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
+
+                {!hasUserTurns && !liveRun ? (
+                  <CoachCard
+                    onPick={(text) => {
+                      setDraft(text)
+                      void send(text)
+                    }}
+                  />
+                ) : (
+                  <div className="chat-log">
+                    {messages.map((m, i) => (
+                      <div key={`${m.role}-${i}`} className={`bubble ${m.role}`}>
+                        {m.text}
+                        {m.timeline && m.timeline.length > 0 && (
+                          <div className="thread-timeline">
+                            <SkillRail
+                              compact
+                              run={{
+                                id: `hist-${i}`,
+                                tenant_id: tenantId,
+                                thread_id: threadId || '',
+                                goal: '',
+                                status: m.runStatus || 'completed',
+                                status_line: '',
+                                steps: m.timeline,
+                                approval_ids: [],
+                                created_at: '',
+                                updated_at: '',
+                              }}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
                 <div className="composer">
                   <textarea
                     value={draft}
@@ -768,7 +862,7 @@ function App() {
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void send()
                     }}
-                    placeholder="Chiedi a Monny…"
+                    placeholder="Es. Controlla le ads degli ultimi 7 giorni…"
                   />
                   <button className="btn btn-primary" disabled={busy} onClick={() => void send()}>
                     {busy ? 'In corso…' : 'Invia'}
@@ -781,43 +875,47 @@ function App() {
                 <h2>Approvazioni</h2>
                 {lastDecide && <p className="status-line">{lastDecide}</p>}
                 {approvals.length === 0 && (
-                  <p className="status-line">Nessuna azione in attesa.</p>
+                  <p className="status-line">
+                    Nessuna decisione in sospeso. Quando Monny propone qualcosa, compare qui.
+                  </p>
                 )}
-                {approvals.map((a) => (
-                  <div key={a.id} className="approval">
-                    <div>
-                      <strong>{a.action_type}</strong>
-                      <div>{a.summary}</div>
-                      <div className="meta">
-                        {a.id.slice(0, 8)} · {a.created_at}
-                      </div>
-                    </div>
-                    <div className="approval-actions">
-                      <button className="btn btn-ok" onClick={() => void onDecide(a.id, 'approved')}>
-                        Approva
-                      </button>
-                      <button
-                        className="btn btn-danger"
-                        onClick={() => void onDecide(a.id, 'rejected')}
-                      >
-                        Rifiuta
-                      </button>
-                    </div>
+                {primaryApproval && (
+                  <ApprovalCard
+                    approval={primaryApproval}
+                    primary
+                    onDecide={(id, d) => void onDecide(id, d)}
+                  />
+                )}
+                {otherApprovals.length > 0 && (
+                  <div className="approval-rest">
+                    <p className="status-line">
+                      Altre {otherApprovals.length}{' '}
+                      {otherApprovals.length === 1 ? 'proposta' : 'proposte'}
+                    </p>
+                    {otherApprovals.map((a) => (
+                      <ApprovalCard
+                        key={a.id}
+                        approval={a}
+                        onDecide={(id, d) => void onDecide(id, d)}
+                      />
+                    ))}
                   </div>
-                ))}
+                )}
               </section>
             </div>
 
-            <section className="panel report-panel">
-              <h2>Artifact salvati</h2>
-              <p className="status-line">
-                {artifactNames.length
-                  ? artifactNames.join(' · ')
-                  : 'Nessun artifact ancora. Avvia un job spend o SEO.'}
-              </p>
-              <SpendPanel channels={spendFromArtifact} />
-              <SeoPanel changes={seoFromArtifact} />
-            </section>
+            {(artifactNames.length > 0 || spendFromArtifact.length > 0 || seoFromArtifact.length > 0) && (
+              <section className="panel report-panel">
+                <h2>Ultimi risultati</h2>
+                <p className="status-line">
+                  {artifactNames.length
+                    ? `Salvati: ${artifactNames.join(', ')}`
+                    : 'Risultati dell’ultima analisi.'}
+                </p>
+                <SpendPanel channels={spendFromArtifact} />
+                <SeoPanel changes={seoFromArtifact} />
+              </section>
+            )}
           </>
         ) : (
           <>
@@ -825,14 +923,14 @@ function App() {
               <div>
                 <h1>Admin</h1>
                 <p>
-                  Configurazione di <strong>{tenantLabel}</strong> (`{tenantId}`). I secret
-                  sono solo riferimenti.
+                  Impostazioni di <strong>{tenantLabel}</strong>. Solo ciò che serve per
+                  collegare negozio e ads.
                 </p>
               </div>
             </section>
 
             <section className="panel">
-              <h2>Tenant</h2>
+              <h2>I tuoi negozi</h2>
               <div className="tenant-chips">
                 {tenants.map((t) => (
                   <button
@@ -842,11 +940,10 @@ function App() {
                     onClick={() => switchTenant(t.tenant_id)}
                   >
                     <strong>{t.display_name}</strong>
-                    <span>{t.tenant_id}</span>
                     <span className="meta">
-                      secrets {t.secrets_configured}/{t.secrets_total}
+                      {(t.secrets_configured ?? 0) > 0 ? 'Accessi ok' : 'Accessi da completare'}
                       {t.pending_approvals
-                        ? ` · ${t.pending_approvals} pending`
+                        ? ` · ${t.pending_approvals} da decidere`
                         : ''}
                     </span>
                   </button>
@@ -855,7 +952,7 @@ function App() {
             </section>
 
             <section className="panel">
-              <h2>Configurazione · {tenantId}</h2>
+              <h2>Configurazione · {tenantLabel}</h2>
               {tenantDetail && (
                 <AdminForm detail={tenantDetail} onSave={saveConfig} busy={busy} />
               )}

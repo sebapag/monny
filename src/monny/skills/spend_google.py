@@ -19,9 +19,9 @@ def run(tenant: TenantConfig, *, dry_run: bool, fixtures_dir: Path) -> dict[str,
         "skill": "spend_google",
         "mode": "dry_run" if dry_run else "live",
         "summary": (
-            f"Google: {totals['campaigns']} campaigns, "
-            f"{totals['waste']} underperforming "
-            f"(waste €{totals['waste_spend']} / {totals['waste_spend_pct']}% of spend)."
+            f"Google Ads: {totals['campaigns']} campagne, "
+            f"{totals['waste']} poco efficaci "
+            f"(€{totals['waste_spend']} / {totals['waste_spend_pct']}% della spesa)."
         ),
         "diagnosis": diagnosis,
         "campaigns": diagnosis["campaigns"],

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from monny.graph import timeline
 from monny.graph.state import AgentState
+from monny.storage.runs import SKILL_LABELS
 
 
 def _infer_plan(goal: str, message: str) -> list[str]:
@@ -53,7 +54,8 @@ def planner_node(state: AgentState) -> dict:
     timeline.start(run_id, "planner", "Sto scegliendo le skill per il tuo obiettivo…")
     goal = state.get("goal") or state.get("message") or "report spend ultimi 7 giorni"
     plan = _infer_plan(goal, state.get("message", ""))
-    timeline.done(run_id, "planner", f"Piano: {', '.join(plan)}")
+    plan_labels = [SKILL_LABELS.get(s, s) for s in plan]
+    timeline.done(run_id, "planner", f"Piano: {', '.join(plan_labels)}")
     return {
         "goal": goal,
         "plan": plan,
