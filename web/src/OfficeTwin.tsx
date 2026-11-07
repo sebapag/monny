@@ -10,10 +10,14 @@ import {
   type ReactNode,
 } from 'react'
 import {
+  CanvasTexture,
   Color,
+  RepeatWrapping,
+  SRGBColorSpace,
   type Group,
   type MeshStandardMaterial,
   type PointLight as PointLightType,
+  type Texture,
 } from 'three'
 import { DEPARTMENTS, type DeptId } from './depts'
 import type { RoomLightState } from './lights'
@@ -21,6 +25,7 @@ import type { RoomLightState } from './lights'
 /** Soft Notion pastels — always readable, brighter when lit. */
 type RoomLayout = {
   id: DeptId
+  /** English 3D hotspot label (Italian kept in dept panels / UI copy). */
   label: string
   hotspot: number
   position: [number, number, number]
@@ -35,25 +40,25 @@ type RoomLayout = {
 const ROOMS: RoomLayout[] = [
   {
     id: 'direzione',
-    label: 'Direzione',
+    label: 'Leadership',
     hotspot: 1,
     position: [0, 0.04, 3.5],
     size: [4.0, 0.1, 2.5],
     floor: '#fef7d6',
     floorLit: '#f9e79f',
-    wall: '#f8f5e8',
+    wall: '#f7f0e4',
     accent: '#f5d75e',
     people: 2,
   },
   {
     id: 'spend',
-    label: 'Spend',
+    label: 'Media',
     hotspot: 2,
     position: [-3.3, 0.04, 0.35],
     size: [3.3, 0.1, 3.1],
     floor: '#dcecfa',
     floorLit: '#b8daf5',
-    wall: '#e8f3fb',
+    wall: '#eaf3fb',
     accent: '#7eb8e8',
     people: 2,
   },
@@ -65,39 +70,90 @@ const ROOMS: RoomLayout[] = [
     size: [3.3, 0.1, 3.1],
     floor: '#d9f3e1',
     floorLit: '#b6e6c6',
-    wall: '#e8f7ed',
+    wall: '#e8f6ed',
     accent: '#6fbf8f',
     people: 2,
   },
   {
     id: 'shopify',
-    label: 'Shopify',
+    label: 'Commerce',
     hotspot: 4,
     position: [-3.3, 0.04, -3.1],
     size: [3.3, 0.1, 2.9],
     floor: '#ffe8d4',
     floorLit: '#ffd4b0',
-    wall: '#fff1e6',
+    wall: '#fff2e8',
     accent: '#f0a878',
     people: 2,
   },
   {
     id: 'lead',
-    label: 'Lead',
+    label: 'Leads',
     hotspot: 5,
     position: [3.3, 0.04, -3.1],
     size: [3.3, 0.1, 2.9],
     floor: '#fde0ec',
     floorLit: '#f7c5d9',
-    wall: '#fef0f5',
+    wall: '#fef1f6',
     accent: '#e890b8',
     people: 2,
   },
 ]
 
+/** Warm structure palette — no sterile grey slabs. */
+const WOOD = '#c4a574'
+const WOOD_DARK = '#9a7b52'
+const CREAM = '#f5efe6'
+const SAND = '#ebe4d8'
+const BLUSH_WALL = '#efe6f2'
+const CHAIR = '#5b6ea8'
+const DESK_TOP = '#e8d9c4'
+const SHELF = '#d9c7ae'
+const GLASS = '#d7eef5'
+
 const MATTE = { roughness: 1, metalness: 0 } as const
+const SOFT = { roughness: 0.72, metalness: 0.08 } as const
 /** Seconds-ish easing: higher = snappier. ~3.2 ≈ soft 0.6–0.8s feel. */
 const EASE = 3.2
+
+/** Light oak plank floor — procedural canvas texture. */
+function makeWoodFloorTexture(): Texture {
+  const size = 512
+  const canvas = document.createElement('canvas')
+  canvas.width = size
+  canvas.height = size
+  const ctx = canvas.getContext('2d')!
+  ctx.fillStyle = '#d8c3a3'
+  ctx.fillRect(0, 0, size, size)
+  const plankH = 42
+  for (let y = 0, row = 0; y < size; y += plankH, row++) {
+    const offset = (row % 2) * 28
+    for (let x = -offset; x < size + 80; x += 86) {
+      const tone = 190 + ((row * 17 + x * 3) % 28)
+      ctx.fillStyle = `rgb(${tone}, ${tone - 28}, ${tone - 58})`
+      ctx.fillRect(x + 1, y + 1, 84, plankH - 2)
+      ctx.strokeStyle = 'rgba(120, 90, 55, 0.22)'
+      ctx.lineWidth = 1
+      ctx.strokeRect(x + 0.5, y + 0.5, 85, plankH - 1)
+      // Soft grain
+      ctx.strokeStyle = 'rgba(90, 65, 40, 0.08)'
+      for (let g = 0; g < 3; g++) {
+        const gy = y + 8 + g * 10 + ((x + row) % 5)
+        ctx.beginPath()
+        ctx.moveTo(x + 4, gy)
+        ctx.bezierCurveTo(x + 28, gy + 1, x + 55, gy - 1, x + 80, gy)
+        ctx.stroke()
+      }
+    }
+  }
+  const tex = new CanvasTexture(canvas)
+  tex.colorSpace = SRGBColorSpace
+  tex.wrapS = RepeatWrapping
+  tex.wrapT = RepeatWrapping
+  tex.repeat.set(4.5, 4)
+  tex.anisotropy = 4
+  return tex
+}
 
 function lerp(a: number, b: number, t: number) {
   return a + (b - a) * t
@@ -236,19 +292,31 @@ function Ometto({
   )
 }
 
+/** Contemporary task chair — soft blue seat, slim base. */
 function FlatChair({ position, rotY = 0 }: { position: [number, number, number]; rotY?: number }) {
   return (
     <group position={position} rotation={[0, rotY, 0]}>
-      <RoundedBox args={[0.32, 0.05, 0.32]} radius={0.02} position={[0, 0.28, 0]}>
-        <FlatMat color="#e8e4df" />
+      <RoundedBox args={[0.34, 0.06, 0.34]} radius={0.03} position={[0, 0.3, 0]}>
+        <meshStandardMaterial color={CHAIR} {...SOFT} />
       </RoundedBox>
-      <mesh position={[0, 0.48, -0.12]}>
-        <boxGeometry args={[0.3, 0.34, 0.05]} />
-        <FlatMat color="#ddd8d1" />
+      <RoundedBox args={[0.32, 0.38, 0.06]} radius={0.02} position={[0, 0.52, -0.14]}>
+        <meshStandardMaterial color={CHAIR} {...SOFT} />
+      </RoundedBox>
+      <mesh position={[-0.14, 0.42, 0]}>
+        <boxGeometry args={[0.04, 0.16, 0.22]} />
+        <meshStandardMaterial color="#4a5a8c" {...SOFT} />
+      </mesh>
+      <mesh position={[0.14, 0.42, 0]}>
+        <boxGeometry args={[0.04, 0.16, 0.22]} />
+        <meshStandardMaterial color="#4a5a8c" {...SOFT} />
       </mesh>
       <mesh position={[0, 0.14, 0]}>
-        <cylinderGeometry args={[0.04, 0.05, 0.26, 8]} />
-        <FlatMat color="#c8c4be" />
+        <cylinderGeometry args={[0.035, 0.045, 0.26, 10]} />
+        <FlatMat color={WOOD_DARK} />
+      </mesh>
+      <mesh position={[0, 0.02, 0]} rotation={[0, 0, 0]}>
+        <cylinderGeometry args={[0.16, 0.16, 0.03, 12]} />
+        <FlatMat color="#8a7355" />
       </mesh>
     </group>
   )
@@ -266,7 +334,7 @@ function FlatDesk({
   const screenMat = useRef<MeshStandardMaterial>(null)
   const litAmt = useRef(lightLevel(light))
   const accentCol = useMemo(() => new Color(accent), [accent])
-  const idle = useMemo(() => new Color('#c5d9ef'), [])
+  const idle = useMemo(() => new Color('#b8d4f0'), [])
   const tmp = useMemo(() => new Color(), [])
 
   useFrame((_, dt) => {
@@ -277,39 +345,38 @@ function FlatDesk({
     tmp.copy(idle).lerp(accentCol, lit)
     screenMat.current.color.copy(tmp)
     screenMat.current.emissive.copy(accentCol)
-    screenMat.current.emissiveIntensity = 0.15 + 0.55 * lit
+    screenMat.current.emissiveIntensity = 0.18 + 0.58 * lit
   })
 
   return (
     <group position={position}>
-      <RoundedBox args={[1.05, 0.06, 0.52]} radius={0.02} position={[0, 0.4, 0]}>
-        <FlatMat color="#f0eeec" />
+      {/* Slim oak desktop */}
+      <RoundedBox args={[1.12, 0.045, 0.55]} radius={0.015} position={[0, 0.42, 0]}>
+        <meshStandardMaterial color={DESK_TOP} {...SOFT} />
       </RoundedBox>
-      <mesh position={[-0.38, 0.2, 0.18]}>
-        <boxGeometry args={[0.06, 0.38, 0.06]} />
-        <FlatMat color="#e5e3df" />
+      {/* Thin tapered legs */}
+      {(
+        [
+          [-0.46, 0.2, 0.2],
+          [0.46, 0.2, 0.2],
+          [-0.46, 0.2, -0.2],
+          [0.46, 0.2, -0.2],
+        ] as [number, number, number][]
+      ).map((p, i) => (
+        <mesh key={i} position={p}>
+          <cylinderGeometry args={[0.022, 0.028, 0.4, 8]} />
+          <FlatMat color={WOOD_DARK} />
+        </mesh>
+      ))}
+      {/* Slim monitor + stand */}
+      <RoundedBox args={[0.52, 0.34, 0.03]} radius={0.01} position={[0, 0.68, -0.16]}>
+        <meshStandardMaterial ref={screenMat} color="#b8d4f0" {...SOFT} />
+      </RoundedBox>
+      <mesh position={[0, 0.48, -0.14]}>
+        <cylinderGeometry args={[0.03, 0.05, 0.1, 8]} />
+        <FlatMat color="#6b6258" />
       </mesh>
-      <mesh position={[0.38, 0.2, 0.18]}>
-        <boxGeometry args={[0.06, 0.38, 0.06]} />
-        <FlatMat color="#e5e3df" />
-      </mesh>
-      <mesh position={[-0.38, 0.2, -0.18]}>
-        <boxGeometry args={[0.06, 0.38, 0.06]} />
-        <FlatMat color="#e5e3df" />
-      </mesh>
-      <mesh position={[0.38, 0.2, -0.18]}>
-        <boxGeometry args={[0.06, 0.38, 0.06]} />
-        <FlatMat color="#e5e3df" />
-      </mesh>
-      <mesh position={[0, 0.62, -0.14]}>
-        <boxGeometry args={[0.48, 0.32, 0.04]} />
-        <meshStandardMaterial ref={screenMat} color="#c5d9ef" {...MATTE} />
-      </mesh>
-      <mesh position={[0, 0.44, -0.1]}>
-        <boxGeometry args={[0.12, 0.08, 0.08]} />
-        <FlatMat color="#d8d4ce" />
-      </mesh>
-      <FlatChair position={[0, 0, 0.42]} rotY={Math.PI} />
+      <FlatChair position={[0, 0, 0.46]} rotY={Math.PI} />
     </group>
   )
 }
@@ -318,12 +385,12 @@ function Plant({ position, scale = 1 }: { position: [number, number, number]; sc
   return (
     <group position={position} scale={scale}>
       <mesh position={[0, 0.1, 0]}>
-        <cylinderGeometry args={[0.14, 0.11, 0.2, 10]} />
-        <FlatMat color="#d9b89a" />
+        <cylinderGeometry args={[0.13, 0.1, 0.2, 12]} />
+        <meshStandardMaterial color="#c9a888" {...SOFT} />
       </mesh>
       <mesh position={[0, 0.28, 0]}>
-        <cylinderGeometry args={[0.03, 0.04, 0.22, 6]} />
-        <FlatMat color="#6a8f6a" />
+        <cylinderGeometry args={[0.025, 0.035, 0.2, 6]} />
+        <FlatMat color="#5f8a62" />
       </mesh>
       <mesh position={[0, 0.5, 0]}>
         <sphereGeometry args={[0.2, 12, 12]} />
@@ -341,6 +408,7 @@ function Plant({ position, scale = 1 }: { position: [number, number, number]; sc
   )
 }
 
+/** Slim open shelving — warm wood, not grey cubes. */
 function Cabinet({
   position,
   rotY = 0,
@@ -352,21 +420,44 @@ function Cabinet({
 }) {
   return (
     <group position={position} rotation={[0, rotY, 0]}>
-      <RoundedBox args={[wide, 0.72, 0.32]} radius={0.02} position={[0, 0.36, 0]}>
-        <FlatMat color="#efebe6" />
-      </RoundedBox>
-      <mesh position={[0, 0.36, 0.165]}>
-        <boxGeometry args={[wide * 0.08, 0.12, 0.02]} />
-        <FlatMat color="#c8c4be" />
+      <mesh position={[0, 0.55, 0]}>
+        <boxGeometry args={[wide, 0.04, 0.3]} />
+        <meshStandardMaterial color={SHELF} {...SOFT} />
       </mesh>
-      <mesh position={[0, 0.74, 0]}>
-        <boxGeometry args={[wide * 0.92, 0.04, 0.28]} />
-        <FlatMat color="#e5e3df" />
+      <mesh position={[0, 0.3, 0]}>
+        <boxGeometry args={[wide, 0.04, 0.3]} />
+        <meshStandardMaterial color={SHELF} {...SOFT} />
+      </mesh>
+      <mesh position={[0, 0.05, 0]}>
+        <boxGeometry args={[wide, 0.04, 0.3]} />
+        <meshStandardMaterial color={SHELF} {...SOFT} />
+      </mesh>
+      <mesh position={[-wide / 2 + 0.03, 0.3, 0]}>
+        <boxGeometry args={[0.04, 0.58, 0.28]} />
+        <FlatMat color={WOOD} />
+      </mesh>
+      <mesh position={[wide / 2 - 0.03, 0.3, 0]}>
+        <boxGeometry args={[0.04, 0.58, 0.28]} />
+        <FlatMat color={WOOD} />
+      </mesh>
+      {/* Accent books */}
+      <mesh position={[-0.12, 0.4, 0]}>
+        <boxGeometry args={[0.08, 0.16, 0.12]} />
+        <FlatMat color="#7eb8e8" />
+      </mesh>
+      <mesh position={[-0.02, 0.39, 0]}>
+        <boxGeometry args={[0.07, 0.14, 0.12]} />
+        <FlatMat color="#e890b8" />
+      </mesh>
+      <mesh position={[0.08, 0.41, 0]}>
+        <boxGeometry args={[0.07, 0.18, 0.12]} />
+        <FlatMat color="#f5d75e" />
       </mesh>
     </group>
   )
 }
 
+/** Modern pendant — warm disc + stem. */
 function SoftLamp({
   position,
   light = 'off',
@@ -379,7 +470,7 @@ function SoftLamp({
   const shade = useRef<MeshStandardMaterial>(null)
   const litAmt = useRef(lightLevel(light))
   const accentCol = useMemo(() => new Color(accent), [accent])
-  const warm = useMemo(() => new Color('#fff6e8'), [])
+  const warm = useMemo(() => new Color('#fff4e0'), [])
   const tmp = useMemo(() => new Color(), [])
   useFrame((_, dt) => {
     const k = 1 - Math.exp(-EASE * dt)
@@ -389,17 +480,17 @@ function SoftLamp({
     tmp.copy(warm).lerp(accentCol, lit * 0.55)
     shade.current.color.copy(tmp)
     shade.current.emissive.copy(tmp)
-    shade.current.emissiveIntensity = 0.12 + 0.55 * lit
+    shade.current.emissiveIntensity = 0.18 + 0.6 * lit
   })
   return (
     <group position={position}>
-      <mesh position={[0, 0.02, 0]}>
-        <cylinderGeometry args={[0.26, 0.34, 0.12, 16]} />
-        <meshStandardMaterial ref={shade} color="#fff6e8" {...MATTE} />
+      <mesh position={[0, 0.22, 0]}>
+        <cylinderGeometry args={[0.015, 0.015, 0.28, 8]} />
+        <FlatMat color={WOOD_DARK} />
       </mesh>
-      <mesh position={[0, 0.2, 0]}>
-        <cylinderGeometry args={[0.025, 0.025, 0.22, 6]} />
-        <FlatMat color="#d8d4ce" />
+      <mesh position={[0, 0.02, 0]}>
+        <cylinderGeometry args={[0.28, 0.22, 0.08, 20]} />
+        <meshStandardMaterial ref={shade} color="#fff4e0" {...SOFT} />
       </mesh>
     </group>
   )
@@ -419,7 +510,7 @@ function Whiteboard({
   const board = useRef<MeshStandardMaterial>(null)
   const litAmt = useRef(lightLevel(light))
   const accentCol = useMemo(() => new Color(accent), [accent])
-  const idle = useMemo(() => new Color('#f7f6f3'), [])
+  const idle = useMemo(() => new Color('#fffdf8'), [])
   const tmp = useMemo(() => new Color(), [])
   useFrame((_, dt) => {
     const k = 1 - Math.exp(-EASE * dt)
@@ -433,23 +524,19 @@ function Whiteboard({
   })
   return (
     <group position={position} rotation={[0, rotY, 0]}>
-      <RoundedBox args={[1.35, 0.82, 0.06]} radius={0.02} position={[0, 0, 0]}>
-        <FlatMat color="#d8d4ce" />
+      <RoundedBox args={[1.4, 0.86, 0.05]} radius={0.02} position={[0, 0, 0]}>
+        <meshStandardMaterial color={WOOD} {...SOFT} />
       </RoundedBox>
-      <RoundedBox args={[1.22, 0.7, 0.04]} radius={0.015} position={[0, 0, 0.03]}>
-        <meshStandardMaterial ref={board} color="#f7f6f3" {...MATTE} />
+      <RoundedBox args={[1.26, 0.72, 0.035]} radius={0.012} position={[0, 0, 0.03]}>
+        <meshStandardMaterial ref={board} color="#fffdf8" {...SOFT} />
       </RoundedBox>
-      <mesh position={[0.1, 0.12, 0.06]}>
-        <boxGeometry args={[0.75, 0.1, 0.01]} />
+      <mesh position={[0.12, 0.14, 0.055]}>
+        <boxGeometry args={[0.78, 0.09, 0.01]} />
         <FlatMat color="#dcecfa" />
       </mesh>
-      <mesh position={[-0.18, -0.08, 0.06]}>
-        <boxGeometry args={[0.55, 0.07, 0.01]} />
+      <mesh position={[-0.16, -0.1, 0.055]}>
+        <boxGeometry args={[0.55, 0.06, 0.01]} />
         <FlatMat color="#e6e0f5" />
-      </mesh>
-      <mesh position={[0.2, -0.22, 0.06]}>
-        <boxGeometry args={[0.4, 0.05, 0.01]} />
-        <FlatMat color="#fde0ec" />
       </mesh>
     </group>
   )
@@ -475,43 +562,68 @@ function Rug({
 function MeetingTable({ position }: { position: [number, number, number] }) {
   return (
     <group position={position}>
-      <RoundedBox args={[1.55, 0.07, 0.85]} radius={0.035} position={[0, 0.44, 0]}>
-        <FlatMat color="#f3efe8" />
+      <RoundedBox args={[1.6, 0.05, 0.88]} radius={0.04} position={[0, 0.44, 0]}>
+        <meshStandardMaterial color={DESK_TOP} {...SOFT} />
       </RoundedBox>
-      <mesh position={[0, 0.21, 0]}>
-        <cylinderGeometry args={[0.1, 0.14, 0.4, 10]} />
-        <FlatMat color="#ddd6cc" />
+      <mesh position={[0, 0.2, 0]}>
+        <cylinderGeometry args={[0.07, 0.11, 0.4, 12]} />
+        <FlatMat color={WOOD} />
       </mesh>
-      <mesh position={[0, 0.5, 0]}>
-        <boxGeometry args={[0.35, 0.03, 0.25]} />
-        <FlatMat color="#e6e0f5" />
-      </mesh>
-      <FlatChair position={[0, 0, 0.65]} rotY={Math.PI} />
-      <FlatChair position={[-0.5, 0, -0.65]} />
-      <FlatChair position={[0.5, 0, -0.65]} />
+      <FlatChair position={[0, 0, 0.68]} rotY={Math.PI} />
+      <FlatChair position={[-0.52, 0, -0.68]} />
+      <FlatChair position={[0.52, 0, -0.68]} />
     </group>
   )
 }
 
+/** Soft lounge sofa for Leadership. */
+function LoungeSofa({ position, rotY = 0 }: { position: [number, number, number]; rotY?: number }) {
+  return (
+    <group position={position} rotation={[0, rotY, 0]}>
+      <RoundedBox args={[1.2, 0.28, 0.48]} radius={0.06} position={[0, 0.28, 0]}>
+        <meshStandardMaterial color="#d8c4e8" {...SOFT} />
+      </RoundedBox>
+      <RoundedBox args={[1.2, 0.36, 0.12]} radius={0.04} position={[0, 0.5, -0.18]}>
+        <meshStandardMaterial color="#cbb6e0" {...SOFT} />
+      </RoundedBox>
+      <RoundedBox args={[0.12, 0.28, 0.42]} radius={0.03} position={[-0.54, 0.4, 0]}>
+        <meshStandardMaterial color="#cbb6e0" {...SOFT} />
+      </RoundedBox>
+      <RoundedBox args={[0.12, 0.28, 0.42]} radius={0.03} position={[0.54, 0.4, 0]}>
+        <meshStandardMaterial color="#cbb6e0" {...SOFT} />
+      </RoundedBox>
+    </group>
+  )
+}
+
+/** Warm plaster body + glass-ish frosted top rail. */
 function LowPartition({
   position,
   size,
-  color = '#e2ddd6',
+  color = SAND,
 }: {
   position: [number, number, number]
   size: [number, number, number]
   color?: string
 }) {
+  const glassH = Math.min(0.22, size[1] * 0.28)
+  const bodyH = size[1] - glassH
   return (
     <group position={position}>
-      <mesh>
-        <boxGeometry args={size} />
-        <FlatMat color={color} />
+      <mesh position={[0, -glassH / 2, 0]}>
+        <boxGeometry args={[size[0], bodyH, size[2]]} />
+        <meshStandardMaterial color={color} {...SOFT} />
       </mesh>
-      {/* Soft top rail so partitions read clearly from isometric view */}
-      <mesh position={[0, size[1] / 2 + 0.025, 0]}>
-        <boxGeometry args={[size[0] * 1.05, 0.05, size[2] * 1.05]} />
-        <FlatMat color="#d0cbc3" />
+      <mesh position={[0, bodyH / 2 - 0.01, 0]}>
+        <boxGeometry args={[size[0] * 0.98, glassH, size[2] * 0.7]} />
+        <meshStandardMaterial
+          color={GLASS}
+          transparent
+          opacity={0.45}
+          roughness={0.25}
+          metalness={0.15}
+          depthWrite={false}
+        />
       </mesh>
     </group>
   )
@@ -604,8 +716,8 @@ function RoomZone({
   const floorLit = useMemo(() => new Color(room.floorLit), [room.floorLit])
   const accent = useMemo(() => new Color(room.accent), [room.accent])
   const white = useMemo(() => new Color('#ffffff'), [])
-  const ceilIdle = useMemo(() => new Color('#f6f5f4'), [])
-  const ceilWarm = useMemo(() => new Color('#fffdf5'), [])
+  const ceilIdle = useMemo(() => new Color('#f7f2ea'), [])
+  const ceilWarm = useMemo(() => new Color('#fff8ec'), [])
   const black = useMemo(() => new Color('#000000'), [])
   const lampWarm = useMemo(() => new Color('#fff8f0'), [])
   const tmp = useMemo(() => new Color(), [])
@@ -699,23 +811,25 @@ function RoomZone({
         color={rugColor}
       />
 
-      {/* Back wall + low side partitions */}
+      {/* Warm plaster back wall + glass-topped partitions */}
       <mesh position={[hx, 0.55, hz - halfD + 0.05]}>
         <boxGeometry args={[room.size[0] * 0.92, 1.05, 0.07]} />
-        <FlatMat color={room.wall} />
+        <meshStandardMaterial color={room.wall} {...SOFT} />
       </mesh>
       <LowPartition
         position={[hx - halfW + 0.05, 0.48, hz]}
         size={[0.08, 0.92, room.size[2] * 0.82]}
+        color={SAND}
       />
       <LowPartition
         position={[hx + halfW - 0.05, 0.48, hz]}
         size={[0.08, 0.92, room.size[2] * 0.82]}
+        color={SAND}
       />
-      {/* Front low half-wall so rooms feel enclosed without blocking labels */}
       <LowPartition
         position={[hx, 0.28, hz + halfD - 0.06]}
         size={[room.size[0] * 0.55, 0.52, 0.07]}
+        color={CREAM}
       />
 
       <Whiteboard
@@ -726,12 +840,12 @@ function RoomZone({
 
       {room.id === 'direzione' ? (
         <>
-          <MeetingTable position={[hx + 0.15, 0, hz + 0.25]} />
-          <FlatDesk position={[hx - 1.15, 0, hz - 0.55]} accent={room.accent} light={light} />
-          <Cabinet position={[hx + 1.35, 0, hz - 0.75]} rotY={-0.12} wide={0.62} />
-          <Cabinet position={[hx - 1.45, 0, hz - 0.75]} rotY={0.12} wide={0.5} />
-          <Plant position={[hx - 1.55, 0, hz + 0.9]} scale={1.05} />
-          <Plant position={[hx + 1.5, 0, hz + 0.8]} scale={0.95} />
+          <MeetingTable position={[hx + 0.35, 0, hz + 0.15]} />
+          <LoungeSofa position={[hx - 1.15, 0, hz + 0.55]} rotY={0.35} />
+          <FlatDesk position={[hx - 1.2, 0, hz - 0.65]} accent={room.accent} light={light} />
+          <Cabinet position={[hx + 1.4, 0, hz - 0.75]} rotY={-0.12} wide={0.62} />
+          <Plant position={[hx - 1.55, 0, hz + 0.95]} scale={1.05} />
+          <Plant position={[hx + 1.5, 0, hz + 0.85]} scale={0.95} />
         </>
       ) : (
         <>
@@ -761,11 +875,11 @@ function RoomZone({
       {/* Ceiling soft panels + hanging lamps */}
       <mesh position={[hx - 0.55, 2.15, hz]}>
         <boxGeometry args={[0.95, 0.04, 0.4]} />
-        <meshStandardMaterial ref={ceilMat} color="#f6f5f4" {...MATTE} />
+        <meshStandardMaterial ref={ceilMat} color="#f7f2ea" {...SOFT} />
       </mesh>
       <mesh position={[hx + 0.55, 2.15, hz]}>
         <boxGeometry args={[0.95, 0.04, 0.4]} />
-        <FlatMat color="#f6f5f4" />
+        <meshStandardMaterial color="#f7f2ea" {...SOFT} />
       </mesh>
       <SoftLamp position={[hx - 0.55, 1.95, hz]} accent={room.accent} light={light} />
       <SoftLamp
@@ -821,37 +935,44 @@ function OfficeBuilding({
   onSelect: (id: DeptId) => void
   reduceMotion: boolean
 }) {
+  const woodTex = useMemo(() => makeWoodFloorTexture(), [])
+
   return (
     <group>
-      {/* Building shell + shared corridor floor */}
-      <mesh position={[0, -0.02, 0]}>
-        <boxGeometry args={[12.2, 0.08, 10.6]} />
-        <FlatMat color="#f3f1ee" />
+      {/* Warm oak plank building floor (not grey) */}
+      <mesh position={[0, -0.02, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <planeGeometry args={[12.2, 10.6]} />
+        <meshStandardMaterial map={woodTex} {...SOFT} />
       </mesh>
+      <mesh position={[0, -0.06, 0]}>
+        <boxGeometry args={[12.2, 0.08, 10.6]} />
+        <meshStandardMaterial color={WOOD} {...SOFT} />
+      </mesh>
+      {/* Soft corridor runner */}
       <mesh position={[0, 0.03, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <planeGeometry args={[1.35, 9.4]} />
-        <meshStandardMaterial color="#e9e5df" {...MATTE} />
+        <planeGeometry args={[1.25, 9.2]} />
+        <meshStandardMaterial color="#e8dcc8" {...MATTE} />
       </mesh>
       <mesh position={[0, 0.035, 1.7]} rotation={[-Math.PI / 2, 0, 0]}>
-        <planeGeometry args={[7.2, 1.15]} />
-        <meshStandardMaterial color="#e9e5df" {...MATTE} />
+        <planeGeometry args={[6.8, 1.05]} />
+        <meshStandardMaterial color="#e8dcc8" {...MATTE} />
       </mesh>
 
       <mesh position={[0, 1.05, -5.2]}>
         <boxGeometry args={[12.2, 2.1, 0.1]} />
-        <FlatMat color="#f0eeec" />
+        <meshStandardMaterial color={CREAM} {...SOFT} />
       </mesh>
       <mesh position={[-6.05, 1.05, 0]}>
         <boxGeometry args={[0.1, 2.1, 10.6]} />
-        <FlatMat color="#f0eeec" />
+        <meshStandardMaterial color={SAND} {...SOFT} />
       </mesh>
       <mesh position={[6.05, 1.05, 0]}>
         <boxGeometry args={[0.1, 2.1, 10.6]} />
-        <FlatMat color="#f0eeec" />
+        <meshStandardMaterial color={SAND} {...SOFT} />
       </mesh>
       <mesh position={[0, 1.05, 5.2]}>
         <boxGeometry args={[12.2, 2.1, 0.08]} />
-        <FlatMat color="#e6e0f5" />
+        <meshStandardMaterial color={BLUSH_WALL} {...SOFT} />
       </mesh>
 
       {/* Corridor props */}
@@ -859,12 +980,12 @@ function OfficeBuilding({
       <Plant position={[-0.85, 0, -1.4]} scale={0.8} />
       <Plant position={[0.85, 0, -1.4]} scale={0.8} />
       <Cabinet position={[0, 0, -4.55]} wide={1.1} />
-      <RoundedBox args={[0.7, 0.05, 0.45]} radius={0.02} position={[0, 0.38, 0.2]}>
-        <FlatMat color="#efebe6" />
+      <RoundedBox args={[0.72, 0.05, 0.48]} radius={0.03} position={[0, 0.4, 0.25]}>
+        <meshStandardMaterial color={DESK_TOP} {...SOFT} />
       </RoundedBox>
-      <mesh position={[0, 0.18, 0.2]}>
-        <cylinderGeometry args={[0.05, 0.07, 0.34, 8]} />
-        <FlatMat color="#d8d4ce" />
+      <mesh position={[0, 0.18, 0.25]}>
+        <cylinderGeometry args={[0.04, 0.06, 0.36, 10]} />
+        <FlatMat color={WOOD} />
       </mesh>
 
       {ROOMS.map((room) => (
@@ -1112,7 +1233,7 @@ export function OfficeTwin({
               gl={{ antialias: true }}
               style={{ touchAction: 'manipulation' }}
               onCreated={({ gl, camera }) => {
-                gl.setClearColor('#f0eeec')
+                gl.setClearColor('#f3ebe0')
                 gl.shadowMap.enabled = false
                 camera.lookAt(0, 0.3, 0)
               }}
