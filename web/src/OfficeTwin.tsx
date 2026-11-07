@@ -454,7 +454,11 @@ function FloorPlan2D({
               ))}
             </div>
             <span className="floor-state">
-              {light === 'on' ? 'Luci accese' : light === 'soft' ? 'Attività recente' : 'In attesa'}
+              {light === 'on'
+                ? 'Luci accese'
+                : light === 'soft'
+                  ? 'Si stanno spegnendo…'
+                  : 'In attesa'}
             </span>
             {(pending[room.id] || 0) > 0 && (
               <span className="dept-pending">{pending[room.id]} in attesa</span>

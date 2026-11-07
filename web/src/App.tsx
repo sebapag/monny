@@ -36,9 +36,17 @@ import {
   plainApproval,
   skillLabel,
 } from './labels'
-import { litDeptsFromAgentRun, type RoomLightState } from './lights'
+import {
+  LIGHT_LINGER_MS,
+  litDeptsFromAgentRun,
+  runNeedsLightTick,
+  type RoomLightState,
+} from './lights'
 import { OfficeTwin } from './OfficeTwin'
 import './index.css'
+
+/** How long to keep the completed run around so linger + fade can play out. */
+const POST_RUN_LIGHT_HOLD_MS = LIGHT_LINGER_MS + 900
 
 type Msg = {
   role: 'user' | 'agent'
@@ -479,6 +487,39 @@ function mergeOfficeLights(
   return next
 }
 
+/** Sticky Italian callout — hard to miss when HITL approvals are waiting. */
+function DecisionsAlert({
+  count,
+  onOpen,
+}: {
+  count: number
+  onOpen: () => void
+}) {
+  if (count <= 0) return null
+  const headline =
+    count === 1
+      ? 'C’è 1 decisione da prendere'
+      : `Ci sono ${count} decisioni da prendere`
+  return (
+    <aside
+      className="decisions-alert"
+      role="status"
+      aria-live="polite"
+      data-testid="decisions-alert"
+    >
+      <div className="decisions-alert-copy">
+        <strong>{headline}</strong>
+        <span>
+          Monny aspetta la tua conferma prima di applicare i cambiamenti.
+        </span>
+      </div>
+      <button type="button" className="btn btn-primary" onClick={onOpen}>
+        Vai alle decisioni
+      </button>
+    </aside>
+  )
+}
+
 function App() {
   const [route, setRoute] = useState<RouteState>(() => parseHash(window.location.hash))
   const [tenants, setTenants] = useState<TenantListItem[]>([])
@@ -498,6 +539,8 @@ function App() {
   const [artifactNames, setArtifactNames] = useState<string[]>([])
   const [liveRun, setLiveRun] = useState<AgentRun | null>(null)
   const [liveDept, setLiveDept] = useState<DeptId | null>(null)
+  /** Clock tick so room lights drop from linger → soft/off after ~2s. */
+  const [nowMs, setNowMs] = useState(() => Date.now())
 
   const navigate = useCallback((next: RouteState) => {
     setRoute(next)
@@ -568,6 +611,12 @@ function App() {
       })
       .catch((err: Error) => setError(err.message))
   }, [route.mode, tenantId])
+
+  useEffect(() => {
+    if (!runNeedsLightTick(liveRun, nowMs)) return
+    const id = window.setInterval(() => setNowMs(Date.now()), 200)
+    return () => window.clearInterval(id)
+  }, [liveRun, nowMs])
 
   const tenantMeta = useMemo(
     () => tenants.find((t) => t.tenant_id === tenantId),
@@ -643,7 +692,7 @@ function App() {
         setTimeout(() => {
           setLiveRun(null)
           setLiveDept(null)
-        }, 800)
+        }, POST_RUN_LIGHT_HOLD_MS)
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -693,7 +742,7 @@ function App() {
   const spendFromArtifact = (latestReport?.spend_channels ?? []) as SpendDiagnosis[]
   const seoFromArtifact = (latestReport?.seo_change_set?.changes ?? []) as SeoChange[]
   const officeLights = mergeOfficeLights(
-    litDeptsFromAgentRun(liveRun),
+    litDeptsFromAgentRun(liveRun, nowMs),
     approvals.length,
   )
 
@@ -720,12 +769,12 @@ function App() {
       await refreshApprovals(tenantId)
       await loadArtifacts(tenantId)
       await refreshTenants()
-      // Keep lit soft briefly after completion / HITL
+      // Hold run so linger (~2s ON) + existing ease-off can finish
       setTimeout(() => {
         if (current.status !== 'awaiting_approval') {
           setLiveRun(null)
         }
-      }, 2500)
+      }, POST_RUN_LIGHT_HOLD_MS)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
       setLiveRun(null)
@@ -734,57 +783,70 @@ function App() {
     }
   }
 
+  const openDecisions = () => {
+    navigate({ mode: 'dept', dept: 'direzione' })
+    window.setTimeout(() => {
+      document.getElementById('first-approval')?.scrollIntoView({ behavior: 'smooth' })
+    }, 80)
+  }
+
   return (
     <div className="app-shell">
-      <header className="topbar">
-        <div className="brand">
-          <span className="brand-strip" aria-hidden />
-          <span className="brand-mark">Monny</span>
-          <span className="brand-tag">workspace</span>
-        </div>
-        <div className="tenant-switch">
-          <label htmlFor="global-tenant">Negozio</label>
-          <select
-            id="global-tenant"
-            value={tenantId}
-            onChange={(e) => switchTenant(e.target.value)}
-          >
-            {tenants.map((t) => (
-              <option key={t.tenant_id} value={t.tenant_id}>
-                {t.display_name}
-                {t.pending_approvals ? ` · ${t.pending_approvals} da decidere` : ''}
-              </option>
-            ))}
-          </select>
-          {tenantMeta && (
-            <span className={`pill ${(tenantMeta.secrets_configured ?? 0) > 0 ? 'ok' : 'miss'}`}>
-              {(tenantMeta.secrets_configured ?? 0) > 0 ? 'Accessi ok' : 'Accessi da completare'}
-            </span>
-          )}
-        </div>
-        <nav className="nav">
-          <a
-            href="#agent"
-            className={route.mode !== 'admin' ? 'active' : ''}
-            onClick={(e) => {
-              e.preventDefault()
-              navigate({ mode: 'piano' })
-            }}
-          >
-            Agent
-          </a>
-          <a
-            href="#admin"
-            className={route.mode === 'admin' ? 'active' : ''}
-            onClick={(e) => {
-              e.preventDefault()
-              navigate({ mode: 'admin' })
-            }}
-          >
-            Admin
-          </a>
-        </nav>
-      </header>
+      <div className="app-chrome">
+        <header className="topbar">
+          <div className="brand">
+            <span className="brand-strip" aria-hidden />
+            <span className="brand-mark">Monny</span>
+            <span className="brand-tag">workspace</span>
+          </div>
+          <div className="tenant-switch">
+            <label htmlFor="global-tenant">Negozio</label>
+            <select
+              id="global-tenant"
+              value={tenantId}
+              onChange={(e) => switchTenant(e.target.value)}
+            >
+              {tenants.map((t) => (
+                <option key={t.tenant_id} value={t.tenant_id}>
+                  {t.display_name}
+                  {t.pending_approvals ? ` · ${t.pending_approvals} da decidere` : ''}
+                </option>
+              ))}
+            </select>
+            {tenantMeta && (
+              <span className={`pill ${(tenantMeta.secrets_configured ?? 0) > 0 ? 'ok' : 'miss'}`}>
+                {(tenantMeta.secrets_configured ?? 0) > 0 ? 'Accessi ok' : 'Accessi da completare'}
+              </span>
+            )}
+          </div>
+          <nav className="nav">
+            <a
+              href="#agent"
+              className={route.mode !== 'admin' ? 'active' : ''}
+              onClick={(e) => {
+                e.preventDefault()
+                navigate({ mode: 'piano' })
+              }}
+            >
+              Agent
+            </a>
+            <a
+              href="#admin"
+              className={route.mode === 'admin' ? 'active' : ''}
+              onClick={(e) => {
+                e.preventDefault()
+                navigate({ mode: 'admin' })
+              }}
+            >
+              Admin
+            </a>
+          </nav>
+        </header>
+
+        {route.mode !== 'admin' && approvals.length > 0 && (
+          <DecisionsAlert count={approvals.length} onOpen={openDecisions} />
+        )}
+      </div>
 
       <main className="page">
         {route.mode === 'admin' ? (

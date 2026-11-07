@@ -104,6 +104,13 @@ a {
   background: var(--surface);
 }
 
+/* —— Top chrome (nav + optional decisions alert) —— */
+.app-chrome {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
 /* —— Top nav —— */
 .topbar {
   display: flex;
@@ -113,9 +120,6 @@ a {
   padding: 0.65rem 1.25rem;
   border-bottom: 1px solid var(--hairline);
   background: var(--canvas);
-  position: sticky;
-  top: 0;
-  z-index: 20;
 }
 
 .brand {
@@ -479,6 +483,51 @@ a {
 .approval-actions {
   display: flex;
   gap: 0.4rem;
+}
+
+/* Agent alert: pending HITL decisions (Italian, non-jargon). Stays with sticky chrome. */
+.decisions-alert {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.85rem;
+  flex-wrap: wrap;
+  padding: 0.85rem 1.25rem;
+  border-bottom: 1px solid #e8d48a;
+  background: linear-gradient(180deg, #fff8d6 0%, var(--tint-yellow-bold) 100%);
+  color: var(--charcoal);
+  box-shadow: 0 6px 18px rgba(55, 53, 47, 0.08);
+  animation: rise 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.decisions-alert-copy {
+  display: grid;
+  gap: 0.15rem;
+  min-width: min(100%, 16rem);
+}
+
+.decisions-alert-copy strong {
+  font-size: 1.02rem;
+  color: var(--brand-navy);
+  letter-spacing: -0.01em;
+}
+
+.decisions-alert-copy span {
+  font-size: 0.86rem;
+  color: var(--slate);
+}
+
+.decisions-alert .btn-primary {
+  flex-shrink: 0;
+}
+
+@media (max-width: 640px) {
+  .decisions-alert {
+    padding: 0.75rem 1rem;
+  }
+  .decisions-alert .btn-primary {
+    width: 100%;
+  }
 }
 
 .approval-banner {
