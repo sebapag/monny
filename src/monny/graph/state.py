@@ -1,0 +1,20 @@
+"""LangGraph agent state."""
+
+from __future__ import annotations
+
+from typing import Any, TypedDict
+
+
+class AgentState(TypedDict, total=False):
+    tenant_id: str
+    goal: str
+    message: str
+    thread_id: str
+    dry_run: bool
+    plan: list[str]
+    findings: list[dict[str, Any]]
+    report: dict[str, Any]
+    pending_proposals: list[dict[str, Any]]
+    approval_ids: list[str]
+    reply: str
+    status: str

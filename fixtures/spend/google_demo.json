@@ -1,0 +1,30 @@
+{
+  "customer_id": "000-000-0000",
+  "lookback_days": 7,
+  "campaigns": [
+    {
+      "id": "g-100",
+      "name": "Brand Search IT",
+      "status": "ENABLED",
+      "daily_budget": 40.0,
+      "impressions": 12000,
+      "clicks": 680,
+      "spend": 210.5,
+      "conversions": 48,
+      "cpa": 4.39,
+      "roas": 5.2
+    },
+    {
+      "id": "g-200",
+      "name": "Prospecting Generic",
+      "status": "ENABLED",
+      "daily_budget": 80.0,
+      "impressions": 45000,
+      "clicks": 920,
+      "spend": 540.0,
+      "conversions": 6,
+      "cpa": 90.0,
+      "roas": 0.7
+    }
+  ]
+}

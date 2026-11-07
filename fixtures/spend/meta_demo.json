@@ -1,0 +1,30 @@
+{
+  "ad_account_id": "act_demo",
+  "lookback_days": 7,
+  "campaigns": [
+    {
+      "id": "m-10",
+      "name": "Retargeting 30d",
+      "status": "ACTIVE",
+      "daily_budget": 35.0,
+      "impressions": 88000,
+      "clicks": 1100,
+      "spend": 245.0,
+      "conversions": 32,
+      "cpa": 7.66,
+      "roas": 3.8
+    },
+    {
+      "id": "m-20",
+      "name": "Cold Lookalike",
+      "status": "ACTIVE",
+      "daily_budget": 60.0,
+      "impressions": 150000,
+      "clicks": 1400,
+      "spend": 410.0,
+      "conversions": 4,
+      "cpa": 102.5,
+      "roas": 0.5
+    }
+  ]
+}
