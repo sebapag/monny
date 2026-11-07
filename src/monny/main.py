@@ -1,14 +1,15 @@
-"""CLI entry: python -m monny.main --tenant demo --goal \"...\""""
+"""CLI entry: python -m monny --tenant demo --goal "..." | --job spend_daily"""
 
 from __future__ import annotations
 
 import argparse
 import json
-import sys
 
 from monny.config.loader import list_tenant_ids, load_tenant
 from monny.config.settings import get_settings
 from monny.graph.app import run_agent
+from monny.jobs import JOBS, resolve_job
+from monny.storage.audit import append_audit
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -19,10 +20,16 @@ def build_parser() -> argparse.ArgumentParser:
         default="report spend ultimi 7 giorni",
         help="Goal / instruction for the agent",
     )
-    parser.add_argument("--job", default=None, help="Scheduled job name (e.: spend_daily)")
+    parser.add_argument(
+        "--job",
+        default=None,
+        choices=sorted(JOBS.keys()),
+        help="Scheduled job (spend_daily | seo_weekly)",
+    )
     parser.add_argument("--thread-id", default=None, help="LangGraph thread id")
     parser.add_argument("--json", action="store_true", help="Emit full state as JSON")
     parser.add_argument("--list-tenants", action="store_true", help="List configured tenants")
+    parser.add_argument("--list-jobs", action="store_true", help="List scheduled jobs")
     return parser
 
 
@@ -36,24 +43,54 @@ def cli(argv: list[str] | None = None) -> int:
             print(f"{tenant_id}\t{cfg.display_name}")
         return 0
 
+    if args.list_jobs:
+        for name, job in sorted(JOBS.items()):
+            print(f"{name}\t{job.goal}\t{job.description}")
+        return 0
+
     tenant_id = args.tenant or settings.monny_default_tenant
     goal = args.goal
-    if args.job == "spend_daily":
-        goal = "report spend ultimi 7 giorni"
-    elif args.job == "seo_weekly":
-        goal = "seo audit of priority pages"
+    job_name: str | None = None
+    thread_id = args.thread_id
+
+    if args.job:
+        job = resolve_job(args.job)
+        job_name = job.name
+        goal = job.goal
+        thread_id = thread_id or f"{tenant_id}-job-{job.name}"
 
     result = run_agent(
         tenant_id=tenant_id,
         goal=goal,
-        thread_id=args.thread_id,
+        thread_id=thread_id,
     )
 
+    if job_name:
+        append_audit(
+            settings.monny_data_dir,
+            tenant_id,
+            "job_completed",
+            {
+                "job": job_name,
+                "goal": goal,
+                "status": result.get("status"),
+                "approval_ids": result.get("approval_ids") or [],
+            },
+        )
+
     if args.json:
-        print(json.dumps(result, indent=2, default=str))
+        payload = dict(result)
+        if job_name:
+            payload["job"] = job_name
+        print(json.dumps(payload, indent=2, default=str))
     else:
+        prefix = f"[job={job_name}] " if job_name else ""
         print(result.get("reply") or result.get("report", {}).get("markdown") or "No reply")
-        print(f"\n[status={result.get('status')} dry_run={result.get('dry_run', settings.dry_run)}]")
+        print(
+            f"\n{prefix}[status={result.get('status')} "
+            f"dry_run={result.get('dry_run', settings.dry_run)} "
+            f"live={settings.monny_live}]"
+        )
     return 0
 
 

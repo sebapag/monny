@@ -98,7 +98,7 @@ def create_app() -> FastAPI:
 
         apply_result: dict[str, Any] | None = None
         if body.decision == "approved":
-            apply_result = apply_approved(item.payload)
+            apply_result = apply_approved(item.payload, tenant_id=item.tenant_id)
             write_json_artifact(
                 settings.monny_data_dir,
                 item.tenant_id,
