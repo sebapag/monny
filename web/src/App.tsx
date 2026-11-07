@@ -32,6 +32,17 @@ type Msg = {
 
 const TENANT_KEY = 'monny.tenantId'
 
+function skillFamily(skill: string): string {
+  if (skill.startsWith('spend_')) return 'spend'
+  if (skill.startsWith('seo_')) return 'seo'
+  if (skill.startsWith('shopify_')) return 'shopify'
+  if (skill === 'lead_warming') return 'lead'
+  if (skill === 'reporting') return 'report'
+  if (skill === 'hitl') return 'hitl'
+  if (skill === 'planner') return 'planner'
+  return 'stub'
+}
+
 function SkillRail({
   run,
   compact = false,
@@ -54,7 +65,10 @@ function SkillRail({
       )}
       <ol className="skill-steps">
         {run.steps.map((step) => (
-          <li key={step.id} className={`skill-step status-${step.status}`}>
+          <li
+            key={step.id}
+            className={`skill-step family-${skillFamily(step.skill)} status-${step.status}`}
+          >
             <span className="skill-dot" aria-hidden />
             <div>
               <strong>{step.label}</strong>
@@ -122,17 +136,17 @@ function SeoPanel({ changes }: { changes: SeoChange[] }) {
           <div className="seo-diff">
             <div>
               <span className="muted">title</span>
-              <div className="before">{change.before.title || '—'}</div>
+              <div className="before">{change.before.title || '(vuoto)'}</div>
               <div className="after">{change.after.title}</div>
             </div>
             <div>
               <span className="muted">meta</span>
-              <div className="before">{change.before.meta_description || '—'}</div>
+              <div className="before">{change.before.meta_description || '(vuoto)'}</div>
               <div className="after">{change.after.meta_description}</div>
             </div>
             <div>
               <span className="muted">H1</span>
-              <div className="before">{change.before.h1 || '—'}</div>
+              <div className="before">{change.before.h1 || '(vuoto)'}</div>
               <div className="after">{change.after.h1}</div>
             </div>
           </div>
@@ -160,7 +174,7 @@ function AdminForm({
   return (
     <div className="form-grid">
       <div className="field">
-        <label>Display name</label>
+        <label>Nome visualizzato</label>
         <input
           value={cfg.display_name}
           onChange={(e) => set('display_name', e.target.value)}
@@ -170,7 +184,7 @@ function AdminForm({
       <div className="section-title">Shopify</div>
       <div className="field-row">
         <div className="field">
-          <label>Shop domain</label>
+          <label>Dominio shop</label>
           <input
             value={cfg.shopify.shop_domain}
             onChange={(e) =>
@@ -179,7 +193,7 @@ function AdminForm({
           />
         </div>
         <div className="field">
-          <label>API version</label>
+          <label>Versione API</label>
           <input
             value={cfg.shopify.api_version}
             onChange={(e) =>
@@ -271,24 +285,24 @@ function AdminForm({
         </div>
       </div>
 
-      <div className="section-title">Site / SEO</div>
+      <div className="section-title">Sito / SEO</div>
       <div className="field-row">
         <div className="field">
-          <label>Base URL</label>
+          <label>URL base</label>
           <input
             value={cfg.site.base_url}
             onChange={(e) => set('site', { ...cfg.site, base_url: e.target.value })}
           />
         </div>
         <div className="field">
-          <label>Sitemap URL</label>
+          <label>URL sitemap</label>
           <input
             value={cfg.site.sitemap_url ?? ''}
             onChange={(e) => set('site', { ...cfg.site, sitemap_url: e.target.value })}
           />
         </div>
         <div className="field">
-          <label>CMS adapter</label>
+          <label>Adapter CMS</label>
           <select
             value={cfg.site.cms_adapter}
             onChange={(e) => set('site', { ...cfg.site, cms_adapter: e.target.value })}
@@ -300,7 +314,7 @@ function AdminForm({
         </div>
       </div>
       <div className="field">
-        <label>Priority URLs (one per line)</label>
+        <label>URL prioritarie (una per riga)</label>
         <textarea
           rows={4}
           value={(cfg.site.priority_urls ?? []).join('\n')}
@@ -325,11 +339,11 @@ function AdminForm({
             set('policy', { ...cfg.policy, hitl_default: e.target.checked })
           }
         />
-        Propose-then-approve by default
+        Propose-then-approve di default
       </label>
       <div className="field-row">
         <div className="field">
-          <label>Min ROAS</label>
+          <label>ROAS minimo</label>
           <input
             type="number"
             step="0.1"
@@ -349,7 +363,7 @@ function AdminForm({
           />
         </div>
         <div className="field">
-          <label>Max CPA</label>
+          <label>CPA massimo</label>
           <input
             type="number"
             step="0.1"
@@ -369,7 +383,7 @@ function AdminForm({
           />
         </div>
         <div className="field">
-          <label>Max budget Δ %</label>
+          <label>Delta budget max %</label>
           <input
             type="number"
             value={cfg.policy.spend.max_budget_delta_pct}
@@ -387,9 +401,9 @@ function AdminForm({
       </div>
 
       <div>
-        <div className="section-title">Secret refs (this tenant)</div>
+        <div className="section-title">Secret ref (questo tenant)</div>
         <p className="status-line">
-          Values live in env / secret manager — never pasted into git.
+          I valori vivono in env / secret manager, mai incollati in git.
         </p>
         {detail.secrets.map((s) => (
           <div key={s.secret_ref} className="secret-row">
@@ -403,7 +417,7 @@ function AdminForm({
 
       <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center' }}>
         <button className="btn btn-primary" disabled={busy} onClick={() => void onSave(cfg)}>
-          {busy ? 'Saving…' : 'Save tenant.yaml'}
+          {busy ? 'Salvataggio…' : 'Salva tenant.yaml'}
         </button>
         <span className="status-line">File: {detail.path}</span>
       </div>
@@ -423,7 +437,7 @@ function App() {
   const [messages, setMessages] = useState<Msg[]>([
     {
       role: 'agent',
-      text: 'Monny è in dry-run. Cambia tenant dall’header. Prova spend, SEO, promo o lead warming — vedrai le skill attivarsi in tempo reale.',
+      text: 'Monny è in dry-run. Cambia tenant dall’header. Prova spend, SEO, promo o lead warming: vedrai le skill attivarsi in tempo reale.',
     },
   ])
   const [draft, setDraft] = useState('report spend ultimi 7 giorni')
@@ -583,7 +597,7 @@ function App() {
       const result = await decideApproval(id, decision)
       setLastDecide(
         decision === 'approved'
-          ? `Approvato ${result.action_type} → ${result.apply_result?.status ?? 'ok'}`
+          ? `Approvato ${result.action_type}: ${result.apply_result?.status ?? 'ok'}`
           : `Rifiutato ${result.action_type}`,
       )
       setLiveRun(null)
@@ -618,8 +632,9 @@ function App() {
     <div className="app-shell">
       <header className="topbar">
         <div className="brand">
+          <span className="brand-strip" aria-hidden />
           <span className="brand-mark">Monny</span>
-          <span className="brand-tag">spend · seo</span>
+          <span className="brand-tag">workspace</span>
         </div>
         <div className="tenant-switch">
           <label htmlFor="global-tenant">Tenant</label>
@@ -662,12 +677,14 @@ function App() {
       <main className="page">
         {view === 'agent' ? (
           <>
-            <section className="hero">
-              <h1>Monny</h1>
-              <p>
-                Guida spend e SEO per <strong>{tenantLabel}</strong>. Ogni skill si attiva in
-                evidenza; le proposte attendono la tua decisione.
-              </p>
+            <section className="page-intro">
+              <div>
+                <h1>Agent</h1>
+                <p>
+                  Console operativa per <strong>{tenantLabel}</strong>. Le skill si attivano
+                  in evidenza; le proposte restano in attesa della tua decisione.
+                </p>
+              </div>
             </section>
 
             {liveRun && (
@@ -687,7 +704,7 @@ function App() {
 
             <div className="layout-split">
               <section className="panel console-panel">
-                <h2>Console · {tenantId}</h2>
+                <h2>Console · {tenantLabel}</h2>
                 <div className="quick-actions">
                   <button
                     type="button"
@@ -761,7 +778,7 @@ function App() {
               </section>
 
               <section className="panel" id="approvals">
-                <h2>Approvazioni · {tenantId}</h2>
+                <h2>Approvazioni</h2>
                 {lastDecide && <p className="status-line">{lastDecide}</p>}
                 {approvals.length === 0 && (
                   <p className="status-line">Nessuna azione in attesa.</p>
@@ -792,11 +809,11 @@ function App() {
             </div>
 
             <section className="panel report-panel">
-              <h2>Saved artifacts · {tenantId}</h2>
+              <h2>Artifact salvati</h2>
               <p className="status-line">
                 {artifactNames.length
                   ? artifactNames.join(' · ')
-                  : 'No artifacts yet — run a spend or SEO job.'}
+                  : 'Nessun artifact ancora. Avvia un job spend o SEO.'}
               </p>
               <SpendPanel channels={spendFromArtifact} />
               <SeoPanel changes={seoFromArtifact} />
@@ -804,16 +821,18 @@ function App() {
           </>
         ) : (
           <>
-            <section className="hero">
-              <h1>Monny</h1>
-              <p>
-                Admin — editing <strong>{tenantLabel}</strong> (`{tenantId}`). Secrets are
-                references only.
-              </p>
+            <section className="page-intro">
+              <div>
+                <h1>Admin</h1>
+                <p>
+                  Configurazione di <strong>{tenantLabel}</strong> (`{tenantId}`). I secret
+                  sono solo riferimenti.
+                </p>
+              </div>
             </section>
 
             <section className="panel">
-              <h2>Tenants</h2>
+              <h2>Tenant</h2>
               <div className="tenant-chips">
                 {tenants.map((t) => (
                   <button
@@ -836,7 +855,7 @@ function App() {
             </section>
 
             <section className="panel">
-              <h2>Configuration · {tenantId}</h2>
+              <h2>Configurazione · {tenantId}</h2>
               {tenantDetail && (
                 <AdminForm detail={tenantDetail} onSave={saveConfig} busy={busy} />
               )}

@@ -24,6 +24,7 @@ data/**/*.sqlite-*
 data/approvals.json
 data/**/*.jsonl
 data/**/artifacts/
+data/runs/
 !data/.gitkeep
 
 # Node / web

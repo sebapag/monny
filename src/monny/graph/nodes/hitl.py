@@ -15,7 +15,7 @@ def _summary_for(proposal: dict) -> str:
     name = proposal.get("entity_name") or proposal.get("entity_id") or "?"
     reason = proposal.get("reason") or ""
     action = proposal.get("action_type") or "action"
-    return f"[{action}] {channel}:{name} — {reason}"
+    return f"[{action}] {channel}:{name}: {reason}"
 
 
 def hitl_node(state: AgentState) -> dict:

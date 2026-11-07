@@ -49,7 +49,7 @@ def run(findings: list[dict[str, Any]], goal: str) -> dict[str, Any]:
             lines.append(
                 f"- Propose **{proposal.get('action_type')}** on "
                 f"{proposal.get('channel')}:{proposal.get('entity_name')} "
-                f"— {proposal.get('reason')}"
+                f": {proposal.get('reason')}"
             )
 
         change_set = item.get("change_set")
