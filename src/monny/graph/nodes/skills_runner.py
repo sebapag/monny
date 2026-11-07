@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from monny.adapters import shopify as shopify_adapter
 from monny.config.loader import load_tenant
 from monny.config.settings import get_settings
 from monny.graph.state import AgentState
@@ -17,11 +18,21 @@ def skills_runner_node(state: AgentState) -> dict:
     tenant = load_tenant(state["tenant_id"], Path(settings.monny_tenants_dir).resolve())
     dry_run = state.get("dry_run", settings.dry_run)
     fixtures_dir = Path(__file__).resolve().parents[4] / "fixtures" / "spend"
-    # parents: nodes -> graph -> monny -> src -> repo root
-    # Path(__file__) = .../src/monny/graph/nodes/skills_runner.py
-    # parents[0]=nodes, [1]=graph, [2]=monny, [3]=src, [4]=repo
     findings = list(state.get("findings") or [])
     plan = state.get("plan") or []
+
+    # Portable Shopify read (fixture or live) — proves config-driven shop swap
+    shop = shopify_adapter.read_shop(tenant, dry_run=dry_run)
+    findings.append(
+        {
+            "skill": "shopify_read",
+            "summary": (
+                f"Shopify {shop.get('shop_domain')} mode={shop.get('mode')} "
+                f"shop={(shop.get('shop') or {}).get('name')}"
+            ),
+            "shopify": shop,
+        }
+    )
 
     for skill_name in plan:
         if skill_name == "spend_google":
@@ -33,7 +44,9 @@ def skills_runner_node(state: AgentState) -> dict:
         elif skill_name == "reporting":
             continue
         else:
-            findings.append({"skill": skill_name, "summary": "Skill not registered in MVP.", "status": "skipped"})
+            findings.append(
+                {"skill": skill_name, "summary": "Skill not registered in MVP.", "status": "skipped"}
+            )
 
     report = reporting.run(findings, state.get("goal", ""))
     findings.append(report)
@@ -48,7 +61,11 @@ def skills_runner_node(state: AgentState) -> dict:
         settings.monny_data_dir,
         tenant.tenant_id,
         "skills_ran",
-        {"plan": plan, "proposal_count": report.get("proposal_count", 0)},
+        {
+            "plan": plan,
+            "proposal_count": report.get("proposal_count", 0),
+            "shopify_mode": shop.get("mode"),
+        },
     )
 
     return {

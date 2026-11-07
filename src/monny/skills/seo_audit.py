@@ -135,7 +135,12 @@ def _issues_for(page: dict[str, Any]) -> list[dict[str, str]]:
     return issues
 
 
-def _propose_copy(page: dict[str, Any], issues: list[dict[str, str]]) -> dict[str, str]:
+def _propose_copy(
+    page: dict[str, Any],
+    issues: list[dict[str, str]],
+    *,
+    brand: str,
+) -> dict[str, str]:
     url = page.get("url") or ""
     slug = urlparse(url).path.strip("/") or "home"
     label = slug.replace("-", " ").replace("/", " · ")
@@ -145,13 +150,13 @@ def _propose_copy(page: dict[str, Any], issues: list[dict[str, str]]) -> dict[st
 
     codes = {i["code"] for i in issues}
     if "missing_title" in codes or "title_short" in codes or "title_long" in codes:
-        title = f"{label.title()} | Demo Shop"
+        title = f"{label.title()} | {brand}"
         if len(title) > 60:
             title = f"{label.title()}"[:57] + "…"
     if "missing_meta" in codes or "meta_short" in codes or "meta_long" in codes:
         meta = (
-            f"Scopri {label} su Demo Shop: selezione curata, spedizione rapida "
-            f"e assistenza dedicata. Acquista online in sicurezza."
+            f"Discover {label} at {brand}: curated selection, fast shipping, "
+            f"and dedicated support. Shop online with confidence."
         )[:155]
     if "missing_h1" in codes:
         h1 = label.title() or "Home"
@@ -194,7 +199,7 @@ def run(
             }
         )
         if issues and page.get("ok"):
-            proposed = _propose_copy(page, issues)
+            proposed = _propose_copy(page, issues, brand=tenant.display_name)
             changes.append(
                 {
                     "url": url,

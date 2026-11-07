@@ -11,6 +11,7 @@ def run(findings: list[dict[str, Any]], goal: str) -> dict[str, Any]:
     spend_channels: list[dict[str, Any]] = []
     seo_change_set: dict[str, Any] | None = None
     seo_findings: list[dict[str, Any]] = []
+    shopify: dict[str, Any] | None = None
 
     for item in findings:
         skill = item.get("skill", "unknown")
@@ -18,6 +19,14 @@ def run(findings: list[dict[str, Any]], goal: str) -> dict[str, Any]:
             continue
         lines.append(f"## {skill}")
         lines.append(item.get("summary", ""))
+
+        if skill == "shopify_read" and item.get("shopify"):
+            shopify = item["shopify"]
+            sample = shopify.get("sample_page") or {}
+            lines.append(
+                f"- Shop “{(shopify.get('shop') or {}).get('name')}” "
+                f"({shopify.get('shop_domain')}) · sample page “{sample.get('title')}”"
+            )
 
         diagnosis = item.get("diagnosis")
         if diagnosis:
@@ -67,4 +76,5 @@ def run(findings: list[dict[str, Any]], goal: str) -> dict[str, Any]:
         "spend_channels": spend_channels,
         "seo_change_set": seo_change_set,
         "seo_findings": seo_findings,
+        "shopify": shopify,
     }

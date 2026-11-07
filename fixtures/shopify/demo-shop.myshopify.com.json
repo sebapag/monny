@@ -1,0 +1,19 @@
+{
+  "shop": {
+    "name": "Demo Shop",
+    "domain": "demo-shop.myshopify.com",
+    "myshopify_domain": "demo-shop.myshopify.com",
+    "currency": "EUR",
+    "primary_locale": "it",
+    "email": "ops@demo-shop.example"
+  },
+  "pages": [
+    {
+      "id": "gid://shopify/Page/1001",
+      "handle": "home-about",
+      "title": "Shop",
+      "body_summary": "Benvenuti nel Demo Shop.",
+      "updated_at": "2026-10-01T10:00:00Z"
+    }
+  ]
+}

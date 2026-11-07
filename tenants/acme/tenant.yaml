@@ -1,0 +1,47 @@
+tenant_id: acme
+display_name: Acme Store
+shopify:
+  shop_domain: acme.myshopify.com
+  api_version: '2025-10'
+  auth:
+    secret_ref: SHOPIFY_TOKEN_ACME
+  scopes_expected:
+  - read_products
+  - write_content
+  - read_orders
+ads:
+  google:
+    customer_id: 111-222-3333
+    login_customer_id: null
+    secret_ref: GOOGLE_ADS_ACME
+  meta:
+    ad_account_id: act_acme
+    secret_ref: META_ADS_ACME
+site:
+  base_url: https://www.acme.example
+  sitemap_url: https://www.acme.example/sitemap.xml
+  cms_adapter: shopify_online_store
+  locales:
+  - en
+  priority_urls:
+  - https://www.acme.example/
+  - https://www.acme.example/collections/all
+  - https://www.acme.example/products/sample
+policy:
+  hitl_default: true
+  spend:
+    max_budget_delta_pct: 10
+    auto_apply:
+      enabled: false
+      allow: []
+    thresholds:
+      min_roas: 2.5
+      max_cpa: 35.0
+      lookback_days: 14
+  seo:
+    auto_apply: false
+    max_urls_per_run: 20
+integrations:
+  search_console:
+    site_url: https://www.acme.example/
+    secret_ref: GSC_ACME

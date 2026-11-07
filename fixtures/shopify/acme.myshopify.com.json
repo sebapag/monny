@@ -1,0 +1,19 @@
+{
+  "shop": {
+    "name": "Acme Store",
+    "domain": "acme.myshopify.com",
+    "myshopify_domain": "acme.myshopify.com",
+    "currency": "EUR",
+    "primary_locale": "en",
+    "email": "hello@acme.example"
+  },
+  "pages": [
+    {
+      "id": "gid://shopify/Page/2002",
+      "handle": "about",
+      "title": "About Acme",
+      "body_summary": "Acme builds portable commerce tooling.",
+      "updated_at": "2026-09-15T08:30:00Z"
+    }
+  ]
+}
