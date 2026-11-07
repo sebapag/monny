@@ -23,8 +23,8 @@ from monny.storage.audit import append_audit
 
 
 def _pause_for_presence() -> None:
-    """Tiny yield so the UI can poll a running step (dev UX)."""
-    time.sleep(0.35)
+    """Yield so the UI can poll a running step (presence, not a silent wait)."""
+    time.sleep(0.65)
 
 
 def skills_runner_node(state: AgentState) -> dict:
