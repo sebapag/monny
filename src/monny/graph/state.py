@@ -11,6 +11,7 @@ class AgentState(TypedDict, total=False):
     message: str
     thread_id: str
     dry_run: bool
+    run_id: str
     plan: list[str]
     findings: list[dict[str, Any]]
     report: dict[str, Any]
@@ -18,3 +19,4 @@ class AgentState(TypedDict, total=False):
     approval_ids: list[str]
     reply: str
     status: str
+    timeline: list[dict[str, Any]]

@@ -15,8 +15,8 @@ from monny.graph.nodes.hitl import hitl_node
 from monny.graph.nodes.planner import planner_node
 from monny.graph.nodes.skills_runner import skills_runner_node
 from monny.graph.state import AgentState
+from monny.storage.runs import get_run_store
 
-# Keep connection alive for process lifetime (SqliteSaver needs an open conn).
 _SQLITE_CONN: sqlite3.Connection | None = None
 
 
@@ -56,6 +56,7 @@ def run_agent(
     message: str | None = None,
     thread_id: str | None = None,
     dry_run: bool | None = None,
+    run_id: str | None = None,
 ) -> dict:
     settings = get_settings()
     graph = get_graph()
@@ -67,5 +68,17 @@ def run_agent(
         "thread_id": tid,
         "dry_run": settings.dry_run if dry_run is None else dry_run,
     }
-    result = graph.invoke(state, config={"configurable": {"thread_id": tid}})
-    return dict(result)
+    if run_id:
+        state["run_id"] = run_id
+        get_run_store(settings.monny_data_dir).set_run_status(
+            run_id,
+            "running",
+            status_line="Avvio del grafo…",
+        )
+    try:
+        result = graph.invoke(state, config={"configurable": {"thread_id": tid}})
+        return dict(result)
+    except Exception as exc:
+        if run_id:
+            get_run_store(settings.monny_data_dir).fail(run_id, str(exc))
+        raise

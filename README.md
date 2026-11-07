@@ -20,7 +20,7 @@ monny/
 
 ## Product surfaces
 
-1. **Agent UI** (`/#agent`) — chat/console, multi-tenant switcher (`demo` / `acme`), structured spend/SEO from saved artifacts, pending-approval banner after jobs, approve/reject.
+1. **Agent UI** (`/#agent`) — chat/console with **live skill rail** (timeline of active skills), multi-tenant switcher (`demo` / `acme`), artifacts, pending-approval banner, approve/reject.
 2. **Admin UI** (`/#admin`) — tenant chips + form editor for the selected `tenant.yaml` (Shopify, Ads, site, policy) with per-tenant secret_ref status (never raw secrets).
 
 ## Quick start (dry-run / mock)
@@ -115,7 +115,10 @@ python -m monny --tenant acme --goal "seo audit"
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| `POST` | `/api/chat` | Steer the agent |
+| `POST` | `/api/runs` | Start async run (returns timeline immediately) |
+| `GET` | `/api/runs/{id}` | Poll run status + skill steps (`pending\|running\|done\|waiting\|error`) |
+| `GET` | `/api/runs/{id}/stream` | SSE stream of the same timeline |
+| `POST` | `/api/chat` | Sync steer (also creates a run timeline) |
 | `GET` | `/api/approvals` | List approvals |
 | `POST` | `/api/approvals/{id}/decide` | Approve / reject (+ apply + audit) |
 | `GET` | `/api/tenants` | List tenants |

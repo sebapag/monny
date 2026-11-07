@@ -21,6 +21,41 @@ class ChatResponse(BaseModel):
     approval_ids: list[str] = Field(default_factory=list)
     report: dict[str, Any] | None = None
     findings: list[dict[str, Any]] = Field(default_factory=list)
+    run_id: str | None = None
+
+
+class RunStartRequest(BaseModel):
+    tenant_id: str = "demo"
+    message: str
+    goal: str | None = None
+    thread_id: str | None = None
+
+
+class TimelineStepOut(BaseModel):
+    id: str
+    skill: str
+    label: str
+    status: str
+    detail: str = ""
+    started_at: str | None = None
+    finished_at: str | None = None
+
+
+class RunOut(BaseModel):
+    id: str
+    tenant_id: str
+    thread_id: str
+    goal: str
+    status: str
+    active_skill: str | None = None
+    status_line: str = ""
+    steps: list[TimelineStepOut] = Field(default_factory=list)
+    reply: str | None = None
+    report: dict[str, Any] | None = None
+    approval_ids: list[str] = Field(default_factory=list)
+    error: str | None = None
+    created_at: str
+    updated_at: str
 
 
 class ApprovalDecision(BaseModel):

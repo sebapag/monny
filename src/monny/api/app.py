@@ -1,18 +1,24 @@
-"""FastAPI surface: agent chat, approvals, tenant admin config."""
+"""FastAPI surface: agent chat, async runs + timeline, approvals, tenant admin."""
 
 from __future__ import annotations
 
+import asyncio
+import json
+import threading
 from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 
 from monny.api.schemas import (
     ApprovalDecision,
     ApprovalOut,
     ChatRequest,
     ChatResponse,
+    RunOut,
+    RunStartRequest,
     SecretStatus,
     TenantUpsert,
 )
@@ -26,6 +32,7 @@ from monny.config.loader import (
 from monny.config.models import TenantConfig
 from monny.config.settings import get_settings
 from monny.graph.app import run_agent
+from monny.graph.nodes.planner import _infer_plan
 from monny.skills.apply_stub import apply_approved
 from monny.storage.approvals import ApprovalStore
 from monny.storage.artifacts import (
@@ -34,6 +41,7 @@ from monny.storage.artifacts import (
     write_json_artifact,
 )
 from monny.storage.audit import append_audit
+from monny.storage.runs import get_run_store
 
 
 def create_app() -> FastAPI:
@@ -50,6 +58,9 @@ def create_app() -> FastAPI:
     def approvals() -> ApprovalStore:
         return ApprovalStore(settings.monny_data_dir)
 
+    def runs():
+        return get_run_store(settings.monny_data_dir)
+
     @app.get("/health")
     def health() -> dict[str, Any]:
         return {
@@ -58,19 +69,106 @@ def create_app() -> FastAPI:
             "default_tenant": settings.monny_default_tenant,
         }
 
+    def _start_background_run(
+        *,
+        tenant_id: str,
+        goal: str,
+        message: str,
+        thread_id: str,
+    ) -> str:
+        plan = _infer_plan(goal, message)
+        # Include shopify_read in planned UX steps
+        planned = ["shopify_read", *plan]
+        run = runs().create(
+            tenant_id=tenant_id,
+            thread_id=thread_id,
+            goal=goal,
+            planned_skills=planned,
+        )
+
+        def _worker() -> None:
+            try:
+                run_agent(
+                    tenant_id=tenant_id,
+                    goal=goal,
+                    message=message,
+                    thread_id=thread_id,
+                    run_id=run.id,
+                )
+            except Exception as exc:  # noqa: BLE001 — surface to run store
+                runs().fail(run.id, str(exc))
+
+        threading.Thread(target=_worker, daemon=True, name=f"monny-run-{run.id[:8]}").start()
+        return run.id
+
+    @app.post("/api/runs", response_model=RunOut)
+    def start_run(body: RunStartRequest) -> RunOut:
+        try:
+            load_tenant(body.tenant_id, Path(settings.monny_tenants_dir))
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        thread_id = body.thread_id or f"{body.tenant_id}-web"
+        goal = body.goal or body.message
+        run_id = _start_background_run(
+            tenant_id=body.tenant_id,
+            goal=goal,
+            message=body.message,
+            thread_id=thread_id,
+        )
+        run = runs().get(run_id)
+        assert run is not None
+        return RunOut(**run.to_dict())
+
+    @app.get("/api/runs/{run_id}", response_model=RunOut)
+    def get_run(run_id: str) -> RunOut:
+        run = runs().get(run_id)
+        if run is None:
+            raise HTTPException(status_code=404, detail="Run not found")
+        return RunOut(**run.to_dict())
+
+    @app.get("/api/runs/{run_id}/stream")
+    async def stream_run(run_id: str) -> StreamingResponse:
+        if runs().get(run_id) is None:
+            raise HTTPException(status_code=404, detail="Run not found")
+
+        async def event_gen():
+            terminal = {"completed", "awaiting_approval", "error"}
+            while True:
+                run = runs().get(run_id)
+                if run is None:
+                    yield f"data: {json.dumps({'error': 'missing'})}\n\n"
+                    break
+                payload = run.to_dict()
+                yield f"data: {json.dumps(payload)}\n\n"
+                if run.status in terminal:
+                    break
+                await asyncio.sleep(0.25)
+
+        return StreamingResponse(event_gen(), media_type="text/event-stream")
+
     @app.post("/api/chat", response_model=ChatResponse)
     def chat(body: ChatRequest) -> ChatResponse:
+        """Sync chat (CLI-compatible). Prefer POST /api/runs for live skill UX."""
         try:
             load_tenant(body.tenant_id, Path(settings.monny_tenants_dir))
         except FileNotFoundError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
         thread_id = body.thread_id or f"{body.tenant_id}-web"
+        goal = body.goal or body.message
+        plan = _infer_plan(goal, body.message)
+        run = runs().create(
+            tenant_id=body.tenant_id,
+            thread_id=thread_id,
+            goal=goal,
+            planned_skills=["shopify_read", *plan],
+        )
         result = run_agent(
             tenant_id=body.tenant_id,
-            goal=body.goal or body.message,
+            goal=goal,
             message=body.message,
             thread_id=thread_id,
+            run_id=run.id,
         )
         return ChatResponse(
             thread_id=thread_id,
@@ -83,6 +181,7 @@ def create_app() -> FastAPI:
                 for f in (result.get("findings") or [])
                 if f.get("skill") != "reporting"
             ],
+            run_id=run.id,
         )
 
     @app.get("/api/approvals", response_model=list[ApprovalOut])
