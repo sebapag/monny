@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   type Approval,
   type Report,
@@ -6,21 +6,22 @@ import {
   type SpendDiagnosis,
   type TenantConfig,
   type TenantDetail,
+  type TenantListItem,
   chat,
   decideApproval,
   getTenant,
+  getTenantArtifact,
   listApprovals,
+  listTenantArtifacts,
   listTenants,
   putTenant,
 } from './api'
 import './index.css'
 
 type View = 'agent' | 'admin'
-type Msg = {
-  role: 'user' | 'agent'
-  text: string
-  report?: Report | null
-}
+type Msg = { role: 'user' | 'agent'; text: string; report?: Report | null }
+
+const TENANT_KEY = 'monny.tenantId'
 
 function SpendPanel({ channels }: { channels: SpendDiagnosis[] }) {
   if (!channels.length) return null
@@ -91,16 +92,6 @@ function SeoPanel({ changes }: { changes: SeoChange[] }) {
               <div className="after">{change.after.h1}</div>
             </div>
           </div>
-          {!!change.issues?.length && (
-            <ul className="issue-list">
-              {change.issues.map((issue) => (
-                <li key={`${change.url}-${issue.code}`}>
-                  <span className={`sev sev-${issue.severity}`}>{issue.severity}</span>{' '}
-                  {issue.detail}
-                </li>
-              ))}
-            </ul>
-          )}
         </div>
       ))}
     </div>
@@ -337,7 +328,6 @@ function AdminForm({
           <label>Max budget Δ %</label>
           <input
             type="number"
-            step="1"
             value={cfg.policy.spend.max_budget_delta_pct}
             onChange={(e) =>
               set('policy', {
@@ -350,26 +340,10 @@ function AdminForm({
             }
           />
         </div>
-        <div className="field">
-          <label>SEO max URLs / run</label>
-          <input
-            type="number"
-            value={cfg.policy.seo.max_urls_per_run}
-            onChange={(e) =>
-              set('policy', {
-                ...cfg.policy,
-                seo: {
-                  ...cfg.policy.seo,
-                  max_urls_per_run: Number(e.target.value),
-                },
-              })
-            }
-          />
-        </div>
       </div>
 
       <div>
-        <div className="section-title">Secret refs</div>
+        <div className="section-title">Secret refs (this tenant)</div>
         <p className="status-line">
           Values live in env / secret manager — never pasted into git.
         </p>
@@ -397,13 +371,15 @@ function App() {
   const [view, setView] = useState<View>(
     () => (window.location.hash === '#admin' ? 'admin' : 'agent'),
   )
-  const [tenants, setTenants] = useState<{ tenant_id: string; display_name: string }[]>([])
-  const [tenantId, setTenantId] = useState('demo')
+  const [tenants, setTenants] = useState<TenantListItem[]>([])
+  const [tenantId, setTenantId] = useState(
+    () => localStorage.getItem(TENANT_KEY) || 'demo',
+  )
   const [threadId, setThreadId] = useState<string | undefined>()
   const [messages, setMessages] = useState<Msg[]>([
     {
       role: 'agent',
-      text: 'Monny is in dry-run. Try “report spend” or “seo audit”.',
+      text: 'Monny is in dry-run. Switch tenants in the header. Try spend, SEO, promo, or lead warming.',
     },
   ])
   const [draft, setDraft] = useState('report spend ultimi 7 giorni')
@@ -414,6 +390,8 @@ function App() {
   const [tenantDetail, setTenantDetail] = useState<TenantDetail | null>(null)
   const [saveNote, setSaveNote] = useState<string | null>(null)
   const [latestReport, setLatestReport] = useState<Report | null>(null)
+  const [artifactNames, setArtifactNames] = useState<string[]>([])
+  const [highlightApprovals, setHighlightApprovals] = useState(false)
 
   useEffect(() => {
     const onHash = () => setView(window.location.hash === '#admin' ? 'admin' : 'agent')
@@ -421,25 +399,51 @@ function App() {
     return () => window.removeEventListener('hashchange', onHash)
   }, [])
 
-  useEffect(() => {
-    listTenants()
-      .then((items) => {
-        setTenants(items)
-        if (items.length && !items.find((t) => t.tenant_id === tenantId)) {
-          setTenantId(items[0].tenant_id)
-        }
-      })
-      .catch((err: Error) => setError(err.message))
-  }, [])
+  const refreshTenants = useCallback(async () => {
+    const items = await listTenants()
+    setTenants(items)
+    if (items.length && !items.find((t) => t.tenant_id === tenantId)) {
+      setTenantId(items[0].tenant_id)
+    }
+  }, [tenantId])
 
-  const refreshApprovals = async (id = tenantId) => {
+  useEffect(() => {
+    refreshTenants().catch((err: Error) => setError(err.message))
+  }, [refreshTenants])
+
+  useEffect(() => {
+    localStorage.setItem(TENANT_KEY, tenantId)
+  }, [tenantId])
+
+  const refreshApprovals = useCallback(async (id = tenantId) => {
     const items = await listApprovals(id)
     setApprovals(items)
-  }
+    return items
+  }, [tenantId])
+
+  const loadArtifacts = useCallback(async (id: string) => {
+    try {
+      const listed = await listTenantArtifacts(id)
+      setArtifactNames(listed.artifacts.map((a) => a.name))
+      const last = await getTenantArtifact(id, 'last_report.json').catch(() => null)
+      if (last?.payload) {
+        setLatestReport(last.payload as Report)
+      } else {
+        setLatestReport(null)
+      }
+    } catch {
+      setArtifactNames([])
+      setLatestReport(null)
+    }
+  }, [])
 
   useEffect(() => {
     refreshApprovals(tenantId).catch((err: Error) => setError(err.message))
-  }, [tenantId])
+    void loadArtifacts(tenantId)
+    getTenant(tenantId)
+      .then(setTenantDetail)
+      .catch((err: Error) => setError(err.message))
+  }, [tenantId, refreshApprovals, loadArtifacts])
 
   useEffect(() => {
     if (view !== 'admin') return
@@ -451,10 +455,25 @@ function App() {
       .catch((err: Error) => setError(err.message))
   }, [view, tenantId])
 
-  const tenantLabel = useMemo(
-    () => tenants.find((t) => t.tenant_id === tenantId)?.display_name ?? tenantId,
+  const tenantMeta = useMemo(
+    () => tenants.find((t) => t.tenant_id === tenantId),
     [tenants, tenantId],
   )
+  const tenantLabel = tenantMeta?.display_name ?? tenantId
+
+  const switchTenant = (id: string) => {
+    if (id === tenantId) return
+    setTenantId(id)
+    setThreadId(undefined)
+    setLastDecide(null)
+    setHighlightApprovals(false)
+    setMessages([
+      {
+        role: 'agent',
+        text: `Switched to tenant “${id}”. Ask for a spend report, SEO audit, promo stub, or lead warming.`,
+      },
+    ])
+  }
 
   const send = async () => {
     if (!draft.trim() || busy) return
@@ -471,11 +490,13 @@ function App() {
       })
       setThreadId(res.thread_id)
       setLatestReport(res.report ?? null)
-      setMessages((m) => [
-        ...m,
-        { role: 'agent', text: res.reply, report: res.report },
-      ])
-      await refreshApprovals(tenantId)
+      setMessages((m) => [...m, { role: 'agent', text: res.reply, report: res.report }])
+      const pending = await refreshApprovals(tenantId)
+      if (res.approval_ids.length || pending.length) {
+        setHighlightApprovals(true)
+      }
+      await loadArtifacts(tenantId)
+      await refreshTenants()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
@@ -493,6 +514,7 @@ function App() {
           : `Rejected ${result.action_type}`,
       )
       await refreshApprovals(tenantId)
+      await refreshTenants()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     }
@@ -507,6 +529,7 @@ function App() {
       setSaveNote(`Saved to ${res.path}`)
       const detail = await getTenant(tenantId)
       setTenantDetail(detail)
+      await refreshTenants()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
@@ -514,12 +537,35 @@ function App() {
     }
   }
 
+  const spendFromArtifact = (latestReport?.spend_channels ?? []) as SpendDiagnosis[]
+  const seoFromArtifact = (latestReport?.seo_change_set?.changes ?? []) as SeoChange[]
+
   return (
     <div className="app-shell">
       <header className="topbar">
         <div className="brand">
           <span className="brand-mark">Monny</span>
           <span className="brand-tag">spend · seo</span>
+        </div>
+        <div className="tenant-switch">
+          <label htmlFor="global-tenant">Tenant</label>
+          <select
+            id="global-tenant"
+            value={tenantId}
+            onChange={(e) => switchTenant(e.target.value)}
+          >
+            {tenants.map((t) => (
+              <option key={t.tenant_id} value={t.tenant_id}>
+                {t.display_name} ({t.tenant_id})
+                {t.pending_approvals ? ` · ${t.pending_approvals} pending` : ''}
+              </option>
+            ))}
+          </select>
+          {tenantMeta && (
+            <span className="pill miss">
+              secrets {tenantMeta.secrets_configured ?? 0}/{tenantMeta.secrets_total ?? 0}
+            </span>
+          )}
         </div>
         <nav className="nav">
           <a
@@ -550,27 +596,18 @@ function App() {
               </p>
             </section>
 
+            {approvals.length > 0 && (
+              <div className={`approval-banner ${highlightApprovals ? 'pulse' : ''}`}>
+                <strong>{approvals.length} pending approval(s)</strong> for {tenantId}.{' '}
+                <a href="#approvals" onClick={() => setHighlightApprovals(false)}>
+                  Review →
+                </a>
+              </div>
+            )}
+
             <div className="layout-split">
               <section className="panel">
-                <h2>Console</h2>
-                <div className="field" style={{ marginBottom: '0.8rem' }}>
-                  <label htmlFor="tenant">Tenant</label>
-                  <select
-                    id="tenant"
-                    value={tenantId}
-                    onChange={(e) => {
-                      setTenantId(e.target.value)
-                      setThreadId(undefined)
-                      setLatestReport(null)
-                    }}
-                  >
-                    {tenants.map((t) => (
-                      <option key={t.tenant_id} value={t.tenant_id}>
-                        {t.display_name} ({t.tenant_id})
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                <h2>Console · {tenantId}</h2>
                 <div className="quick-actions">
                   <button
                     type="button"
@@ -586,6 +623,20 @@ function App() {
                   >
                     SEO audit
                   </button>
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    onClick={() => setDraft('propose shopify promo discount')}
+                  >
+                    Promo stub
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    onClick={() => setDraft('lead warming sequence stub')}
+                  >
+                    Lead stub
+                  </button>
                 </div>
                 <div className="chat-log">
                   {messages.map((m, i) => (
@@ -599,11 +650,9 @@ function App() {
                     value={draft}
                     onChange={(e) => setDraft(e.target.value)}
                     onKeyDown={(e) => {
-                      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-                        void send()
-                      }
+                      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void send()
                     }}
-                    placeholder="Ask Monny for a spend report or SEO audit…"
+                    placeholder="Ask Monny…"
                   />
                   <button className="btn btn-primary" disabled={busy} onClick={() => void send()}>
                     {busy ? 'Running…' : 'Send'}
@@ -612,8 +661,8 @@ function App() {
                 {error && <p className="error">{error}</p>}
               </section>
 
-              <section className="panel">
-                <h2>Pending approvals</h2>
+              <section className="panel" id="approvals">
+                <h2>Pending approvals · {tenantId}</h2>
                 {lastDecide && <p className="status-line">{lastDecide}</p>}
                 {approvals.length === 0 && (
                   <p className="status-line">No gated actions waiting.</p>
@@ -623,11 +672,6 @@ function App() {
                     <div>
                       <strong>{a.action_type}</strong>
                       <div>{a.summary}</div>
-                      {a.payload?.metrics != null && (
-                        <div className="meta">
-                          metrics: {JSON.stringify(a.payload.metrics)}
-                        </div>
-                      )}
                       <div className="meta">
                         {a.id.slice(0, 8)} · {a.created_at}
                       </div>
@@ -648,39 +692,52 @@ function App() {
               </section>
             </div>
 
-            {latestReport && (
-              <section className="panel report-panel">
-                <h2>Latest structured report</h2>
-                <SpendPanel channels={latestReport.spend_channels ?? []} />
-                <SeoPanel changes={latestReport.seo_change_set?.changes ?? []} />
-              </section>
-            )}
+            <section className="panel report-panel">
+              <h2>Saved artifacts · {tenantId}</h2>
+              <p className="status-line">
+                {artifactNames.length
+                  ? artifactNames.join(' · ')
+                  : 'No artifacts yet — run a spend or SEO job.'}
+              </p>
+              <SpendPanel channels={spendFromArtifact} />
+              <SeoPanel changes={seoFromArtifact} />
+            </section>
           </>
         ) : (
           <>
             <section className="hero">
               <h1>Monny</h1>
               <p>
-                Admin — portable tenant config. Store secret <em>references</em>, not raw tokens.
+                Admin — editing <strong>{tenantLabel}</strong> (`{tenantId}`). Secrets are
+                references only.
               </p>
             </section>
 
             <section className="panel">
-              <h2>Tenant configuration</h2>
-              <div className="field" style={{ marginBottom: '1rem' }}>
-                <label htmlFor="admin-tenant">Tenant</label>
-                <select
-                  id="admin-tenant"
-                  value={tenantId}
-                  onChange={(e) => setTenantId(e.target.value)}
-                >
-                  {tenants.map((t) => (
-                    <option key={t.tenant_id} value={t.tenant_id}>
-                      {t.display_name} ({t.tenant_id})
-                    </option>
-                  ))}
-                </select>
+              <h2>Tenants</h2>
+              <div className="tenant-chips">
+                {tenants.map((t) => (
+                  <button
+                    key={t.tenant_id}
+                    type="button"
+                    className={`tenant-chip ${t.tenant_id === tenantId ? 'active' : ''}`}
+                    onClick={() => switchTenant(t.tenant_id)}
+                  >
+                    <strong>{t.display_name}</strong>
+                    <span>{t.tenant_id}</span>
+                    <span className="meta">
+                      secrets {t.secrets_configured}/{t.secrets_total}
+                      {t.pending_approvals
+                        ? ` · ${t.pending_approvals} pending`
+                        : ''}
+                    </span>
+                  </button>
+                ))}
               </div>
+            </section>
+
+            <section className="panel">
+              <h2>Configuration · {tenantId}</h2>
               {tenantDetail && (
                 <AdminForm detail={tenantDetail} onSave={saveConfig} busy={busy} />
               )}

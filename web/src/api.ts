@@ -54,6 +54,7 @@ export type Report = {
   spend_channels?: SpendDiagnosis[]
   seo_change_set?: { status?: string; changes?: SeoChange[] } | null
   seo_findings?: Record<string, unknown>[]
+  shopify?: Record<string, unknown> | null
 }
 
 export type ChatResponse = {
@@ -79,7 +80,14 @@ export type Approval = {
   apply_result?: Record<string, unknown> | null
 }
 
-export type TenantListItem = { tenant_id: string; display_name: string }
+export type TenantListItem = {
+  tenant_id: string
+  display_name: string
+  secrets?: { secret_ref: string; configured: boolean }[]
+  secrets_configured?: number
+  secrets_total?: number
+  pending_approvals?: number
+}
 
 export type TenantConfig = {
   tenant_id: string
@@ -119,6 +127,17 @@ export type TenantDetail = {
   config: TenantConfig
   secrets: { secret_ref: string; configured: boolean }[]
   path: string
+}
+
+export type ArtifactList = {
+  tenant_id: string
+  artifacts: { name: string; path: string; size: number; mtime: number }[]
+}
+
+export type ArtifactPayload = {
+  tenant_id: string
+  name: string
+  payload: Record<string, unknown>
 }
 
 export function chat(body: {
@@ -165,4 +184,12 @@ export function putTenant(tenantId: string, config: TenantConfig) {
     method: 'PUT',
     body: JSON.stringify({ config }),
   })
+}
+
+export function listTenantArtifacts(tenantId: string) {
+  return request<ArtifactList>(`/api/tenants/${tenantId}/artifacts`)
+}
+
+export function getTenantArtifact(tenantId: string, name: string) {
+  return request<ArtifactPayload>(`/api/tenants/${tenantId}/artifacts/${name}`)
 }

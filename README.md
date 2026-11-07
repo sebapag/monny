@@ -20,8 +20,8 @@ monny/
 
 ## Product surfaces
 
-1. **Agent UI** (`/#agent`) — chat/console, structured spend tables, SEO change-set diffs, approve/reject.
-2. **Admin UI** (`/#admin`) — form editor for Shopify, Google Ads, Meta, site/SEO, policy/HITL, and secret_ref status (never raw secrets).
+1. **Agent UI** (`/#agent`) — chat/console, multi-tenant switcher (`demo` / `acme`), structured spend/SEO from saved artifacts, pending-approval banner after jobs, approve/reject.
+2. **Admin UI** (`/#admin`) — tenant chips + form editor for the selected `tenant.yaml` (Shopify, Ads, site, policy) with per-tenant secret_ref status (never raw secrets).
 
 ## Quick start (dry-run / mock)
 
@@ -128,7 +128,23 @@ python -m monny --tenant acme --goal "seo audit"
 |-------|--------|
 | `shopify_read` | Fixture/live shop + sample page (every run) |
 | `spend_google` / `spend_meta` | Fixture or live metrics + diagnosis |
-| `seo_audit` | HTML audit → SeoChangeSet |
+| `seo_audit` | Uses `seo_crawler` subagent → SeoChangeSet |
 | `seo_apply` | HITL-gated stub / live CMS behind flag |
-| `reporting` | Markdown + structured UI payload |
-| `shopify_promo` / `lead_warming` | Disabled stubs |
+| `reporting` | Markdown + structured UI payload + artifacts |
+| `shopify_promo` | Phase-2 stub proposals (no side effects) |
+| `lead_warming` | Phase-3 stub proposals (no side effects) |
+
+### Subagents
+
+| Subagent | Role |
+|----------|------|
+| `seo_crawler` | Batch fetch/parse priority URLs; returns compact summaries only (fixtures by default) |
+
+Ask explicitly for stubs, e.g. `propose shopify promo discount` or `lead warming sequence`.
+
+### Artifacts API
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| `GET` | `/api/tenants/{id}/artifacts` | List JSON artifacts |
+| `GET` | `/api/tenants/{id}/artifacts/{name}` | Load `last_report.json`, `last_spend_report.json`, `last_seo_report.json` |
