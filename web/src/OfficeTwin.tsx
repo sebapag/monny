@@ -15,7 +15,9 @@ import {
   type MeshStandardMaterial,
   type PointLight as PointLightType,
 } from 'three'
+import type { SubscriptionSkills } from './api'
 import { DEPARTMENTS, type DeptId } from './depts'
+import { isDeptEnabled, lockedHintIt } from './entitlements'
 import type { RoomLightState } from './lights'
 
 /** Soft Notion pastels — always readable, brighter when lit. */
@@ -241,11 +243,13 @@ function FlatDesk({ position }: { position: [number, number, number] }) {
 function RoomZone({
   room,
   light,
+  locked,
   onSelect,
   reduceMotion,
 }: {
   room: RoomLayout
   light: RoomLightState
+  locked: boolean
   onSelect: (id: DeptId) => void
   reduceMotion: boolean
 }) {
@@ -260,6 +264,8 @@ function RoomZone({
   const floorLit = useMemo(() => new Color(room.floorLit), [room.floorLit])
   const accent = useMemo(() => new Color(room.accent), [room.accent])
   const white = useMemo(() => new Color('#ffffff'), [])
+  const lockedFloor = useMemo(() => new Color('#c8c4be'), [])
+  const lockedHot = useMemo(() => new Color('#9a9690'), [])
   const ceilIdle = useMemo(() => new Color('#f6f5f4'), [])
   const ceilWarm = useMemo(() => new Color('#fffdf5'), [])
   const black = useMemo(() => new Color('#000000'), [])
@@ -277,37 +283,43 @@ function RoomZone({
   }, [hx, hz, room.people])
 
   useFrame((_, dt) => {
-    const target = lightLevel(light)
+    const target = locked ? 0 : lightLevel(light)
     const k = reduceMotion ? 1 : 1 - Math.exp(-EASE * dt)
     level.current = lerp(level.current, target, k)
     const L = level.current
 
     if (floorMat.current) {
       tmp.copy(floorIdle).lerp(floorLit, L)
+      if (locked) tmp.copy(floorIdle).lerp(lockedFloor, 0.45)
       floorMat.current.color.copy(tmp)
       floorMat.current.emissive.copy(accent)
-      floorMat.current.emissiveIntensity = 0.28 * L
+      floorMat.current.emissiveIntensity = locked ? 0 : 0.28 * L
     }
     if (ceilMat.current) {
       tmp.copy(ceilIdle).lerp(ceilWarm, Math.min(1, L * 1.4))
       ceilMat.current.color.copy(tmp)
       tmp2.copy(black).lerp(accent, L)
       ceilMat.current.emissive.copy(tmp2)
-      ceilMat.current.emissiveIntensity = 0.45 * L
+      ceilMat.current.emissiveIntensity = locked ? 0 : 0.45 * L
     }
     if (hotMat.current) {
-      tmp.copy(white).lerp(accent, L)
-      hotMat.current.color.copy(tmp)
-      hotMat.current.emissive.copy(tmp)
-      hotMat.current.emissiveIntensity = lerp(0.05, 0.35, L)
+      if (locked) {
+        hotMat.current.color.copy(lockedHot)
+        hotMat.current.emissive.copy(lockedHot)
+      } else {
+        tmp.copy(white).lerp(accent, L)
+        hotMat.current.color.copy(tmp)
+        hotMat.current.emissive.copy(tmp)
+      }
+      hotMat.current.emissiveIntensity = locked ? 0.02 : lerp(0.05, 0.35, L)
     }
     if (lamp.current) {
-      lamp.current.intensity = lerp(0.08, 1.1, L)
+      lamp.current.intensity = locked ? 0.02 : lerp(0.08, 1.1, L)
       lamp.current.color.copy(lampWarm).lerp(accent, L)
     }
   })
 
-  const active = light === 'on'
+  const active = !locked && light === 'on'
 
   return (
     <group>
@@ -318,7 +330,7 @@ function RoomZone({
           onSelect(room.id)
         }}
         onPointerOver={() => {
-          document.body.style.cursor = 'pointer'
+          document.body.style.cursor = locked ? 'not-allowed' : 'pointer'
         }}
         onPointerOut={() => {
           document.body.style.cursor = 'default'
@@ -366,13 +378,13 @@ function RoomZone({
       <Billboard position={[hx, 1.55, hz]}>
         <Text
           fontSize={0.26}
-          color="#37352f"
+          color={locked ? '#787671' : '#37352f'}
           anchorX="center"
           anchorY="middle"
           outlineWidth={0.015}
           outlineColor="#ffffff"
         >
-          {`${room.hotspot} · ${room.label}`}
+          {locked ? `${room.hotspot} · ${room.label} · chiuso` : `${room.hotspot} · ${room.label}`}
         </Text>
       </Billboard>
     </group>
@@ -381,10 +393,12 @@ function RoomZone({
 
 function OfficeBuilding({
   lights,
+  enabled,
   onSelect,
   reduceMotion,
 }: {
   lights: Record<DeptId, RoomLightState>
+  enabled: SubscriptionSkills
   onSelect: (id: DeptId) => void
   reduceMotion: boolean
 }) {
@@ -416,6 +430,7 @@ function OfficeBuilding({
           key={room.id}
           room={room}
           light={lights[room.id]}
+          locked={!isDeptEnabled(room.id, enabled)}
           onSelect={onSelect}
           reduceMotion={reduceMotion}
         />
@@ -427,10 +442,12 @@ function OfficeBuilding({
 function FloorPlan2D({
   lights,
   pending,
+  enabled,
   onSelect,
 }: {
   lights: Record<DeptId, RoomLightState>
   pending: Record<DeptId, number>
+  enabled: SubscriptionSkills
   onSelect: (id: DeptId) => void
 }) {
   return (
@@ -438,25 +455,38 @@ function FloorPlan2D({
       {ROOMS.map((room) => {
         const light = lights[room.id]
         const dept = DEPARTMENTS.find((d) => d.id === room.id)
+        const locked = !isDeptEnabled(room.id, enabled)
         return (
           <button
             key={room.id}
             type="button"
-            className={`floor-room light-${light} tint-${dept?.tint ?? 'gray'}`}
+            className={`floor-room light-${locked ? 'off' : light} tint-${dept?.tint ?? 'gray'}${
+              locked ? ' is-locked' : ''
+            }`}
             style={{ gridArea: room.id }}
             onClick={() => onSelect(room.id)}
+            title={locked ? lockedHintIt(room.id) : undefined}
           >
             <span className="floor-hotspot">{room.hotspot}</span>
             <strong>{dept?.name ?? room.label}</strong>
             <div className="floor-people" aria-hidden>
               {Array.from({ length: room.people }).map((_, i) => (
-                <span key={i} className={`ometto-2d ${light === 'on' ? 'active' : ''}`} />
+                <span
+                  key={i}
+                  className={`ometto-2d ${!locked && light === 'on' ? 'active' : ''}`}
+                />
               ))}
             </div>
             <span className="floor-state">
-              {light === 'on' ? 'Luci accese' : light === 'soft' ? 'Attività recente' : 'In attesa'}
+              {locked
+                ? 'Non nel piano'
+                : light === 'on'
+                  ? 'Luci accese'
+                  : light === 'soft'
+                    ? 'Attività recente'
+                    : 'In attesa'}
             </span>
-            {(pending[room.id] || 0) > 0 && (
+            {!locked && (pending[room.id] || 0) > 0 && (
               <span className="dept-pending">{pending[room.id]} in attesa</span>
             )}
           </button>
@@ -513,6 +543,7 @@ class CanvasErrorBoundary extends Component<
 export function OfficeTwin({
   lights,
   pending,
+  enabled,
   statusLine,
   busy,
   onSelect,
@@ -520,6 +551,7 @@ export function OfficeTwin({
 }: {
   lights: Record<DeptId, RoomLightState>
   pending: Record<DeptId, number>
+  enabled: SubscriptionSkills
   statusLine?: string | null
   busy?: boolean
   onSelect: (id: DeptId) => void
@@ -528,15 +560,19 @@ export function OfficeTwin({
   const fallback = usePreferFallback()
   const reduceMotion = useReduceMotion()
   const [failed, setFailed] = useState(false)
+  const [freeText, setFreeText] = useState('')
   const use2d = fallback || failed
 
   const litNames = useMemo(
     () =>
-      DEPARTMENTS.filter((d) => lights[d.id] === 'on')
+      DEPARTMENTS.filter((d) => lights[d.id] === 'on' && isDeptEnabled(d.id, enabled))
         .map((d) => d.name)
         .join(', '),
-    [lights],
+    [lights, enabled],
   )
+
+  const spendOn = isDeptEnabled('spend', enabled)
+  const seoOn = isDeptEnabled('seo', enabled)
 
   return (
     <section className="office-twin" data-testid="office-twin">
@@ -545,7 +581,7 @@ export function OfficeTwin({
           <h1>Ufficio Monny</h1>
           <p>
             Ufficio digitale dei reparti. Quando una skill lavora, si accendono le luci
-            e gli ometti di quella zona. Clicca una stanza per entrare.
+            e gli ometti di quella zona. I reparti non nel piano restano chiusi.
           </p>
         </div>
       </div>
@@ -554,7 +590,8 @@ export function OfficeTwin({
         <button
           type="button"
           className="btn btn-primary"
-          disabled={busy}
+          disabled={busy || !spendOn}
+          title={spendOn ? undefined : lockedHintIt('spend')}
           onClick={() => onQuickAction('report spend ultimi 7 giorni')}
         >
           {busy ? 'In corso…' : 'Controlla le ads'}
@@ -562,7 +599,8 @@ export function OfficeTwin({
         <button
           type="button"
           className="btn btn-ghost"
-          disabled={busy}
+          disabled={busy || !seoOn}
+          title={seoOn ? undefined : lockedHintIt('seo')}
           onClick={() => onQuickAction('seo audit of priority pages')}
         >
           Controlla SEO
@@ -571,9 +609,39 @@ export function OfficeTwin({
         {litNames && <span className="office-status lit">Luci: {litNames}</span>}
       </div>
 
+      <form
+        className="office-request"
+        onSubmit={(e) => {
+          e.preventDefault()
+          const text = freeText.trim()
+          if (!text || busy) return
+          onQuickAction(text)
+          setFreeText('')
+        }}
+      >
+        <label htmlFor="office-free-text">Cosa vuoi chiedere all’ufficio?</label>
+        <div className="office-request-row">
+          <input
+            id="office-free-text"
+            value={freeText}
+            onChange={(e) => setFreeText(e.target.value)}
+            placeholder="Es. Controlla le ads degli ultimi 7 giorni…"
+            disabled={busy}
+          />
+          <button className="btn btn-primary" type="submit" disabled={busy || !freeText.trim()}>
+            Avvia
+          </button>
+        </div>
+      </form>
+
       <div className={`office-viewport flat-pastel locked-view ${use2d ? 'is-2d' : 'is-3d'}`}>
         {use2d ? (
-          <FloorPlan2D lights={lights} pending={pending} onSelect={onSelect} />
+          <FloorPlan2D
+            lights={lights}
+            pending={pending}
+            enabled={enabled}
+            onSelect={onSelect}
+          />
         ) : (
           <CanvasErrorBoundary onError={() => setFailed(true)}>
             <Canvas
@@ -594,6 +662,7 @@ export function OfficeTwin({
                 <directionalLight position={[5, 10, 3]} intensity={0.35} />
                 <OfficeBuilding
                   lights={lights}
+                  enabled={enabled}
                   onSelect={onSelect}
                   reduceMotion={reduceMotion}
                 />

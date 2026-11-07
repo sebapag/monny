@@ -1,0 +1,53 @@
+name: Deploy API to AWS App Runner (stub)
+
+# Same GHCR image as Cloud Run. Documented twin — no live AWS account required for CI.
+#
+# When activating, set:
+#   secrets: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY (or use OIDC)
+#   vars:    AWS_REGION (e.g. eu-west-1), APP_RUNNER_SERVICE_ARN
+#   vars:    API_IMAGE (default ghcr.io/<owner>/monny-api)
+#
+# Manual:
+#   aws apprunner start-deployment --service-arn "$APP_RUNNER_SERVICE_ARN"
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Print intended deploy without calling AWS"
+        type: boolean
+        default: true
+      image_tag:
+        description: "Image tag"
+        required: false
+        default: "latest"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      IMAGE: ${{ vars.API_IMAGE || format('ghcr.io/{0}/monny-api', github.repository_owner) }}
+      AWS_REGION: ${{ vars.AWS_REGION || 'eu-west-1' }}
+    steps:
+      - name: Document / dry-run App Runner deploy
+        env:
+          TAG: ${{ github.event.inputs.image_tag || 'latest' }}
+          DRY: ${{ github.event.inputs.dry_run }}
+          SERVICE_ARN: ${{ vars.APP_RUNNER_SERVICE_ARN }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        run: |
+          set -euo pipefail
+          IMAGE_REF="${IMAGE}:${TAG}"
+          echo "Would deploy ${IMAGE_REF} to AWS App Runner (region=${AWS_REGION})."
+          echo "Example:"
+          echo "  aws apprunner start-deployment --service-arn \"\$APP_RUNNER_SERVICE_ARN\""
+          if [ "${DRY}" != "false" ] || [ -z "${AWS_ACCESS_KEY_ID:-}" ]; then
+            echo "Dry-run or missing AWS credentials — OK (stub workflow)."
+            exit 0
+          fi
+          if [ -z "${SERVICE_ARN:-}" ]; then
+            echo "Set repository variable APP_RUNNER_SERVICE_ARN for a live deploy."
+            exit 1
+          fi
+          echo "Live App Runner deploy not auto-wired in this stub; use AWS console/CLI with ${IMAGE_REF}."
+          exit 1

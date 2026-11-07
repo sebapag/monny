@@ -1,33 +1,51 @@
 # Monny
 
 LangGraph marketing deep agent for **spend** (Google Ads + Meta) and **SEO**.  
-Propose-then-approve HITL by default. Shopify / ads accounts are portable config — never hard-coded.
+Propose-then-approve HITL by default. Shopify / ads accounts are portable config — never hard-coded.  
+Skills/reparti are **subscription entitlements** toggled per tenant (not all-on).
 
 ## Layout
 
 ```
 monny/
   src/monny/          # Python agent + FastAPI
-  tenants/demo/       # Sample portable tenant.yaml
+  tenants/demo/       # Sample portable tenant.yaml (+ subscription.skills)
   tenants/acme/       # Second tenant (swap YAML only)
   fixtures/spend/     # Mock Ads metrics for dry-run
   fixtures/seo/       # HTML fixtures for .example hosts
   fixtures/shopify/   # Shop + page metadata by shop_domain
   web/                # Vite + React UI (Agent + Admin)
   data/               # Runtime (checkpoints, approvals, artifacts, audit)
+  Dockerfile          # Multi-stage API image (Cloud Run / App Runner / ACA)
+  docker-compose.yml  # Local api (+ optional web profile)
+  netlify.toml        # Frontend static deploy
+  .github/workflows/  # CI, GHCR push, Cloud Run / Netlify / AWS / Azure
   tests/
 ```
 
 ## Product surfaces
 
-1. **Agent UI** (`/#agent`) — chat/console with **live skill rail** (timeline of active skills), multi-tenant switcher (`demo` / `acme`), artifacts, pending-approval banner, approve/reject.
-2. **Admin UI** (`/#admin`) — tenant chips + form editor for the selected `tenant.yaml` (Shopify, Ads, site, policy) with per-tenant secret_ref status (never raw secrets).
+1. **Agent UI** (`/#agent`) — 3D office twin: rooms light when skills run; locked rooms for disabled entitlements; free-text + shortcuts respect the plan.
+2. **Admin UI** (`/#admin`) — tenant editor + **Attivazione piano / reparti** toggles (`subscription.skills`: spend, seo, shopify, leads). Leadership/HITL always on.
 
 ## Quick start (dry-run / mock)
 
 No live credentials required. Dry-run is the default (`MONNY_DRY_RUN=1`, `MONNY_LIVE=0`).
 
-### 1. Python agent + API
+### Docker Compose (recommended local)
+
+```bash
+# API only (production-like image)
+docker compose up --build
+
+# API + Vite web (profile)
+docker compose --profile web up --build
+```
+
+- API health: http://127.0.0.1:8000/health (also `/api/health`)
+- Web (profile): http://127.0.0.1:5173 — set `VITE_API_BASE_URL` if the UI should call a remote API
+
+### 1. Python agent + API (venv)
 
 ```bash
 cd monny
@@ -58,6 +76,12 @@ uvicorn monny.api.app:app --reload --host 127.0.0.1 --port 8000
 cd web && npm install && npm run dev
 ```
 
+Optional: point the SPA at a remote API (Cloud Run):
+
+```bash
+VITE_API_BASE_URL=https://YOUR-CLOUD-RUN-URL npm run dev
+```
+
 - Agent: http://127.0.0.1:5173  
 - Admin: http://127.0.0.1:5173/#admin  
 
@@ -65,6 +89,7 @@ cd web && npm install && npm run dev
 
 ```bash
 pytest   # no live credentials required
+cd web && npm test && npm run build
 ```
 
 ## Secret refs & live mode
@@ -105,6 +130,52 @@ python -m monny --tenant demo --goal "seo audit"
 python -m monny --tenant acme --goal "seo audit"
 ```
 
+## Subscription / activatable skills
+
+In `tenant.yaml`:
+
+```yaml
+subscription:
+  plan: growth          # starter | growth | scale
+  skills:
+    spend: true
+    seo: true
+    shopify: false
+    leads: false
+```
+
+- **Demo seed**: growth with spend+seo on; shopify/leads off.
+- **Runtime**: planner + skills runner skip disabled skills; API returns `403` when a free-text goal only targets disabled reparti.
+- **UI**: Admin toggles (“Attivazione piano / reparti”); office rooms for off skills look locked (Italian hint); shortcuts/free-text refuse disabled goals.
+- Leadership (HITL / Direzione) is always available.
+
+## Deploy
+
+| Path | Role |
+|------|------|
+| **Docker image** (`Dockerfile`) | Portable API → GHCR `ghcr.io/<owner>/monny-api` |
+| **Cloud Run** | Reference hyperscaler (`.github/workflows/deploy-cloudrun.yml`, `workflow_dispatch`) |
+| **Netlify** | Static `web/` (`netlify.toml`; env `VITE_API_BASE_URL`) |
+| **AWS App Runner / Azure Container Apps** | Same image — stub workflows `deploy-aws.yml` / `deploy-azure.yml` (dry-run by default) |
+
+### GitHub Actions
+
+| Workflow | Trigger | Notes |
+|----------|---------|-------|
+| `ci.yml` | PR + push `main` | pytest + web build |
+| `docker-api.yml` | push `main` / tags / manual | build & push GHCR |
+| `deploy-cloudrun.yml` | `workflow_dispatch` | secrets: `GCP_SA_KEY`, `GCP_PROJECT` |
+| `deploy-netlify.yml` | `workflow_dispatch` | secrets: `NETLIFY_AUTH_TOKEN`, `NETLIFY_SITE_ID` + input `api_base_url` |
+| `deploy-aws.yml` / `deploy-azure.yml` | `workflow_dispatch` | documented stubs; dry-run without cloud accounts |
+
+### Netlify (Git integration)
+
+1. New site from repo → build uses root `netlify.toml` (`base = web`, publish `dist`, SPA redirect).
+2. Set env `VITE_API_BASE_URL` to the Cloud Run URL (no trailing slash).
+3. Or use `deploy-netlify.yml` with Netlify secrets.
+
+No live cloud credentials are committed; dry-run/mock remains the default.
+
 ## HITL apply
 
 1. Agent proposes spend pauses/budget cuts or an SEO change set.
@@ -121,8 +192,9 @@ python -m monny --tenant acme --goal "seo audit"
 | `POST` | `/api/chat` | Sync steer (also creates a run timeline) |
 | `GET` | `/api/approvals` | List approvals |
 | `POST` | `/api/approvals/{id}/decide` | Approve / reject (+ apply + audit) |
-| `GET` | `/api/tenants` | List tenants |
-| `GET`/`PUT` | `/api/tenants/{id}` | Read / save config |
+| `GET` | `/health` / `/api/health` | Liveness |
+| `GET` | `/api/tenants` | List tenants (+ `subscription` summary) |
+| `GET`/`PUT` | `/api/tenants/{id}` | Read / save config (includes `subscription`) |
 | `GET` | `/api/tenants/{id}/audit` | Audit events |
 
 ## Skills (MVP)

@@ -6,6 +6,7 @@ import time
 from pathlib import Path
 
 from monny.adapters import shopify as shopify_adapter
+from monny.config.entitlements import is_skill_allowed
 from monny.config.loader import load_tenant
 from monny.config.settings import get_settings
 from monny.graph import timeline
@@ -57,6 +58,16 @@ def skills_runner_node(state: AgentState) -> dict:
 
     for skill_name in plan:
         if skill_name == "reporting":
+            continue
+
+        if not is_skill_allowed(tenant, skill_name):
+            findings.append(
+                {
+                    "skill": skill_name,
+                    "summary": "Skill non attiva nel piano di sottoscrizione.",
+                    "status": "skipped_entitlement",
+                }
+            )
             continue
 
         if skill_name == "spend_google":

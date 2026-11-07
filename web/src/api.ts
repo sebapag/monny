@@ -1,4 +1,8 @@
-const API_BASE = import.meta.env.VITE_API_BASE ?? ''
+/** Prefer VITE_API_BASE_URL (Netlify/Cloud Run); fall back to legacy VITE_API_BASE. */
+const API_BASE =
+  (import.meta.env.VITE_API_BASE_URL as string | undefined) ||
+  (import.meta.env.VITE_API_BASE as string | undefined) ||
+  ''
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
@@ -108,6 +112,25 @@ export type Approval = {
   apply_result?: Record<string, unknown> | null
 }
 
+export type SubscriptionSkills = {
+  spend: boolean
+  seo: boolean
+  shopify: boolean
+  leads: boolean
+}
+
+export type SubscriptionConfig = {
+  plan: 'starter' | 'growth' | 'scale'
+  skills: SubscriptionSkills
+}
+
+export type SubscriptionSummary = {
+  plan: string
+  skills: SubscriptionSkills
+  leadership: boolean
+  labels_it?: Record<string, string>
+}
+
 export type TenantListItem = {
   tenant_id: string
   display_name: string
@@ -115,6 +138,7 @@ export type TenantListItem = {
   secrets_configured?: number
   secrets_total?: number
   pending_approvals?: number
+  subscription?: SubscriptionSummary
 }
 
 export type TenantConfig = {
@@ -149,12 +173,14 @@ export type TenantConfig = {
   integrations?: {
     search_console?: { site_url: string; secret_ref: string } | null
   }
+  subscription?: SubscriptionConfig
 }
 
 export type TenantDetail = {
   config: TenantConfig
   secrets: { secret_ref: string; configured: boolean }[]
   path: string
+  subscription?: SubscriptionSummary
 }
 
 export type ArtifactList = {

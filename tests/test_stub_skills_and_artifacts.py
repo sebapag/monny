@@ -18,8 +18,26 @@ def test_planner_routes_stub_skills():
 
 
 def test_stub_skills_produce_proposals(tmp_path, monkeypatch):
-    monkeypatch.setenv("MONNY_TENANTS_DIR", str(ROOT / "tenants"))
-    monkeypatch.setenv("MONNY_DATA_DIR", str(tmp_path))
+    import shutil
+
+    from monny.config.loader import load_tenant, save_tenant
+    from monny.config.models import SubscriptionConfig, SubscriptionSkills
+
+    tenants = tmp_path / "tenants"
+    shutil.copytree(ROOT / "tenants" / "demo", tenants / "demo")
+    cfg = load_tenant("demo", tenants)
+    cfg = cfg.model_copy(
+        update={
+            "subscription": SubscriptionConfig(
+                plan="scale",
+                skills=SubscriptionSkills(spend=True, seo=True, shopify=True, leads=True),
+            )
+        }
+    )
+    save_tenant(cfg, tenants)
+
+    monkeypatch.setenv("MONNY_TENANTS_DIR", str(tenants))
+    monkeypatch.setenv("MONNY_DATA_DIR", str(tmp_path / "data"))
     monkeypatch.setenv("MONNY_DRY_RUN", "1")
     get_settings.cache_clear()
     get_graph.cache_clear()

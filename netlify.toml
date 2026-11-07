@@ -1,0 +1,30 @@
+# Netlify — static Agent/Admin SPA (API runs on Cloud Run / container).
+# Site root is the monorepo; build only the web/ package.
+#
+# Required build env (Netlify UI or CLI):
+#   VITE_API_BASE_URL = https://<your-cloud-run-service-url>
+#   (no trailing slash; browser calls `${VITE_API_BASE_URL}/api/...`)
+#
+# Local preview without Netlify:
+#   cd web && VITE_API_BASE_URL=http://127.0.0.1:8000 npm run build && npm run preview
+
+[build]
+  base = "web"
+  command = "npm ci && npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "22"
+
+# SPA fallback
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# Optional: keep health checks off Netlify (API is elsewhere)
+# Headers for static assets
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"

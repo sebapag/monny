@@ -2,12 +2,18 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
+from monny.config.entitlements import filter_plan
+from monny.config.loader import load_tenant
+from monny.config.models import TenantConfig
+from monny.config.settings import get_settings
 from monny.graph import timeline
 from monny.graph.state import AgentState
 from monny.storage.runs import SKILL_LABELS
 
 
-def _infer_plan(goal: str, message: str) -> list[str]:
+def _infer_plan_raw(goal: str, message: str) -> list[str]:
     text = f"{goal} {message}".lower()
     plan: list[str] = []
 
@@ -49,11 +55,28 @@ def _infer_plan(goal: str, message: str) -> list[str]:
     return ordered
 
 
+def _infer_plan(
+    goal: str,
+    message: str,
+    tenant: TenantConfig | None = None,
+) -> list[str]:
+    plan = _infer_plan_raw(goal, message)
+    if tenant is None:
+        return plan
+    filtered = filter_plan(tenant, plan)
+    # If every product skill was stripped, keep reporting only (Leadership path).
+    if not any(s != "reporting" for s in filtered):
+        return ["reporting"]
+    return filtered
+
+
 def planner_node(state: AgentState) -> dict:
     run_id = state.get("run_id")
     timeline.start(run_id, "planner", "Sto scegliendo le skill per il tuo obiettivo…")
     goal = state.get("goal") or state.get("message") or "report spend ultimi 7 giorni"
-    plan = _infer_plan(goal, state.get("message", ""))
+    settings = get_settings()
+    tenant = load_tenant(state["tenant_id"], Path(settings.monny_tenants_dir).resolve())
+    plan = _infer_plan(goal, state.get("message", ""), tenant=tenant)
     plan_labels = [SKILL_LABELS.get(s, s) for s in plan]
     timeline.done(run_id, "planner", f"Piano: {', '.join(plan_labels)}")
     return {

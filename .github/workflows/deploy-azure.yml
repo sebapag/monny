@@ -1,0 +1,54 @@
+name: Deploy API to Azure Container Apps (stub)
+
+# Same GHCR image as Cloud Run. Documented twin — no live Azure account required for CI.
+#
+# When activating, set:
+#   secrets: AZURE_CREDENTIALS (JSON from `az ad sp create-for-rbac`)
+#   vars:    AZURE_RESOURCE_GROUP, AZURE_CONTAINER_APP_NAME, AZURE_CONTAINER_APP_ENV
+#   vars:    API_IMAGE (default ghcr.io/<owner>/monny-api)
+#
+# Manual:
+#   az containerapp update -n "$AZURE_CONTAINER_APP_NAME" -g "$AZURE_RESOURCE_GROUP" \
+#     --image "ghcr.io/<owner>/monny-api:latest"
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Print intended deploy without calling Azure"
+        type: boolean
+        default: true
+      image_tag:
+        description: "Image tag"
+        required: false
+        default: "latest"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      IMAGE: ${{ vars.API_IMAGE || format('ghcr.io/{0}/monny-api', github.repository_owner) }}
+    steps:
+      - name: Document / dry-run Azure Container Apps deploy
+        env:
+          TAG: ${{ github.event.inputs.image_tag || 'latest' }}
+          DRY: ${{ github.event.inputs.dry_run }}
+          AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
+          APP_NAME: ${{ vars.AZURE_CONTAINER_APP_NAME }}
+          RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+        run: |
+          set -euo pipefail
+          IMAGE_REF="${IMAGE}:${TAG}"
+          echo "Would deploy ${IMAGE_REF} to Azure Container Apps."
+          echo "Example:"
+          echo "  az containerapp update -n \"\$AZURE_CONTAINER_APP_NAME\" -g \"\$AZURE_RESOURCE_GROUP\" --image ${IMAGE_REF}"
+          if [ "${DRY}" != "false" ] || [ -z "${AZURE_CREDENTIALS:-}" ]; then
+            echo "Dry-run or missing AZURE_CREDENTIALS — OK (stub workflow)."
+            exit 0
+          fi
+          if [ -z "${APP_NAME:-}" ] || [ -z "${RG:-}" ]; then
+            echo "Set AZURE_CONTAINER_APP_NAME and AZURE_RESOURCE_GROUP variables for a live deploy."
+            exit 1
+          fi
+          echo "Live Azure deploy not auto-wired in this stub; use az CLI with ${IMAGE_REF}."
+          exit 1

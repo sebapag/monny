@@ -1019,6 +1019,67 @@ a {
   margin-bottom: 0.75rem;
 }
 
+.office-request {
+  display: grid;
+  gap: 0.35rem;
+  margin-bottom: 0.9rem;
+}
+
+.office-request label {
+  font-size: 0.85rem;
+  color: var(--slate);
+  font-weight: 600;
+}
+
+.office-request-row {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.office-request-row input {
+  flex: 1;
+  min-width: 220px;
+  height: var(--input-h);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-md);
+  padding: 0 0.85rem;
+  background: var(--canvas);
+}
+
+.skill-toggles {
+  display: grid;
+  gap: 0.45rem;
+  margin: 0.5rem 0 1rem;
+  padding: 0.85rem 1rem;
+  background: var(--surface-soft);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-lg);
+}
+
+.skill-toggle strong {
+  color: var(--brand-navy);
+}
+
+.floor-room.is-locked {
+  filter: grayscale(0.55) brightness(0.92);
+  opacity: 0.78;
+  cursor: not-allowed;
+}
+
+.floor-room.is-locked .floor-state {
+  color: var(--warning);
+  font-weight: 600;
+}
+
+.locked-panel {
+  max-width: 36rem;
+}
+
+.dept-shell.dept-locked {
+  opacity: 0.95;
+}
+
 .office-status {
   font-size: 0.82rem;
   color: var(--steel);

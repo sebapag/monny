@@ -1,0 +1,69 @@
+name: Deploy API to Cloud Run
+
+# Reference hyperscaler deploy. No fake credentials — configure repo secrets first.
+#
+# Required secrets:
+#   GCP_SA_KEY   — JSON key for a deploy SA (run.admin + iam.serviceAccountUser)
+#   GCP_PROJECT  — GCP project id
+# Optional repository variables:
+#   GCP_REGION         — default europe-west1
+#   CLOUD_RUN_SERVICE  — default monny-api
+#   API_IMAGE          — default ghcr.io/<owner>/monny-api
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Image tag to deploy (sha or latest)"
+        required: false
+        default: "latest"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      GCP_REGION: ${{ vars.GCP_REGION || 'europe-west1' }}
+      CLOUD_RUN_SERVICE: ${{ vars.CLOUD_RUN_SERVICE || 'monny-api' }}
+      IMAGE: ${{ vars.API_IMAGE || format('ghcr.io/{0}/monny-api', github.repository_owner) }}
+    steps:
+      - name: Require secrets
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+          GCP_PROJECT: ${{ secrets.GCP_PROJECT }}
+        run: |
+          if [ -z "$GCP_SA_KEY" ] || [ -z "$GCP_PROJECT" ]; then
+            echo "Missing GCP_SA_KEY / GCP_PROJECT. Add them under Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT }}
+
+      - name: Deploy to Cloud Run
+        env:
+          TAG: ${{ github.event.inputs.image_tag || 'latest' }}
+          GCP_PROJECT: ${{ secrets.GCP_PROJECT }}
+        run: |
+          set -euo pipefail
+          IMAGE_REF="${IMAGE}:${TAG}"
+          echo "Deploying ${IMAGE_REF} → ${CLOUD_RUN_SERVICE} (${GCP_REGION})"
+          gcloud run deploy "${CLOUD_RUN_SERVICE}" \
+            --project="${GCP_PROJECT}" \
+            --image="${IMAGE_REF}" \
+            --region="${GCP_REGION}" \
+            --platform=managed \
+            --allow-unauthenticated \
+            --port=8000 \
+            --set-env-vars="MONNY_DRY_RUN=1,MONNY_LIVE=0,MONNY_DEFAULT_TENANT=demo" \
+            --quiet
+          gcloud run services describe "${CLOUD_RUN_SERVICE}" \
+            --project="${GCP_PROJECT}" \
+            --region="${GCP_REGION}" \
+            --format='value(status.url)'

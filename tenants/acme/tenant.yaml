@@ -45,3 +45,10 @@ integrations:
   search_console:
     site_url: https://www.acme.example/
     secret_ref: GSC_ACME
+subscription:
+  plan: starter
+  skills:
+    spend: true
+    seo: false
+    shopify: false
+    leads: false
