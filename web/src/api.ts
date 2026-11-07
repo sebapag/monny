@@ -64,6 +64,34 @@ export type ChatResponse = {
   approval_ids: string[]
   report?: Report | null
   findings?: Record<string, unknown>[]
+  run_id?: string | null
+}
+
+export type TimelineStep = {
+  id: string
+  skill: string
+  label: string
+  status: 'pending' | 'running' | 'done' | 'error' | 'waiting' | string
+  detail: string
+  started_at?: string | null
+  finished_at?: string | null
+}
+
+export type AgentRun = {
+  id: string
+  tenant_id: string
+  thread_id: string
+  goal: string
+  status: string
+  active_skill?: string | null
+  status_line: string
+  steps: TimelineStep[]
+  reply?: string | null
+  report?: Report | null
+  approval_ids: string[]
+  error?: string | null
+  created_at: string
+  updated_at: string
 }
 
 export type Approval = {
@@ -150,6 +178,22 @@ export function chat(body: {
     method: 'POST',
     body: JSON.stringify(body),
   })
+}
+
+export function startRun(body: {
+  tenant_id: string
+  message: string
+  goal?: string
+  thread_id?: string
+}) {
+  return request<AgentRun>('/api/runs', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
+export function getRun(runId: string) {
+  return request<AgentRun>(`/api/runs/${runId}`)
 }
 
 export function listApprovals(tenant_id?: string, status = 'pending') {

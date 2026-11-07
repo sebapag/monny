@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
+  type AgentRun,
   type Approval,
   type Report,
   type SeoChange,
@@ -7,21 +8,64 @@ import {
   type TenantConfig,
   type TenantDetail,
   type TenantListItem,
-  chat,
+  type TimelineStep,
   decideApproval,
+  getRun,
   getTenant,
   getTenantArtifact,
   listApprovals,
   listTenantArtifacts,
   listTenants,
   putTenant,
+  startRun,
 } from './api'
 import './index.css'
 
 type View = 'agent' | 'admin'
-type Msg = { role: 'user' | 'agent'; text: string; report?: Report | null }
+type Msg = {
+  role: 'user' | 'agent'
+  text: string
+  report?: Report | null
+  timeline?: TimelineStep[]
+  runStatus?: string
+}
 
 const TENANT_KEY = 'monny.tenantId'
+
+function SkillRail({
+  run,
+  compact = false,
+}: {
+  run: AgentRun | null
+  compact?: boolean
+}) {
+  if (!run) return null
+  const active = run.steps.find((s) => s.status === 'running' || s.status === 'waiting')
+  return (
+    <div className={`skill-rail ${compact ? 'compact' : ''} status-${run.status}`}>
+      {!compact && (
+        <div className="skill-rail-head">
+          <span className="skill-pulse" aria-hidden />
+          <div>
+            <strong>{active?.label ?? 'Monny'}</strong>
+            <p>{run.status_line}</p>
+          </div>
+        </div>
+      )}
+      <ol className="skill-steps">
+        {run.steps.map((step) => (
+          <li key={step.id} className={`skill-step status-${step.status}`}>
+            <span className="skill-dot" aria-hidden />
+            <div>
+              <strong>{step.label}</strong>
+              <span>{step.detail}</span>
+            </div>
+          </li>
+        ))}
+      </ol>
+    </div>
+  )
+}
 
 function SpendPanel({ channels }: { channels: SpendDiagnosis[] }) {
   if (!channels.length) return null
@@ -379,7 +423,7 @@ function App() {
   const [messages, setMessages] = useState<Msg[]>([
     {
       role: 'agent',
-      text: 'Monny is in dry-run. Switch tenants in the header. Try spend, SEO, promo, or lead warming.',
+      text: 'Monny è in dry-run. Cambia tenant dall’header. Prova spend, SEO, promo o lead warming — vedrai le skill attivarsi in tempo reale.',
     },
   ])
   const [draft, setDraft] = useState('report spend ultimi 7 giorni')
@@ -392,6 +436,7 @@ function App() {
   const [latestReport, setLatestReport] = useState<Report | null>(null)
   const [artifactNames, setArtifactNames] = useState<string[]>([])
   const [highlightApprovals, setHighlightApprovals] = useState(false)
+  const [liveRun, setLiveRun] = useState<AgentRun | null>(null)
 
   useEffect(() => {
     const onHash = () => setView(window.location.hash === '#admin' ? 'admin' : 'agent')
@@ -467,10 +512,11 @@ function App() {
     setThreadId(undefined)
     setLastDecide(null)
     setHighlightApprovals(false)
+    setLiveRun(null)
     setMessages([
       {
         role: 'agent',
-        text: `Switched to tenant “${id}”. Ask for a spend report, SEO audit, promo stub, or lead warming.`,
+        text: `Passato al tenant “${id}”. Chiedi un report spend, un audit SEO, uno stub promo o lead warming.`,
       },
     ])
   }
@@ -483,22 +529,49 @@ function App() {
     setMessages((m) => [...m, { role: 'user', text }])
     setDraft('')
     try {
-      const res = await chat({
+      const started = await startRun({
         tenant_id: tenantId,
         message: text,
         thread_id: threadId,
       })
-      setThreadId(res.thread_id)
-      setLatestReport(res.report ?? null)
-      setMessages((m) => [...m, { role: 'agent', text: res.reply, report: res.report }])
+      setThreadId(started.thread_id)
+      setLiveRun(started)
+
+      const terminal = new Set(['completed', 'awaiting_approval', 'error'])
+      let current = started
+      while (!terminal.has(current.status)) {
+        await new Promise((r) => setTimeout(r, 280))
+        current = await getRun(started.id)
+        setLiveRun({ ...current })
+      }
+
+      setLatestReport(current.report ?? null)
+      setMessages((m) => [
+        ...m,
+        {
+          role: 'agent',
+          text: current.reply || current.status_line || 'Fatto.',
+          report: current.report,
+          timeline: current.steps,
+          runStatus: current.status,
+        },
+      ])
+      if (current.status === 'awaiting_approval') {
+        setHighlightApprovals(true)
+      }
       const pending = await refreshApprovals(tenantId)
-      if (res.approval_ids.length || pending.length) {
+      if (current.approval_ids.length || pending.length) {
         setHighlightApprovals(true)
       }
       await loadArtifacts(tenantId)
       await refreshTenants()
+      // Keep rail briefly on HITL, then settle to compact history in thread
+      if (current.status !== 'awaiting_approval') {
+        setTimeout(() => setLiveRun(null), 800)
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
+      setLiveRun(null)
     } finally {
       setBusy(false)
     }
@@ -510,9 +583,10 @@ function App() {
       const result = await decideApproval(id, decision)
       setLastDecide(
         decision === 'approved'
-          ? `Approved ${result.action_type} → ${result.apply_result?.status ?? 'ok'}`
-          : `Rejected ${result.action_type}`,
+          ? `Approvato ${result.action_type} → ${result.apply_result?.status ?? 'ok'}`
+          : `Rifiutato ${result.action_type}`,
       )
+      setLiveRun(null)
       await refreshApprovals(tenantId)
       await refreshTenants()
     } catch (err) {
@@ -591,22 +665,28 @@ function App() {
             <section className="hero">
               <h1>Monny</h1>
               <p>
-                Steer spend and SEO for <strong>{tenantLabel}</strong>. Proposals wait for your
-                approval before anything applies.
+                Guida spend e SEO per <strong>{tenantLabel}</strong>. Ogni skill si attiva in
+                evidenza; le proposte attendono la tua decisione.
               </p>
             </section>
 
+            {liveRun && (
+              <div className="skill-stage" data-testid="skill-rail-live">
+                <SkillRail run={liveRun} />
+              </div>
+            )}
+
             {approvals.length > 0 && (
               <div className={`approval-banner ${highlightApprovals ? 'pulse' : ''}`}>
-                <strong>{approvals.length} pending approval(s)</strong> for {tenantId}.{' '}
+                <strong>{approvals.length} approvazione/i in sospeso</strong> per {tenantId}.{' '}
                 <a href="#approvals" onClick={() => setHighlightApprovals(false)}>
-                  Review →
+                  Rivedi →
                 </a>
               </div>
             )}
 
             <div className="layout-split">
-              <section className="panel">
+              <section className="panel console-panel">
                 <h2>Console · {tenantId}</h2>
                 <div className="quick-actions">
                   <button
@@ -614,34 +694,53 @@ function App() {
                     className="btn btn-ghost"
                     onClick={() => setDraft('report spend ultimi 7 giorni')}
                   >
-                    Spend report
+                    Report spend
                   </button>
                   <button
                     type="button"
                     className="btn btn-ghost"
                     onClick={() => setDraft('seo audit of priority pages')}
                   >
-                    SEO audit
+                    Audit SEO
                   </button>
                   <button
                     type="button"
                     className="btn btn-ghost"
                     onClick={() => setDraft('propose shopify promo discount')}
                   >
-                    Promo stub
+                    Stub promo
                   </button>
                   <button
                     type="button"
                     className="btn btn-ghost"
                     onClick={() => setDraft('lead warming sequence stub')}
                   >
-                    Lead stub
+                    Stub lead
                   </button>
                 </div>
                 <div className="chat-log">
                   {messages.map((m, i) => (
                     <div key={`${m.role}-${i}`} className={`bubble ${m.role}`}>
                       {m.text}
+                      {m.timeline && m.timeline.length > 0 && (
+                        <div className="thread-timeline">
+                          <SkillRail
+                            compact
+                            run={{
+                              id: `hist-${i}`,
+                              tenant_id: tenantId,
+                              thread_id: threadId || '',
+                              goal: '',
+                              status: m.runStatus || 'completed',
+                              status_line: '',
+                              steps: m.timeline,
+                              approval_ids: [],
+                              created_at: '',
+                              updated_at: '',
+                            }}
+                          />
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -652,20 +751,20 @@ function App() {
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void send()
                     }}
-                    placeholder="Ask Monny…"
+                    placeholder="Chiedi a Monny…"
                   />
                   <button className="btn btn-primary" disabled={busy} onClick={() => void send()}>
-                    {busy ? 'Running…' : 'Send'}
+                    {busy ? 'In corso…' : 'Invia'}
                   </button>
                 </div>
                 {error && <p className="error">{error}</p>}
               </section>
 
               <section className="panel" id="approvals">
-                <h2>Pending approvals · {tenantId}</h2>
+                <h2>Approvazioni · {tenantId}</h2>
                 {lastDecide && <p className="status-line">{lastDecide}</p>}
                 {approvals.length === 0 && (
-                  <p className="status-line">No gated actions waiting.</p>
+                  <p className="status-line">Nessuna azione in attesa.</p>
                 )}
                 {approvals.map((a) => (
                   <div key={a.id} className="approval">
@@ -678,13 +777,13 @@ function App() {
                     </div>
                     <div className="approval-actions">
                       <button className="btn btn-ok" onClick={() => void onDecide(a.id, 'approved')}>
-                        Approve
+                        Approva
                       </button>
                       <button
                         className="btn btn-danger"
                         onClick={() => void onDecide(a.id, 'rejected')}
                       >
-                        Reject
+                        Rifiuta
                       </button>
                     </div>
                   </div>
