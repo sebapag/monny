@@ -1,5 +1,5 @@
-import { Canvas, useFrame } from '@react-three/fiber'
-import { Billboard, OrbitControls, RoundedBox, Text } from '@react-three/drei'
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
+import { Billboard, RoundedBox, Text } from '@react-three/drei'
 import {
   Component,
   Suspense,
@@ -9,7 +9,12 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import type { Group } from 'three'
+import {
+  Color,
+  type Group,
+  type MeshStandardMaterial,
+  type PointLight as PointLightType,
+} from 'three'
 import { DEPARTMENTS, type DeptId } from './depts'
 import type { RoomLightState } from './lights'
 
@@ -91,8 +96,24 @@ const ROOMS: RoomLayout[] = [
 ]
 
 const MATTE = { roughness: 1, metalness: 0 } as const
+/** Seconds-ish easing: higher = snappier. ~3.2 ≈ soft 0.6–0.8s feel. */
+const EASE = 3.2
 
-function FlatMat({ color, emissive, emissiveIntensity = 0 }: {
+function lerp(a: number, b: number, t: number) {
+  return a + (b - a) * t
+}
+
+function lightLevel(light: RoomLightState): number {
+  if (light === 'on') return 1
+  if (light === 'soft') return 0.38
+  return 0
+}
+
+function FlatMat({
+  color,
+  emissive,
+  emissiveIntensity = 0,
+}: {
   color: string
   emissive?: string
   emissiveIntensity?: number
@@ -107,7 +128,18 @@ function FlatMat({ color, emissive, emissiveIntensity = 0 }: {
   )
 }
 
-/** Simple stylized person (ometto): head sphere + body capsule/box. */
+/** Fixed isometric camera — no orbit / pan / zoom. */
+function FixedCamera() {
+  const { camera } = useThree()
+  useEffect(() => {
+    camera.position.set(8.6, 9.6, 10.6)
+    camera.lookAt(0, 0.3, 0)
+    camera.updateProjectionMatrix()
+  }, [camera])
+  return null
+}
+
+/** Simple stylized person with eased active state. */
 function Ometto({
   position,
   accent,
@@ -122,24 +154,44 @@ function Ometto({
   reduceMotion: boolean
 }) {
   const ref = useRef<Group>(null)
-  useFrame(({ clock }) => {
-    if (!ref.current || reduceMotion) return
-    const t = clock.elapsedTime
-    const speed = active ? 2.4 : 1.1
-    const amp = active ? 0.06 : 0.03
-    ref.current.position.y = position[1] + Math.sin(t * speed + phase) * amp
-    if (active) {
-      ref.current.rotation.y = Math.sin(t * 1.6 + phase) * 0.12
+  const shirtMat = useRef<MeshStandardMaterial>(null)
+  const armL = useRef<MeshStandardMaterial>(null)
+  const armR = useRef<MeshStandardMaterial>(null)
+  const activity = useRef(active ? 1 : 0)
+  const idleColor = useMemo(() => new Color('#ffffff'), [])
+  const accentColor = useMemo(() => new Color(accent), [accent])
+  const black = useMemo(() => new Color('#000000'), [])
+  const tmp = useMemo(() => new Color(), [])
+
+  useFrame(({ clock }, dt) => {
+    const target = active ? 1 : 0
+    const k = reduceMotion ? 1 : 1 - Math.exp(-EASE * dt)
+    activity.current = lerp(activity.current, target, k)
+    const a = activity.current
+
+    if (ref.current) {
+      const speed = lerp(1.1, 2.4, a)
+      const amp = reduceMotion ? 0 : lerp(0.03, 0.06, a)
+      ref.current.position.y = position[1] + Math.sin(clock.elapsedTime * speed + phase) * amp
+      ref.current.rotation.y = reduceMotion
+        ? 0
+        : Math.sin(clock.elapsedTime * 1.6 + phase) * 0.12 * a
+    }
+
+    tmp.copy(idleColor).lerp(accentColor, a)
+    for (const mat of [shirtMat.current, armL.current, armR.current]) {
+      if (!mat) continue
+      mat.color.copy(tmp)
+      mat.emissive.copy(black).lerp(accentColor, a)
+      mat.emissiveIntensity = 0.22 * a
     }
   })
 
   const skin = '#f3d5b5'
   const pants = '#5d5b54'
-  const shirt = active ? accent : '#ffffff'
 
   return (
     <group ref={ref} position={position}>
-      {/* legs */}
       <mesh position={[-0.07, 0.18, 0]}>
         <boxGeometry args={[0.1, 0.36, 0.1]} />
         <FlatMat color={pants} />
@@ -148,25 +200,18 @@ function Ometto({
         <boxGeometry args={[0.1, 0.36, 0.1]} />
         <FlatMat color={pants} />
       </mesh>
-      {/* body */}
       <mesh position={[0, 0.52, 0]}>
         <boxGeometry args={[0.32, 0.38, 0.22]} />
-        <FlatMat
-          color={shirt}
-          emissive={active ? accent : '#000000'}
-          emissiveIntensity={active ? 0.22 : 0}
-        />
+        <meshStandardMaterial ref={shirtMat} color="#ffffff" {...MATTE} />
       </mesh>
-      {/* arms */}
       <mesh position={[-0.22, 0.5, 0]} rotation={[0, 0, 0.15]}>
         <boxGeometry args={[0.08, 0.32, 0.08]} />
-        <FlatMat color={shirt} />
+        <meshStandardMaterial ref={armL} color="#ffffff" {...MATTE} />
       </mesh>
       <mesh position={[0.22, 0.5, 0]} rotation={[0, 0, -0.15]}>
         <boxGeometry args={[0.08, 0.32, 0.08]} />
-        <FlatMat color={shirt} />
+        <meshStandardMaterial ref={armR} color="#ffffff" {...MATTE} />
       </mesh>
-      {/* head */}
       <mesh position={[0, 0.82, 0]}>
         <sphereGeometry args={[0.14, 16, 16]} />
         <FlatMat color={skin} />
@@ -185,7 +230,6 @@ function FlatDesk({ position }: { position: [number, number, number] }) {
         <boxGeometry args={[0.9, 0.04, 0.08]} />
         <FlatMat color="#e5e3df" />
       </mesh>
-      {/* monitor slab */}
       <mesh position={[0, 0.62, -0.12]}>
         <boxGeometry args={[0.42, 0.28, 0.04]} />
         <FlatMat color="#dcecfa" />
@@ -205,11 +249,23 @@ function RoomZone({
   onSelect: (id: DeptId) => void
   reduceMotion: boolean
 }) {
-  const active = light === 'on'
-  const soft = light === 'soft'
-  const floor = active ? room.floorLit : room.floor
   const [hx, , hz] = room.position
-  const glow = active ? 0.28 : soft ? 0.1 : 0
+  const level = useRef(lightLevel(light))
+  const floorMat = useRef<MeshStandardMaterial>(null)
+  const ceilMat = useRef<MeshStandardMaterial>(null)
+  const hotMat = useRef<MeshStandardMaterial>(null)
+  const lamp = useRef<PointLightType>(null)
+
+  const floorIdle = useMemo(() => new Color(room.floor), [room.floor])
+  const floorLit = useMemo(() => new Color(room.floorLit), [room.floorLit])
+  const accent = useMemo(() => new Color(room.accent), [room.accent])
+  const white = useMemo(() => new Color('#ffffff'), [])
+  const ceilIdle = useMemo(() => new Color('#f6f5f4'), [])
+  const ceilWarm = useMemo(() => new Color('#fffdf5'), [])
+  const black = useMemo(() => new Color('#000000'), [])
+  const lampWarm = useMemo(() => new Color('#fff8f0'), [])
+  const tmp = useMemo(() => new Color(), [])
+  const tmp2 = useMemo(() => new Color(), [])
 
   const peopleOffsets = useMemo(() => {
     const offsets: [number, number, number][] = []
@@ -220,12 +276,43 @@ function RoomZone({
     return offsets
   }, [hx, hz, room.people])
 
+  useFrame((_, dt) => {
+    const target = lightLevel(light)
+    const k = reduceMotion ? 1 : 1 - Math.exp(-EASE * dt)
+    level.current = lerp(level.current, target, k)
+    const L = level.current
+
+    if (floorMat.current) {
+      tmp.copy(floorIdle).lerp(floorLit, L)
+      floorMat.current.color.copy(tmp)
+      floorMat.current.emissive.copy(accent)
+      floorMat.current.emissiveIntensity = 0.28 * L
+    }
+    if (ceilMat.current) {
+      tmp.copy(ceilIdle).lerp(ceilWarm, Math.min(1, L * 1.4))
+      ceilMat.current.color.copy(tmp)
+      tmp2.copy(black).lerp(accent, L)
+      ceilMat.current.emissive.copy(tmp2)
+      ceilMat.current.emissiveIntensity = 0.45 * L
+    }
+    if (hotMat.current) {
+      tmp.copy(white).lerp(accent, L)
+      hotMat.current.color.copy(tmp)
+      hotMat.current.emissive.copy(tmp)
+      hotMat.current.emissiveIntensity = lerp(0.05, 0.35, L)
+    }
+    if (lamp.current) {
+      lamp.current.intensity = lerp(0.08, 1.1, L)
+      lamp.current.color.copy(lampWarm).lerp(accent, L)
+    }
+  })
+
+  const active = light === 'on'
+
   return (
     <group>
-      {/* Soft pastel floor */}
       <mesh
         position={room.position}
-        receiveShadow
         onClick={(e) => {
           e.stopPropagation()
           onSelect(room.id)
@@ -238,10 +325,9 @@ function RoomZone({
         }}
       >
         <boxGeometry args={room.size} />
-        <FlatMat color={floor} emissive={room.accent} emissiveIntensity={glow} />
+        <meshStandardMaterial ref={floorMat} color={room.floor} {...MATTE} />
       </mesh>
 
-      {/* Soft partition */}
       <mesh position={[hx, 0.42, hz - room.size[2] / 2 + 0.06]}>
         <boxGeometry args={[room.size[0] * 0.9, 0.72, 0.07]} />
         <FlatMat color={room.wall} />
@@ -261,23 +347,12 @@ function RoomZone({
         />
       ))}
 
-      {/* Flat ceiling panel */}
       <mesh position={[hx, 2.2, hz]}>
         <boxGeometry args={[Math.min(room.size[0] * 0.5, 1.6), 0.05, 0.45]} />
-        <FlatMat
-          color={active || soft ? '#fffdf5' : '#f6f5f4'}
-          emissive={active ? room.accent : soft ? room.floor : '#000000'}
-          emissiveIntensity={active ? 0.45 : soft ? 0.12 : 0}
-        />
+        <meshStandardMaterial ref={ceilMat} color="#f6f5f4" {...MATTE} />
       </mesh>
-      <pointLight
-        position={[hx, 2.0, hz]}
-        intensity={active ? 1.1 : soft ? 0.35 : 0.08}
-        distance={5.5}
-        color={active ? room.accent : '#fff8f0'}
-      />
+      <pointLight ref={lamp} position={[hx, 2.0, hz]} intensity={0.08} distance={5.5} color="#fff8f0" />
 
-      {/* Soft disc hotspot */}
       <mesh
         position={[hx, 1.25, hz]}
         onClick={(e) => {
@@ -286,11 +361,7 @@ function RoomZone({
         }}
       >
         <cylinderGeometry args={[0.2, 0.2, 0.06, 24]} />
-        <FlatMat
-          color={active ? room.accent : '#ffffff'}
-          emissive={active ? room.accent : '#ffffff'}
-          emissiveIntensity={active ? 0.35 : 0.05}
-        />
+        <meshStandardMaterial ref={hotMat} color="#ffffff" {...MATTE} />
       </mesh>
       <Billboard position={[hx, 1.55, hz]}>
         <Text
@@ -319,12 +390,10 @@ function OfficeBuilding({
 }) {
   return (
     <group>
-      {/* Soft building slab */}
-      <mesh position={[0, -0.02, 0]} receiveShadow>
+      <mesh position={[0, -0.02, 0]}>
         <boxGeometry args={[12.2, 0.08, 10.6]} />
         <FlatMat color="#fafaf9" />
       </mesh>
-      {/* Soft outer walls */}
       <mesh position={[0, 1.05, -5.2]}>
         <boxGeometry args={[12.2, 2.1, 0.1]} />
         <FlatMat color="#f0eeec" />
@@ -502,21 +571,24 @@ export function OfficeTwin({
         {litNames && <span className="office-status lit">Luci: {litNames}</span>}
       </div>
 
-      <div className={`office-viewport flat-pastel ${use2d ? 'is-2d' : 'is-3d'}`}>
+      <div className={`office-viewport flat-pastel locked-view ${use2d ? 'is-2d' : 'is-3d'}`}>
         {use2d ? (
           <FloorPlan2D lights={lights} pending={pending} onSelect={onSelect} />
         ) : (
           <CanvasErrorBoundary onError={() => setFailed(true)}>
             <Canvas
-              camera={{ position: [8.5, 9.5, 10.5], fov: 40, near: 0.1, far: 80 }}
+              camera={{ position: [8.6, 9.6, 10.6], fov: 40, near: 0.1, far: 80 }}
               dpr={[1, 1.5]}
               gl={{ antialias: true }}
-              onCreated={({ gl }) => {
+              style={{ touchAction: 'manipulation' }}
+              onCreated={({ gl, camera }) => {
                 gl.setClearColor('#f0eeec')
                 gl.shadowMap.enabled = false
+                camera.lookAt(0, 0.3, 0)
               }}
             >
               <Suspense fallback={null}>
+                <FixedCamera />
                 <ambientLight intensity={0.92} />
                 <hemisphereLight args={['#ffffff', '#e8e4d8', 0.45]} />
                 <directionalLight position={[5, 10, 3]} intensity={0.35} />
@@ -524,15 +596,6 @@ export function OfficeTwin({
                   lights={lights}
                   onSelect={onSelect}
                   reduceMotion={reduceMotion}
-                />
-                <OrbitControls
-                  enablePan
-                  enableZoom
-                  minPolarAngle={0.4}
-                  maxPolarAngle={1.2}
-                  minDistance={8}
-                  maxDistance={20}
-                  target={[0, 0.35, 0]}
                 />
               </Suspense>
             </Canvas>
@@ -542,8 +605,8 @@ export function OfficeTwin({
 
       <p className="office-hint">
         {use2d
-          ? 'Vista pianta 2D (WebGL non disponibile o motion ridotta).'
-          : 'Trascina per orbitare · clicca hotspot, ometti o pavimento della stanza.'}
+          ? 'Vista pianta 2D (WebGL non disponibile o motion ridotta). Clicca una stanza.'
+          : 'Vista fissa dell’ufficio. Clicca hotspot, ometti o pavimento per entrare nel reparto.'}
       </p>
     </section>
   )
