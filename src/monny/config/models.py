@@ -41,6 +41,7 @@ class SiteConfig(BaseModel):
         "shopify_online_store"
     )
     locales: list[str] = Field(default_factory=lambda: ["en"])
+    priority_urls: list[str] = Field(default_factory=list)
 
 
 class SpendAutoApply(BaseModel):

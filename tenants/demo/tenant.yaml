@@ -1,31 +1,33 @@
-tenant_id: "demo"
-display_name: "Demo Shop"
-
+tenant_id: demo
+display_name: Demo Shop
 shopify:
-  shop_domain: "demo-shop.myshopify.com"
-  api_version: "2025-10"
+  shop_domain: demo-shop.myshopify.com
+  api_version: '2025-10'
   auth:
-    secret_ref: "SHOPIFY_TOKEN_DEMO"
+    secret_ref: SHOPIFY_TOKEN_DEMO
   scopes_expected:
-    - "read_products"
-    - "write_content"
-    - "read_orders"
-
+  - read_products
+  - write_content
+  - read_orders
 ads:
   google:
-    customer_id: "000-000-0000"
+    customer_id: 000-000-0000
     login_customer_id: null
-    secret_ref: "GOOGLE_ADS_DEMO"
+    secret_ref: GOOGLE_ADS_DEMO
   meta:
-    ad_account_id: "act_demo"
-    secret_ref: "META_ADS_DEMO"
-
+    ad_account_id: act_demo
+    secret_ref: META_ADS_DEMO
 site:
-  base_url: "https://www.demo-shop.example"
-  sitemap_url: "https://www.demo-shop.example/sitemap.xml"
-  cms_adapter: "shopify_online_store"
-  locales: ["it", "en"]
-
+  base_url: https://www.demo-shop.example
+  sitemap_url: https://www.demo-shop.example/sitemap.xml
+  cms_adapter: shopify_online_store
+  locales:
+  - it
+  - en
+  priority_urls:
+  - https://www.demo-shop.example/
+  - https://www.demo-shop.example/collections/all
+  - https://www.demo-shop.example/products/sample
 policy:
   hitl_default: true
   spend:
@@ -33,7 +35,7 @@ policy:
     auto_apply:
       enabled: false
       allow:
-        - "pause_underperforming_adgroup"
+      - pause_underperforming_adgroup
     thresholds:
       min_roas: 2.0
       max_cpa: 40.0
@@ -41,8 +43,7 @@ policy:
   seo:
     auto_apply: false
     max_urls_per_run: 50
-
 integrations:
   search_console:
-    site_url: "https://www.demo-shop.example/"
-    secret_ref: "GSC_DEMO"
+    site_url: https://www.demo-shop.example/
+    secret_ref: GSC_DEMO

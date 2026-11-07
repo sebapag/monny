@@ -1,4 +1,4 @@
-"""Skill: SEO apply — gated; stub only (no CMS writes in this slice)."""
+"""Skill: SEO apply — gated stub (records approval, no CMS writes in this slice)."""
 
 from __future__ import annotations
 
@@ -12,10 +12,15 @@ def run(change_set: dict[str, Any], *, approved: bool) -> dict[str, Any]:
             "status": "skipped",
             "reason": "Not approved",
         }
+    changes = change_set.get("changes") or []
+    # Mark proposed → applied_stub (no CMS mutation)
+    applied = []
+    for change in changes:
+        applied.append({**change, "status": "applied_stub"})
     return {
         "skill": "seo_apply",
-        "status": "stubbed",
-        "applied": 0,
-        "note": "CMS apply adapter is a stub in this scaffold slice.",
-        "change_set_status": change_set.get("status", "proposed"),
+        "status": "applied_stub",
+        "applied": len(applied),
+        "note": "CMS apply adapter is a stub — change set recorded as applied_stub only.",
+        "change_set": {**change_set, "status": "applied_stub", "changes": applied},
     }
