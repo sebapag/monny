@@ -23,6 +23,15 @@ def apply_approved(payload: dict[str, Any], *, tenant_id: str | None = None) -> 
             tenant = None
 
     action = payload.get("action_type")
+    if action in {"phase2_stub", "phase3_stub"} or payload.get("stub"):
+        return {
+            "skill": payload.get("channel") or "stub",
+            "status": "noop_stub",
+            "action_type": action,
+            "phase": payload.get("phase"),
+            "note": "Phase stub acknowledged — no side effects executed.",
+        }
+
     if action == "seo_apply_changeset":
         change_set = payload.get("change_set") or {}
         return seo_apply.run(

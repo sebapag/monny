@@ -8,7 +8,14 @@ from monny.adapters import shopify as shopify_adapter
 from monny.config.loader import load_tenant
 from monny.config.settings import get_settings
 from monny.graph.state import AgentState
-from monny.skills import reporting, seo_audit, spend_google, spend_meta
+from monny.skills import (
+    lead_warming,
+    reporting,
+    seo_audit,
+    shopify_promo,
+    spend_google,
+    spend_meta,
+)
 from monny.storage.artifacts import write_json_artifact
 from monny.storage.audit import append_audit
 
@@ -21,7 +28,6 @@ def skills_runner_node(state: AgentState) -> dict:
     findings = list(state.get("findings") or [])
     plan = state.get("plan") or []
 
-    # Portable Shopify read (fixture or live) — proves config-driven shop swap
     shop = shopify_adapter.read_shop(tenant, dry_run=dry_run)
     findings.append(
         {
@@ -41,6 +47,10 @@ def skills_runner_node(state: AgentState) -> dict:
             findings.append(spend_meta.run(tenant, dry_run=dry_run, fixtures_dir=fixtures_dir))
         elif skill_name == "seo_audit":
             findings.append(seo_audit.run(tenant, dry_run=dry_run))
+        elif skill_name == "shopify_promo":
+            findings.append(shopify_promo.run(tenant))
+        elif skill_name == "lead_warming":
+            findings.append(lead_warming.run(tenant))
         elif skill_name == "reporting":
             continue
         else:
@@ -51,12 +61,38 @@ def skills_runner_node(state: AgentState) -> dict:
     report = reporting.run(findings, state.get("goal", ""))
     findings.append(report)
 
-    write_json_artifact(
-        settings.monny_data_dir,
-        tenant.tenant_id,
-        "last_report.json",
-        report,
-    )
+    write_json_artifact(settings.monny_data_dir, tenant.tenant_id, "last_report.json", report)
+
+    spend_channels = report.get("spend_channels") or []
+    if spend_channels:
+        write_json_artifact(
+            settings.monny_data_dir,
+            tenant.tenant_id,
+            "last_spend_report.json",
+            {
+                "goal": state.get("goal"),
+                "spend_channels": spend_channels,
+                "proposal_count": report.get("proposal_count", 0),
+            },
+        )
+
+    seo_cs = report.get("seo_change_set")
+    if seo_cs:
+        write_json_artifact(
+            settings.monny_data_dir,
+            tenant.tenant_id,
+            "last_seo_report.json",
+            {
+                "goal": state.get("goal"),
+                "change_set": seo_cs,
+                "seo_findings": report.get("seo_findings") or [],
+                "crawler": next(
+                    (f.get("crawler") for f in findings if f.get("skill") == "seo_audit"),
+                    None,
+                ),
+            },
+        )
+
     append_audit(
         settings.monny_data_dir,
         tenant.tenant_id,

@@ -1,4 +1,4 @@
-"""Planner node — routes goal/message to MVP skills."""
+"""Planner node — routes goal/message to MVP skills (+ stub surfaces when asked)."""
 
 from __future__ import annotations
 
@@ -8,18 +8,46 @@ from monny.graph.state import AgentState
 def _infer_plan(goal: str, message: str) -> list[str]:
     text = f"{goal} {message}".lower()
     plan: list[str] = []
+
+    wants_promo = any(
+        k in text for k in ("promo", "promotion", "discount", "price rule", "shopify promo")
+    )
+    wants_leads = any(
+        k in text for k in ("lead", "warming", "nurture", "crm", "sequence")
+    )
     wants_spend = any(k in text for k in ("spend", "ads", "budget", "roas", "cpa", "meta", "google"))
-    wants_seo = any(k in text for k in ("seo", "title", "meta", "page", "sitemap"))
+    wants_seo = any(k in text for k in ("seo", "title", "meta", "page", "sitemap", "crawl"))
     wants_report = any(k in text for k in ("report", "summary", "overview", "daily"))
 
-    if wants_spend or (wants_report and not wants_seo) or (not wants_seo and not wants_spend):
-        plan.extend(["spend_google", "spend_meta"])
-    if wants_seo or (wants_report and not wants_spend) or "overview" in text:
-        plan.append("seo_audit")
-    if not plan:
-        plan.extend(["spend_google", "spend_meta"])
+    # Stub surfaces only when explicitly asked (do not mix into default spend/SEO runs)
+    if wants_promo:
+        plan.append("shopify_promo")
+    if wants_leads:
+        plan.append("lead_warming")
+
+    if wants_promo or wants_leads:
+        # Still allow combining with spend/SEO if also mentioned
+        if wants_spend:
+            plan.extend(["spend_google", "spend_meta"])
+        if wants_seo:
+            plan.append("seo_audit")
+    else:
+        if wants_spend or (wants_report and not wants_seo) or (not wants_seo and not wants_spend):
+            plan.extend(["spend_google", "spend_meta"])
+        if wants_seo or (wants_report and not wants_spend) or "overview" in text:
+            plan.append("seo_audit")
+        if not plan:
+            plan.extend(["spend_google", "spend_meta"])
+
     plan.append("reporting")
-    return plan
+    # de-dupe while preserving order
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for item in plan:
+        if item not in seen:
+            seen.add(item)
+            ordered.append(item)
+    return ordered
 
 
 def planner_node(state: AgentState) -> dict:

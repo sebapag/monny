@@ -28,7 +28,11 @@ from monny.config.settings import get_settings
 from monny.graph.app import run_agent
 from monny.skills.apply_stub import apply_approved
 from monny.storage.approvals import ApprovalStore
-from monny.storage.artifacts import write_json_artifact
+from monny.storage.artifacts import (
+    list_artifacts,
+    read_json_artifact,
+    write_json_artifact,
+)
 from monny.storage.audit import append_audit
 
 
@@ -122,11 +126,24 @@ def create_app() -> FastAPI:
         return out
 
     @app.get("/api/tenants")
-    def tenants() -> list[dict[str, str]]:
+    def tenants() -> list[dict[str, Any]]:
         out = []
+        store = approvals()
         for tenant_id in list_tenant_ids(Path(settings.monny_tenants_dir)):
             cfg = load_tenant(tenant_id, Path(settings.monny_tenants_dir))
-            out.append({"tenant_id": tenant_id, "display_name": cfg.display_name})
+            refs = _collect_secret_refs(cfg)
+            secrets = [SecretStatus(**secret_status(r)).model_dump() for r in refs]
+            pending = store.list(tenant_id=tenant_id, status="pending")
+            out.append(
+                {
+                    "tenant_id": tenant_id,
+                    "display_name": cfg.display_name,
+                    "secrets": secrets,
+                    "secrets_configured": sum(1 for s in secrets if s["configured"]),
+                    "secrets_total": len(secrets),
+                    "pending_approvals": len(pending),
+                }
+            )
         return out
 
     @app.get("/api/tenants/{tenant_id}")
@@ -170,6 +187,28 @@ def create_app() -> FastAPI:
 
         rows = [json.loads(line) for line in lines if line.strip()]
         return list(reversed(rows[-limit:]))
+
+    @app.get("/api/tenants/{tenant_id}/artifacts")
+    def tenant_artifacts(tenant_id: str) -> dict[str, Any]:
+        try:
+            load_tenant(tenant_id, Path(settings.monny_tenants_dir))
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        items = list_artifacts(settings.monny_data_dir, tenant_id)
+        return {"tenant_id": tenant_id, "artifacts": items}
+
+    @app.get("/api/tenants/{tenant_id}/artifacts/{name}")
+    def tenant_artifact(tenant_id: str, name: str) -> dict[str, Any]:
+        if "/" in name or ".." in name or not name.endswith(".json"):
+            raise HTTPException(status_code=400, detail="Invalid artifact name")
+        try:
+            load_tenant(tenant_id, Path(settings.monny_tenants_dir))
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        payload = read_json_artifact(settings.monny_data_dir, tenant_id, name)
+        if payload is None:
+            raise HTTPException(status_code=404, detail=f"Artifact not found: {name}")
+        return {"tenant_id": tenant_id, "name": name, "payload": payload}
 
     return app
 
