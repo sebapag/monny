@@ -9,8 +9,10 @@ Propose-then-approve HITL by default. Shopify / ads accounts are portable config
 monny/
   src/monny/          # Python agent + FastAPI
   tenants/demo/       # Sample portable tenant.yaml
+  tenants/acme/       # Second tenant (swap YAML only)
   fixtures/spend/     # Mock Ads metrics for dry-run
   fixtures/seo/       # HTML fixtures for .example hosts
+  fixtures/shopify/   # Shop + page metadata by shop_domain
   web/                # Vite + React UI (Agent + Admin)
   data/               # Runtime (checkpoints, approvals, artifacts, audit)
   tests/
@@ -23,7 +25,7 @@ monny/
 
 ## Quick start (dry-run / mock)
 
-No live credentials required. Dry-run is the default (`MONNY_DRY_RUN=1`).
+No live credentials required. Dry-run is the default (`MONNY_DRY_RUN=1`, `MONNY_LIVE=0`).
 
 ### 1. Python agent + API
 
@@ -34,74 +36,99 @@ source .venv/bin/activate
 pip install -e ".[dev]"
 cp .env.example .env
 
-# CLI — spend report
+# Interactive goals
 python -m monny --tenant demo --goal "report spend ultimi 7 giorni"
-
-# CLI — SEO audit
 python -m monny --tenant demo --goal "seo audit of priority pages"
+
+# Scheduled jobs (same graph)
+python -m monny --job spend_daily --tenant demo
+python -m monny --job seo_weekly --tenant demo
+python -m monny --list-jobs
+
+# Portability check — different shop via YAML only
+python -m monny --tenant acme --goal "report spend ultimi 7 giorni"
 
 # API
 uvicorn monny.api.app:app --reload --host 127.0.0.1 --port 8000
-# or: ./scripts/dev.sh
 ```
 
 ### 2. Web UI
 
 ```bash
-cd web
-npm install
-npm run dev
+cd web && npm install && npm run dev
 ```
 
 - Agent: http://127.0.0.1:5173  
 - Admin: http://127.0.0.1:5173/#admin  
 
-Vite proxies `/api` → `:8000`.
-
 ### 3. Tests
 
 ```bash
-pytest
+pytest   # no live credentials required
 ```
 
-## Try the HITL loop
+## Secret refs & live mode
 
-1. Start API + UI.
-2. In Agent UI, click **Spend report** (or **SEO audit**) → Send.
-3. Review structured report (campaign table / SEO diffs).
-4. Approve or reject pending proposals in the right panel.
-5. Approved actions run apply stubs only (`applied_stub`) and append to `data/<tenant>/audit.jsonl`.
+Secrets are **names** in `tenant.yaml` (`secret_ref`), resolved from the environment at runtime. Never commit values.
+
+| Tenant | Shopify | Google Ads | Meta | Search Console |
+|--------|---------|------------|------|----------------|
+| `demo` | `SHOPIFY_TOKEN_DEMO` | `GOOGLE_ADS_DEMO` | `META_ADS_DEMO` | `GSC_DEMO` |
+| `acme` | `SHOPIFY_TOKEN_ACME` | `GOOGLE_ADS_ACME` | `META_ADS_ACME` | `GSC_ACME` |
+
+**Global (live Google Ads only):**
+
+- `GOOGLE_ADS_DEVELOPER_TOKEN` — required when `MONNY_LIVE=1`
+- `GOOGLE_ADS_LOGIN_CUSTOMER_ID` — optional MCC
+
+### Enable live reads (explicit)
+
+```bash
+export MONNY_LIVE=1
+export MONNY_DRY_RUN=0
+export GOOGLE_ADS_DEMO=...          # OAuth access token
+export GOOGLE_ADS_DEVELOPER_TOKEN=...
+export META_ADS_DEMO=...            # Graph access token
+export SHOPIFY_TOKEN_DEMO=...       # Admin API token
+```
+
+- Live **reads** use real HTTP client interfaces (`GoogleAdsLiveClient`, `MetaAdsLiveClient`, `ShopifyLiveClient`).
+- Live **writes** still require HITL approve; mutate endpoints are scaffolded and will not run unattended production mutations without further wiring.
+- With `MONNY_LIVE=0` (default), all paths use fixtures under `fixtures/`.
 
 ## Portability
 
-Onboard a new shop by adding `tenants/<id>/tenant.yaml` with Shopify / Ads / site / policy blocks and `secret_ref` names. Put real tokens in the environment under those names. The agent never embeds shop domains or account IDs in code.
+Onboard a shop by adding `tenants/<id>/tenant.yaml` + matching `fixtures/shopify/<shop_domain>.json` (for dry-run). Swap tenant id — no code changes. Compare:
 
-Demo secret refs (see `.env.example`): `SHOPIFY_TOKEN_DEMO`, `GOOGLE_ADS_DEMO`, `META_ADS_DEMO`, `GSC_DEMO`.
+```bash
+python -m monny --tenant demo --goal "seo audit"
+python -m monny --tenant acme --goal "seo audit"
+```
 
-Optional `site.priority_urls` drives the SEO audit target list; `.example` hosts load HTML from `fixtures/seo/`.
+## HITL apply
 
-## Live mode (later)
-
-Set `MONNY_LIVE=1` and `MONNY_DRY_RUN=0`, then populate secret refs. Live Ads/Shopify clients remain hooks — this slice never mutates production APIs.
+1. Agent proposes spend pauses/budget cuts or an SEO change set.
+2. Approve via Agent UI or `POST /api/approvals/{id}/decide`.
+3. Apply runs stubs by default (`applied_stub`); with live flags + secrets, CMS/Ads live interfaces are selected (writes remain gated / scaffolded).
 
 ## API
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| `POST` | `/api/chat` | Steer the agent (returns structured `report`) |
-| `GET` | `/api/approvals` | List approvals (`?tenant_id=&status=pending`) |
-| `POST` | `/api/approvals/{id}/decide` | Approve / reject (+ apply stub + audit) |
+| `POST` | `/api/chat` | Steer the agent |
+| `GET` | `/api/approvals` | List approvals |
+| `POST` | `/api/approvals/{id}/decide` | Approve / reject (+ apply + audit) |
 | `GET` | `/api/tenants` | List tenants |
-| `GET` | `/api/tenants/{id}` | Config + secret status |
-| `PUT` | `/api/tenants/{id}` | Save `tenant.yaml` |
-| `GET` | `/api/tenants/{id}/audit` | Recent audit events |
+| `GET`/`PUT` | `/api/tenants/{id}` | Read / save config |
+| `GET` | `/api/tenants/{id}/audit` | Audit events |
 
 ## Skills (MVP)
 
 | Skill | Status |
 |-------|--------|
-| `spend_google` / `spend_meta` | Fixture metrics + CPA/ROAS diagnosis + proposals |
-| `seo_audit` | Fetch/fixture HTML → title/meta/H1 issues → SeoChangeSet |
-| `seo_apply` | Stub on approve |
-| `reporting` | Markdown + structured payload for UI |
+| `shopify_read` | Fixture/live shop + sample page (every run) |
+| `spend_google` / `spend_meta` | Fixture or live metrics + diagnosis |
+| `seo_audit` | HTML audit → SeoChangeSet |
+| `seo_apply` | HITL-gated stub / live CMS behind flag |
+| `reporting` | Markdown + structured UI payload |
 | `shopify_promo` / `lead_warming` | Disabled stubs |
