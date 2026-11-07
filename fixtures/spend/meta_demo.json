@@ -15,6 +15,18 @@
       "roas": 3.8
     },
     {
+      "id": "m-15",
+      "name": "Interest Prospecting",
+      "status": "ACTIVE",
+      "daily_budget": 45.0,
+      "impressions": 110000,
+      "clicks": 980,
+      "spend": 290.0,
+      "conversions": 8,
+      "cpa": 36.25,
+      "roas": 1.4
+    },
+    {
       "id": "m-20",
       "name": "Cold Lookalike",
       "status": "ACTIVE",
@@ -22,9 +34,9 @@
       "impressions": 150000,
       "clicks": 1400,
       "spend": 410.0,
-      "conversions": 4,
-      "cpa": 102.5,
-      "roas": 0.5
+      "conversions": 0,
+      "cpa": 0,
+      "roas": 0
     }
   ]
 }

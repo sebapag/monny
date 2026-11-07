@@ -15,6 +15,18 @@
       "roas": 5.2
     },
     {
+      "id": "g-150",
+      "name": "Shopping Mid Funnel",
+      "status": "ENABLED",
+      "daily_budget": 55.0,
+      "impressions": 28000,
+      "clicks": 740,
+      "spend": 320.0,
+      "conversions": 9,
+      "cpa": 35.55,
+      "roas": 1.6
+    },
+    {
       "id": "g-200",
       "name": "Prospecting Generic",
       "status": "ENABLED",
