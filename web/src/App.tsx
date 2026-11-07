@@ -483,7 +483,8 @@ function mergeOfficeLights(
   pendingTotal: number,
 ): Record<DeptId, RoomLightState> {
   const next = { ...runLights }
-  if (pendingTotal > 0 && next.direzione === 'off') next.direzione = 'soft'
+  // Pending decisions keep Direzione visibly lit (not just soft).
+  if (pendingTotal > 0) next.direzione = 'on'
   return next
 }
 
@@ -502,16 +503,37 @@ function DecisionsAlert({
       : `Ci sono ${count} decisioni da prendere`
   return (
     <aside
-      className="decisions-alert"
+      className="decisions-alert decisions-alert-attention"
       role="status"
       aria-live="polite"
       data-testid="decisions-alert"
     >
-      <div className="decisions-alert-copy">
-        <strong>{headline}</strong>
-        <span>
-          Monny aspetta la tua conferma prima di applicare i cambiamenti.
+      <div className="decisions-alert-lead">
+        <span className="decisions-alert-icon" aria-hidden>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+            <path
+              d="M12 3a6 6 0 0 0-6 6v2.2c0 .7-.2 1.4-.6 2L4 16h16l-1.4-2.8c-.4-.6-.6-1.3-.6-2V9a6 6 0 0 0-6-6Z"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinejoin="round"
+            />
+            <path
+              d="M9.5 18a2.5 2.5 0 0 0 5 0"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+            />
+          </svg>
         </span>
+        <span className="decisions-alert-count" aria-hidden>
+          {count}
+        </span>
+        <div className="decisions-alert-copy">
+          <strong>{headline}</strong>
+          <span>
+            Guarda la stanza Direzione (luce e badge) oppure apri l’elenco.
+          </span>
+        </div>
       </div>
       <button type="button" className="btn btn-primary" onClick={onOpen}>
         Vai alle decisioni

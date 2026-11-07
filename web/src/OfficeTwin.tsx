@@ -238,14 +238,78 @@ function FlatDesk({ position }: { position: [number, number, number] }) {
   )
 }
 
+/** Count badge + soft pulse ring when Direzione has pending decisions. */
+function DecisionHotspotBadge({
+  position,
+  count,
+  reduceMotion,
+}: {
+  position: [number, number, number]
+  count: number
+  reduceMotion: boolean
+}) {
+  const disc = useRef<MeshStandardMaterial>(null)
+  const ring = useRef<MeshStandardMaterial>(null)
+  useFrame(({ clock }) => {
+    const pulse = reduceMotion
+      ? 1
+      : 0.55 + 0.45 * (0.5 + 0.5 * Math.sin(clock.elapsedTime * 2.6))
+    if (disc.current) disc.current.emissiveIntensity = 0.35 + 0.45 * pulse
+    if (ring.current) {
+      ring.current.opacity = 0.22 + 0.35 * pulse
+      ring.current.emissiveIntensity = 0.4 * pulse
+    }
+  })
+  return (
+    <group position={position}>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.9, 0]}>
+        <ringGeometry args={[0.55, 0.82, 36]} />
+        <meshStandardMaterial
+          ref={ring}
+          color="#f5d75e"
+          emissive="#f5d75e"
+          emissiveIntensity={0.4}
+          transparent
+          opacity={0.4}
+          depthWrite={false}
+          {...MATTE}
+        />
+      </mesh>
+      <Billboard>
+        <mesh>
+          <circleGeometry args={[0.3, 28]} />
+          <meshStandardMaterial
+            ref={disc}
+            color="#5645d4"
+            emissive="#5645d4"
+            emissiveIntensity={0.6}
+            {...MATTE}
+          />
+        </mesh>
+        <Text
+          position={[0, 0, 0.03]}
+          fontSize={0.28}
+          color="#ffffff"
+          anchorX="center"
+          anchorY="middle"
+        >
+          {String(count)}
+        </Text>
+      </Billboard>
+    </group>
+  )
+}
+
 function RoomZone({
   room,
   light,
+  attentionCount = 0,
   onSelect,
   reduceMotion,
 }: {
   room: RoomLayout
   light: RoomLightState
+  attentionCount?: number
   onSelect: (id: DeptId) => void
   reduceMotion: boolean
 }) {
@@ -255,6 +319,7 @@ function RoomZone({
   const ceilMat = useRef<MeshStandardMaterial>(null)
   const hotMat = useRef<MeshStandardMaterial>(null)
   const lamp = useRef<PointLightType>(null)
+  const needsAttention = attentionCount > 0
 
   const floorIdle = useMemo(() => new Color(room.floor), [room.floor])
   const floorLit = useMemo(() => new Color(room.floorLit), [room.floorLit])
@@ -276,38 +341,44 @@ function RoomZone({
     return offsets
   }, [hx, hz, room.people])
 
-  useFrame((_, dt) => {
+  useFrame(({ clock }, dt) => {
     const target = lightLevel(light)
     const k = reduceMotion ? 1 : 1 - Math.exp(-EASE * dt)
     level.current = lerp(level.current, target, k)
-    const L = level.current
+    let L = level.current
+    if (needsAttention) {
+      const pulse = reduceMotion
+        ? 1
+        : 0.72 + 0.28 * (0.5 + 0.5 * Math.sin(clock.elapsedTime * 2.4))
+      L = Math.max(L, pulse)
+    }
 
     if (floorMat.current) {
       tmp.copy(floorIdle).lerp(floorLit, L)
       floorMat.current.color.copy(tmp)
       floorMat.current.emissive.copy(accent)
-      floorMat.current.emissiveIntensity = 0.28 * L
+      floorMat.current.emissiveIntensity = (needsAttention ? 0.42 : 0.28) * L
     }
     if (ceilMat.current) {
       tmp.copy(ceilIdle).lerp(ceilWarm, Math.min(1, L * 1.4))
       ceilMat.current.color.copy(tmp)
       tmp2.copy(black).lerp(accent, L)
       ceilMat.current.emissive.copy(tmp2)
-      ceilMat.current.emissiveIntensity = 0.45 * L
+      ceilMat.current.emissiveIntensity = (needsAttention ? 0.62 : 0.45) * L
     }
     if (hotMat.current) {
       tmp.copy(white).lerp(accent, L)
       hotMat.current.color.copy(tmp)
       hotMat.current.emissive.copy(tmp)
-      hotMat.current.emissiveIntensity = lerp(0.05, 0.35, L)
+      hotMat.current.emissiveIntensity = lerp(0.05, needsAttention ? 0.55 : 0.35, L)
     }
     if (lamp.current) {
-      lamp.current.intensity = lerp(0.08, 1.1, L)
+      lamp.current.intensity = lerp(0.08, needsAttention ? 1.45 : 1.1, L)
       lamp.current.color.copy(lampWarm).lerp(accent, L)
     }
   })
 
-  const active = light === 'on'
+  const active = light === 'on' || needsAttention
 
   return (
     <group>
@@ -360,7 +431,7 @@ function RoomZone({
           onSelect(room.id)
         }}
       >
-        <cylinderGeometry args={[0.2, 0.2, 0.06, 24]} />
+        <cylinderGeometry args={[needsAttention ? 0.26 : 0.2, needsAttention ? 0.26 : 0.2, 0.06, 24]} />
         <meshStandardMaterial ref={hotMat} color="#ffffff" {...MATTE} />
       </mesh>
       <Billboard position={[hx, 1.55, hz]}>
@@ -375,16 +446,25 @@ function RoomZone({
           {`${room.hotspot} · ${room.label}`}
         </Text>
       </Billboard>
+      {needsAttention && (
+        <DecisionHotspotBadge
+          position={[hx + 0.72, 1.7, hz]}
+          count={attentionCount}
+          reduceMotion={reduceMotion}
+        />
+      )}
     </group>
   )
 }
 
 function OfficeBuilding({
   lights,
+  pendingCount,
   onSelect,
   reduceMotion,
 }: {
   lights: Record<DeptId, RoomLightState>
+  pendingCount: number
   onSelect: (id: DeptId) => void
   reduceMotion: boolean
 }) {
@@ -416,6 +496,7 @@ function OfficeBuilding({
           key={room.id}
           room={room}
           light={lights[room.id]}
+          attentionCount={room.id === 'direzione' ? pendingCount : 0}
           onSelect={onSelect}
           reduceMotion={reduceMotion}
         />
@@ -433,34 +514,50 @@ function FloorPlan2D({
   pending: Record<DeptId, number>
   onSelect: (id: DeptId) => void
 }) {
+  const direzionePending = pending.direzione || 0
   return (
     <div className="office-floorplan" data-testid="office-floorplan-2d">
       {ROOMS.map((room) => {
         const light = lights[room.id]
         const dept = DEPARTMENTS.find((d) => d.id === room.id)
+        const needsDecision = room.id === 'direzione' && direzionePending > 0
         return (
           <button
             key={room.id}
             type="button"
-            className={`floor-room light-${light} tint-${dept?.tint ?? 'gray'}`}
+            className={`floor-room light-${light} tint-${dept?.tint ?? 'gray'}${
+              needsDecision ? ' needs-decision' : ''
+            }`}
             style={{ gridArea: room.id }}
             onClick={() => onSelect(room.id)}
           >
-            <span className="floor-hotspot">{room.hotspot}</span>
+            <span className="floor-hotspot-row">
+              <span className="floor-hotspot">{room.hotspot}</span>
+              {needsDecision && (
+                <span className="decision-count-badge" aria-label={`${direzionePending} decisioni`}>
+                  {direzionePending}
+                </span>
+              )}
+            </span>
             <strong>{dept?.name ?? room.label}</strong>
             <div className="floor-people" aria-hidden>
               {Array.from({ length: room.people }).map((_, i) => (
-                <span key={i} className={`ometto-2d ${light === 'on' ? 'active' : ''}`} />
+                <span
+                  key={i}
+                  className={`ometto-2d ${light === 'on' || needsDecision ? 'active' : ''}`}
+                />
               ))}
             </div>
             <span className="floor-state">
-              {light === 'on'
-                ? 'Luci accese'
-                : light === 'soft'
-                  ? 'Si stanno spegnendo…'
-                  : 'In attesa'}
+              {needsDecision
+                ? 'Decisioni in attesa'
+                : light === 'on'
+                  ? 'Luci accese'
+                  : light === 'soft'
+                    ? 'Si stanno spegnendo…'
+                    : 'In attesa'}
             </span>
-            {(pending[room.id] || 0) > 0 && (
+            {(pending[room.id] || 0) > 0 && room.id !== 'direzione' && (
               <span className="dept-pending">{pending[room.id]} in attesa</span>
             )}
           </button>
@@ -469,6 +566,11 @@ function FloorPlan2D({
     </div>
   )
 }
+
+const OFFICE_SHORTCUTS = [
+  { label: 'Controlla le ads', goal: 'report spend ultimi 7 giorni' },
+  { label: 'Controlla SEO', goal: 'seo audit of priority pages' },
+] as const
 
 function usePreferFallback(): boolean {
   const [fallback, setFallback] = useState(false)
@@ -532,7 +634,9 @@ export function OfficeTwin({
   const fallback = usePreferFallback()
   const reduceMotion = useReduceMotion()
   const [failed, setFailed] = useState(false)
+  const [goalDraft, setGoalDraft] = useState('')
   const use2d = fallback || failed
+  const pendingTotal = pending.direzione || 0
 
   const litNames = useMemo(
     () =>
@@ -542,40 +646,86 @@ export function OfficeTwin({
     [lights],
   )
 
+  const sendGoal = (goal: string) => {
+    const text = goal.trim()
+    if (!text || busy) return
+    onQuickAction(text)
+    setGoalDraft('')
+  }
+
   return (
     <section className="office-twin" data-testid="office-twin">
       <div className="page-intro">
         <div>
           <h1>Ufficio Monny</h1>
           <p>
-            Ufficio digitale dei reparti. Quando una skill lavora, si accendono le luci
-            e gli ometti di quella zona. Clicca una stanza per entrare.
+            Ufficio digitale dei reparti. Scrivi cosa vuoi che Monny faccia, oppure
+            scegli un suggerimento. Quando una skill lavora, si accendono luci e ometti.
           </p>
         </div>
       </div>
 
-      <div className="office-toolbar">
+      <form
+        className="office-compose"
+        data-testid="office-compose"
+        onSubmit={(e) => {
+          e.preventDefault()
+          sendGoal(goalDraft)
+        }}
+      >
+        <label className="sr-only" htmlFor="office-goal">
+          Richiesta per Monny
+        </label>
+        <textarea
+          id="office-goal"
+          rows={2}
+          value={goalDraft}
+          disabled={busy}
+          placeholder="Scrivi cosa vuoi che Monny faccia…"
+          onChange={(e) => setGoalDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+              e.preventDefault()
+              sendGoal(goalDraft)
+            }
+          }}
+        />
         <button
-          type="button"
+          type="submit"
           className="btn btn-primary"
-          disabled={busy}
-          onClick={() => onQuickAction('report spend ultimi 7 giorni')}
+          disabled={busy || !goalDraft.trim()}
         >
-          {busy ? 'In corso…' : 'Controlla le ads'}
+          {busy ? 'In corso…' : 'Avvia'}
         </button>
-        <button
-          type="button"
-          className="btn btn-ghost"
-          disabled={busy}
-          onClick={() => onQuickAction('seo audit of priority pages')}
-        >
-          Controlla SEO
-        </button>
+      </form>
+
+      <div className="office-shortcuts">
+        <span className="office-shortcuts-label">Suggerimenti</span>
+        {OFFICE_SHORTCUTS.map((s) => (
+          <button
+            key={s.goal}
+            type="button"
+            className="chip-shortcut"
+            disabled={busy}
+            onClick={() => sendGoal(s.goal)}
+          >
+            {s.label}
+          </button>
+        ))}
         {statusLine && <span className="office-status">{statusLine}</span>}
         {litNames && <span className="office-status lit">Luci: {litNames}</span>}
+        {pendingTotal > 0 && (
+          <span className="office-status decisions">
+            {pendingTotal} {pendingTotal === 1 ? 'decisione' : 'decisioni'} · Direzione
+          </span>
+        )}
       </div>
 
-      <div className={`office-viewport flat-pastel locked-view ${use2d ? 'is-2d' : 'is-3d'}`}>
+      <div
+        className={`office-viewport flat-pastel locked-view ${use2d ? 'is-2d' : 'is-3d'}${
+          pendingTotal > 0 ? ' has-decisions' : ''
+        }`}
+      >
         {use2d ? (
           <FloorPlan2D lights={lights} pending={pending} onSelect={onSelect} />
         ) : (
@@ -598,6 +748,7 @@ export function OfficeTwin({
                 <directionalLight position={[5, 10, 3]} intensity={0.35} />
                 <OfficeBuilding
                   lights={lights}
+                  pendingCount={pendingTotal}
                   onSelect={onSelect}
                   reduceMotion={reduceMotion}
                 />
