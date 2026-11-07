@@ -26,7 +26,10 @@ from monny.config.loader import (
 from monny.config.models import TenantConfig
 from monny.config.settings import get_settings
 from monny.graph.app import run_agent
+from monny.skills.apply_stub import apply_approved
 from monny.storage.approvals import ApprovalStore
+from monny.storage.artifacts import write_json_artifact
+from monny.storage.audit import append_audit
 
 
 def create_app() -> FastAPI:
@@ -54,7 +57,7 @@ def create_app() -> FastAPI:
     @app.post("/api/chat", response_model=ChatResponse)
     def chat(body: ChatRequest) -> ChatResponse:
         try:
-            load_tenant(body.tenant_id)
+            load_tenant(body.tenant_id, Path(settings.monny_tenants_dir))
         except FileNotFoundError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
@@ -71,6 +74,11 @@ def create_app() -> FastAPI:
             status=result.get("status") or "unknown",
             approval_ids=result.get("approval_ids") or [],
             report=result.get("report"),
+            findings=[
+                f
+                for f in (result.get("findings") or [])
+                if f.get("skill") != "reporting"
+            ],
         )
 
     @app.get("/api/approvals", response_model=list[ApprovalOut])
@@ -87,7 +95,31 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
-        return ApprovalOut(**item.__dict__)
+
+        apply_result: dict[str, Any] | None = None
+        if body.decision == "approved":
+            apply_result = apply_approved(item.payload)
+            write_json_artifact(
+                settings.monny_data_dir,
+                item.tenant_id,
+                f"apply-{item.id}.json",
+                apply_result,
+            )
+
+        append_audit(
+            settings.monny_data_dir,
+            item.tenant_id,
+            f"approval_{body.decision}",
+            {
+                "approval_id": item.id,
+                "action_type": item.action_type,
+                "note": body.note,
+                "apply_result": apply_result,
+            },
+        )
+
+        out = ApprovalOut(**item.__dict__, apply_result=apply_result)
+        return out
 
     @app.get("/api/tenants")
     def tenants() -> list[dict[str, str]]:
@@ -120,7 +152,24 @@ def create_app() -> FastAPI:
         except Exception as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         path = save_tenant(cfg, Path(settings.monny_tenants_dir))
+        append_audit(
+            settings.monny_data_dir,
+            tenant_id,
+            "tenant_config_saved",
+            {"path": str(path)},
+        )
         return {"ok": True, "path": str(path), "tenant_id": tenant_id}
+
+    @app.get("/api/tenants/{tenant_id}/audit")
+    def tenant_audit(tenant_id: str, limit: int = 50) -> list[dict[str, Any]]:
+        path = Path(settings.monny_data_dir) / tenant_id / "audit.jsonl"
+        if not path.exists():
+            return []
+        lines = path.read_text(encoding="utf-8").strip().splitlines()
+        import json
+
+        rows = [json.loads(line) for line in lines if line.strip()]
+        return list(reversed(rows[-limit:]))
 
     return app
 
@@ -133,7 +182,6 @@ def _collect_secret_refs(cfg: TenantConfig) -> list[str]:
         refs.append(cfg.ads.meta.secret_ref)
     if cfg.integrations.search_console:
         refs.append(cfg.integrations.search_console.secret_ref)
-    # stable unique order
     seen: set[str] = set()
     out: list[str] = []
     for r in refs:

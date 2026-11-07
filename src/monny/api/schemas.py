@@ -20,6 +20,7 @@ class ChatResponse(BaseModel):
     status: str
     approval_ids: list[str] = Field(default_factory=list)
     report: dict[str, Any] | None = None
+    findings: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class ApprovalDecision(BaseModel):
@@ -38,6 +39,7 @@ class ApprovalOut(BaseModel):
     created_at: str
     decided_at: str | None = None
     note: str | None = None
+    apply_result: dict[str, Any] | None = None
 
 
 class TenantUpsert(BaseModel):

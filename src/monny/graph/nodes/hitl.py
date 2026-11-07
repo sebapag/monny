@@ -1,4 +1,4 @@
-"""HITL gate — create pending approvals for proposals (interrupt placeholder)."""
+"""HITL gate — persist pending proposals for approve/reject."""
 
 from __future__ import annotations
 
@@ -6,6 +6,14 @@ from monny.config.settings import get_settings
 from monny.graph.state import AgentState
 from monny.storage.approvals import ApprovalStore
 from monny.storage.audit import append_audit
+
+
+def _summary_for(proposal: dict) -> str:
+    channel = proposal.get("channel") or "?"
+    name = proposal.get("entity_name") or proposal.get("entity_id") or "?"
+    reason = proposal.get("reason") or ""
+    action = proposal.get("action_type") or "action"
+    return f"[{action}] {channel}:{name} — {reason}"
 
 
 def hitl_node(state: AgentState) -> dict:
@@ -21,10 +29,7 @@ def hitl_node(state: AgentState) -> dict:
             tenant_id=state["tenant_id"],
             thread_id=state.get("thread_id") or "cli",
             action_type=proposal.get("action_type", "unknown"),
-            summary=(
-                f"{proposal.get('channel')}:{proposal.get('entity_name')} — "
-                f"{proposal.get('reason')}"
-            ),
+            summary=_summary_for(proposal),
             payload=proposal,
         )
         approval_ids.append(approval.id)
