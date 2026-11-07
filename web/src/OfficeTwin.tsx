@@ -139,7 +139,12 @@ function FixedCamera() {
   return null
 }
 
-/** Simple stylized person with eased active state. */
+/** Ease-in-out wave in [0,1] — calm bob without hard snaps. */
+function easeWave(t: number) {
+  return 0.5 - 0.5 * Math.cos(t)
+}
+
+/** Stylized person — slow idle bob, slightly livelier when lit, staggered phases. */
 function Ometto({
   position,
   accent,
@@ -170,12 +175,23 @@ function Ometto({
     const a = activity.current
 
     if (ref.current) {
-      const speed = lerp(1.1, 2.4, a)
-      const amp = reduceMotion ? 0 : lerp(0.03, 0.06, a)
-      ref.current.position.y = position[1] + Math.sin(clock.elapsedTime * speed + phase) * amp
+      // ~2.5–3× slower than before; idle calm, active only a bit livelier
+      const speed = lerp(0.36, 0.88, a)
+      const amp = reduceMotion ? 0 : lerp(0.016, 0.038, a)
+      const t = clock.elapsedTime * speed + phase
+      const bob = (easeWave(t) * 2 - 1) * amp
+      ref.current.position.y = position[1] + bob
+      ref.current.position.x = position[0]
+      ref.current.position.z =
+        position[2] +
+        (reduceMotion
+          ? 0
+          : Math.sin(clock.elapsedTime * lerp(0.22, 0.55, a) + phase * 1.37) *
+            lerp(0.012, 0.028, a))
       ref.current.rotation.y = reduceMotion
         ? 0
-        : Math.sin(clock.elapsedTime * 1.6 + phase) * 0.12 * a
+        : Math.sin(clock.elapsedTime * lerp(0.32, 0.72, a) + phase * 0.9) *
+          lerp(0.05, 0.11, a)
     }
 
     tmp.copy(idleColor).lerp(accentColor, a)
@@ -220,19 +236,282 @@ function Ometto({
   )
 }
 
-function FlatDesk({ position }: { position: [number, number, number] }) {
+function FlatChair({ position, rotY = 0 }: { position: [number, number, number]; rotY?: number }) {
+  return (
+    <group position={position} rotation={[0, rotY, 0]}>
+      <RoundedBox args={[0.32, 0.05, 0.32]} radius={0.02} position={[0, 0.28, 0]}>
+        <FlatMat color="#e8e4df" />
+      </RoundedBox>
+      <mesh position={[0, 0.48, -0.12]}>
+        <boxGeometry args={[0.3, 0.34, 0.05]} />
+        <FlatMat color="#ddd8d1" />
+      </mesh>
+      <mesh position={[0, 0.14, 0]}>
+        <cylinderGeometry args={[0.04, 0.05, 0.26, 8]} />
+        <FlatMat color="#c8c4be" />
+      </mesh>
+    </group>
+  )
+}
+
+function FlatDesk({
+  position,
+  accent,
+  light = 'off',
+}: {
+  position: [number, number, number]
+  accent: string
+  light?: RoomLightState
+}) {
+  const screenMat = useRef<MeshStandardMaterial>(null)
+  const litAmt = useRef(lightLevel(light))
+  const accentCol = useMemo(() => new Color(accent), [accent])
+  const idle = useMemo(() => new Color('#c5d9ef'), [])
+  const tmp = useMemo(() => new Color(), [])
+
+  useFrame((_, dt) => {
+    const k = 1 - Math.exp(-EASE * dt)
+    litAmt.current = lerp(litAmt.current, lightLevel(light), k)
+    const lit = litAmt.current
+    if (!screenMat.current) return
+    tmp.copy(idle).lerp(accentCol, lit)
+    screenMat.current.color.copy(tmp)
+    screenMat.current.emissive.copy(accentCol)
+    screenMat.current.emissiveIntensity = 0.15 + 0.55 * lit
+  })
+
   return (
     <group position={position}>
-      <RoundedBox args={[1.0, 0.06, 0.5]} radius={0.02} position={[0, 0.4, 0]}>
+      <RoundedBox args={[1.05, 0.06, 0.52]} radius={0.02} position={[0, 0.4, 0]}>
         <FlatMat color="#f0eeec" />
       </RoundedBox>
-      <mesh position={[0, 0.2, 0]}>
-        <boxGeometry args={[0.9, 0.04, 0.08]} />
+      <mesh position={[-0.38, 0.2, 0.18]}>
+        <boxGeometry args={[0.06, 0.38, 0.06]} />
         <FlatMat color="#e5e3df" />
       </mesh>
-      <mesh position={[0, 0.62, -0.12]}>
-        <boxGeometry args={[0.42, 0.28, 0.04]} />
+      <mesh position={[0.38, 0.2, 0.18]}>
+        <boxGeometry args={[0.06, 0.38, 0.06]} />
+        <FlatMat color="#e5e3df" />
+      </mesh>
+      <mesh position={[-0.38, 0.2, -0.18]}>
+        <boxGeometry args={[0.06, 0.38, 0.06]} />
+        <FlatMat color="#e5e3df" />
+      </mesh>
+      <mesh position={[0.38, 0.2, -0.18]}>
+        <boxGeometry args={[0.06, 0.38, 0.06]} />
+        <FlatMat color="#e5e3df" />
+      </mesh>
+      <mesh position={[0, 0.62, -0.14]}>
+        <boxGeometry args={[0.48, 0.32, 0.04]} />
+        <meshStandardMaterial ref={screenMat} color="#c5d9ef" {...MATTE} />
+      </mesh>
+      <mesh position={[0, 0.44, -0.1]}>
+        <boxGeometry args={[0.12, 0.08, 0.08]} />
+        <FlatMat color="#d8d4ce" />
+      </mesh>
+      <FlatChair position={[0, 0, 0.42]} rotY={Math.PI} />
+    </group>
+  )
+}
+
+function Plant({ position, scale = 1 }: { position: [number, number, number]; scale?: number }) {
+  return (
+    <group position={position} scale={scale}>
+      <mesh position={[0, 0.1, 0]}>
+        <cylinderGeometry args={[0.14, 0.11, 0.2, 10]} />
+        <FlatMat color="#d9b89a" />
+      </mesh>
+      <mesh position={[0, 0.28, 0]}>
+        <cylinderGeometry args={[0.03, 0.04, 0.22, 6]} />
+        <FlatMat color="#6a8f6a" />
+      </mesh>
+      <mesh position={[0, 0.5, 0]}>
+        <sphereGeometry args={[0.2, 12, 12]} />
+        <FlatMat color="#5faf7f" />
+      </mesh>
+      <mesh position={[0.12, 0.58, 0.06]}>
+        <sphereGeometry args={[0.13, 10, 10]} />
+        <FlatMat color="#7ec994" />
+      </mesh>
+      <mesh position={[-0.1, 0.56, -0.08]}>
+        <sphereGeometry args={[0.12, 10, 10]} />
+        <FlatMat color="#4f9a6e" />
+      </mesh>
+    </group>
+  )
+}
+
+function Cabinet({
+  position,
+  rotY = 0,
+  wide = 0.7,
+}: {
+  position: [number, number, number]
+  rotY?: number
+  wide?: number
+}) {
+  return (
+    <group position={position} rotation={[0, rotY, 0]}>
+      <RoundedBox args={[wide, 0.72, 0.32]} radius={0.02} position={[0, 0.36, 0]}>
+        <FlatMat color="#efebe6" />
+      </RoundedBox>
+      <mesh position={[0, 0.36, 0.165]}>
+        <boxGeometry args={[wide * 0.08, 0.12, 0.02]} />
+        <FlatMat color="#c8c4be" />
+      </mesh>
+      <mesh position={[0, 0.74, 0]}>
+        <boxGeometry args={[wide * 0.92, 0.04, 0.28]} />
+        <FlatMat color="#e5e3df" />
+      </mesh>
+    </group>
+  )
+}
+
+function SoftLamp({
+  position,
+  light = 'off',
+  accent,
+}: {
+  position: [number, number, number]
+  light?: RoomLightState
+  accent: string
+}) {
+  const shade = useRef<MeshStandardMaterial>(null)
+  const litAmt = useRef(lightLevel(light))
+  const accentCol = useMemo(() => new Color(accent), [accent])
+  const warm = useMemo(() => new Color('#fff6e8'), [])
+  const tmp = useMemo(() => new Color(), [])
+  useFrame((_, dt) => {
+    const k = 1 - Math.exp(-EASE * dt)
+    litAmt.current = lerp(litAmt.current, lightLevel(light), k)
+    const lit = litAmt.current
+    if (!shade.current) return
+    tmp.copy(warm).lerp(accentCol, lit * 0.55)
+    shade.current.color.copy(tmp)
+    shade.current.emissive.copy(tmp)
+    shade.current.emissiveIntensity = 0.12 + 0.55 * lit
+  })
+  return (
+    <group position={position}>
+      <mesh position={[0, 0.02, 0]}>
+        <cylinderGeometry args={[0.26, 0.34, 0.12, 16]} />
+        <meshStandardMaterial ref={shade} color="#fff6e8" {...MATTE} />
+      </mesh>
+      <mesh position={[0, 0.2, 0]}>
+        <cylinderGeometry args={[0.025, 0.025, 0.22, 6]} />
+        <FlatMat color="#d8d4ce" />
+      </mesh>
+    </group>
+  )
+}
+
+function Whiteboard({
+  position,
+  rotY = 0,
+  light = 'off',
+  accent,
+}: {
+  position: [number, number, number]
+  rotY?: number
+  light?: RoomLightState
+  accent: string
+}) {
+  const board = useRef<MeshStandardMaterial>(null)
+  const litAmt = useRef(lightLevel(light))
+  const accentCol = useMemo(() => new Color(accent), [accent])
+  const idle = useMemo(() => new Color('#f7f6f3'), [])
+  const tmp = useMemo(() => new Color(), [])
+  useFrame((_, dt) => {
+    const k = 1 - Math.exp(-EASE * dt)
+    litAmt.current = lerp(litAmt.current, lightLevel(light), k)
+    const lit = litAmt.current
+    if (!board.current) return
+    tmp.copy(idle).lerp(accentCol, lit * 0.35)
+    board.current.color.copy(tmp)
+    board.current.emissive.copy(accentCol)
+    board.current.emissiveIntensity = 0.08 + 0.42 * lit
+  })
+  return (
+    <group position={position} rotation={[0, rotY, 0]}>
+      <RoundedBox args={[1.35, 0.82, 0.06]} radius={0.02} position={[0, 0, 0]}>
+        <FlatMat color="#d8d4ce" />
+      </RoundedBox>
+      <RoundedBox args={[1.22, 0.7, 0.04]} radius={0.015} position={[0, 0, 0.03]}>
+        <meshStandardMaterial ref={board} color="#f7f6f3" {...MATTE} />
+      </RoundedBox>
+      <mesh position={[0.1, 0.12, 0.06]}>
+        <boxGeometry args={[0.75, 0.1, 0.01]} />
         <FlatMat color="#dcecfa" />
+      </mesh>
+      <mesh position={[-0.18, -0.08, 0.06]}>
+        <boxGeometry args={[0.55, 0.07, 0.01]} />
+        <FlatMat color="#e6e0f5" />
+      </mesh>
+      <mesh position={[0.2, -0.22, 0.06]}>
+        <boxGeometry args={[0.4, 0.05, 0.01]} />
+        <FlatMat color="#fde0ec" />
+      </mesh>
+    </group>
+  )
+}
+
+function Rug({
+  position,
+  size,
+  color,
+}: {
+  position: [number, number, number]
+  size: [number, number]
+  color: string
+}) {
+  return (
+    <mesh position={position} rotation={[-Math.PI / 2, 0, 0]}>
+      <planeGeometry args={size} />
+      <meshStandardMaterial color={color} {...MATTE} />
+    </mesh>
+  )
+}
+
+function MeetingTable({ position }: { position: [number, number, number] }) {
+  return (
+    <group position={position}>
+      <RoundedBox args={[1.55, 0.07, 0.85]} radius={0.035} position={[0, 0.44, 0]}>
+        <FlatMat color="#f3efe8" />
+      </RoundedBox>
+      <mesh position={[0, 0.21, 0]}>
+        <cylinderGeometry args={[0.1, 0.14, 0.4, 10]} />
+        <FlatMat color="#ddd6cc" />
+      </mesh>
+      <mesh position={[0, 0.5, 0]}>
+        <boxGeometry args={[0.35, 0.03, 0.25]} />
+        <FlatMat color="#e6e0f5" />
+      </mesh>
+      <FlatChair position={[0, 0, 0.65]} rotY={Math.PI} />
+      <FlatChair position={[-0.5, 0, -0.65]} />
+      <FlatChair position={[0.5, 0, -0.65]} />
+    </group>
+  )
+}
+
+function LowPartition({
+  position,
+  size,
+  color = '#e2ddd6',
+}: {
+  position: [number, number, number]
+  size: [number, number, number]
+  color?: string
+}) {
+  return (
+    <group position={position}>
+      <mesh>
+        <boxGeometry args={size} />
+        <FlatMat color={color} />
+      </mesh>
+      {/* Soft top rail so partitions read clearly from isometric view */}
+      <mesh position={[0, size[1] / 2 + 0.025, 0]}>
+        <boxGeometry args={[size[0] * 1.05, 0.05, size[2] * 1.05]} />
+        <FlatMat color="#d0cbc3" />
       </mesh>
     </group>
   )
@@ -332,11 +611,15 @@ function RoomZone({
   const tmp = useMemo(() => new Color(), [])
   const tmp2 = useMemo(() => new Color(), [])
 
+  const halfW = room.size[0] / 2
+  const halfD = room.size[2] / 2
+  const phaseBase = room.hotspot * 2.7
+
   const peopleOffsets = useMemo(() => {
     const offsets: [number, number, number][] = []
     for (let i = 0; i < room.people; i++) {
       const side = i % 2 === 0 ? -1 : 1
-      offsets.push([hx + side * 0.55, 0, hz + (i < 2 ? 0.15 : -0.45)])
+      offsets.push([hx + side * 0.55, 0, hz + (i < 2 ? 0.2 : -0.35)])
     }
     return offsets
   }, [hx, hz, room.people])
@@ -379,6 +662,16 @@ function RoomZone({
   })
 
   const active = light === 'on' || needsAttention
+  const rugColor =
+    room.id === 'direzione'
+      ? '#f3e7b0'
+      : room.id === 'spend'
+        ? '#c9dff3'
+        : room.id === 'seo'
+          ? '#c6e8d2'
+          : room.id === 'shopify'
+            ? '#ffd9c0'
+            : '#f5c9db'
 
   return (
     <group>
@@ -399,13 +692,60 @@ function RoomZone({
         <meshStandardMaterial ref={floorMat} color={room.floor} {...MATTE} />
       </mesh>
 
-      <mesh position={[hx, 0.42, hz - room.size[2] / 2 + 0.06]}>
-        <boxGeometry args={[room.size[0] * 0.9, 0.72, 0.07]} />
+      {/* Soft rug so ometti sit in a furnished zone, not bare mat */}
+      <Rug
+        position={[hx, 0.055, hz]}
+        size={[room.size[0] * 0.72, room.size[2] * 0.62]}
+        color={rugColor}
+      />
+
+      {/* Back wall + low side partitions */}
+      <mesh position={[hx, 0.55, hz - halfD + 0.05]}>
+        <boxGeometry args={[room.size[0] * 0.92, 1.05, 0.07]} />
         <FlatMat color={room.wall} />
       </mesh>
+      <LowPartition
+        position={[hx - halfW + 0.05, 0.48, hz]}
+        size={[0.08, 0.92, room.size[2] * 0.82]}
+      />
+      <LowPartition
+        position={[hx + halfW - 0.05, 0.48, hz]}
+        size={[0.08, 0.92, room.size[2] * 0.82]}
+      />
+      {/* Front low half-wall so rooms feel enclosed without blocking labels */}
+      <LowPartition
+        position={[hx, 0.28, hz + halfD - 0.06]}
+        size={[room.size[0] * 0.55, 0.52, 0.07]}
+      />
 
-      <FlatDesk position={[hx - 0.75, 0, hz + 0.15]} />
-      <FlatDesk position={[hx + 0.75, 0, hz - 0.4]} />
+      <Whiteboard
+        position={[hx, 1.15, hz - halfD + 0.14]}
+        light={light === 'off' && needsAttention ? 'on' : light}
+        accent={room.accent}
+      />
+
+      {room.id === 'direzione' ? (
+        <>
+          <MeetingTable position={[hx + 0.15, 0, hz + 0.25]} />
+          <FlatDesk position={[hx - 1.15, 0, hz - 0.55]} accent={room.accent} light={light} />
+          <Cabinet position={[hx + 1.35, 0, hz - 0.75]} rotY={-0.12} wide={0.62} />
+          <Cabinet position={[hx - 1.45, 0, hz - 0.75]} rotY={0.12} wide={0.5} />
+          <Plant position={[hx - 1.55, 0, hz + 0.9]} scale={1.05} />
+          <Plant position={[hx + 1.5, 0, hz + 0.8]} scale={0.95} />
+        </>
+      ) : (
+        <>
+          <FlatDesk position={[hx - 0.7, 0, hz + 0.15]} accent={room.accent} light={light} />
+          <FlatDesk position={[hx + 0.7, 0, hz - 0.4]} accent={room.accent} light={light} />
+          <Cabinet
+            position={[hx + halfW - 0.38, 0, hz - halfD + 0.4]}
+            rotY={0.08}
+            wide={0.58}
+          />
+          <Plant position={[hx - halfW + 0.38, 0, hz + halfD - 0.38]} scale={1} />
+          <Plant position={[hx + halfW - 0.4, 0, hz + halfD - 0.4]} scale={0.75} />
+        </>
+      )}
 
       {peopleOffsets.map((pos, i) => (
         <Ometto
@@ -413,28 +753,41 @@ function RoomZone({
           position={pos}
           accent={room.accent}
           active={active}
-          phase={i * 1.3}
+          phase={phaseBase + i * 2.35 + i * 0.41}
           reduceMotion={reduceMotion}
         />
       ))}
 
-      <mesh position={[hx, 2.2, hz]}>
-        <boxGeometry args={[Math.min(room.size[0] * 0.5, 1.6), 0.05, 0.45]} />
+      {/* Ceiling soft panels + hanging lamps */}
+      <mesh position={[hx - 0.55, 2.15, hz]}>
+        <boxGeometry args={[0.95, 0.04, 0.4]} />
         <meshStandardMaterial ref={ceilMat} color="#f6f5f4" {...MATTE} />
       </mesh>
+      <mesh position={[hx + 0.55, 2.15, hz]}>
+        <boxGeometry args={[0.95, 0.04, 0.4]} />
+        <FlatMat color="#f6f5f4" />
+      </mesh>
+      <SoftLamp position={[hx - 0.55, 1.95, hz]} accent={room.accent} light={light} />
+      <SoftLamp
+        position={[hx + 0.55, 1.95, hz]}
+        accent={room.accent}
+        light={light === 'off' && needsAttention ? 'on' : light}
+      />
       <pointLight ref={lamp} position={[hx, 2.0, hz]} intensity={0.08} distance={5.5} color="#fff8f0" />
 
       <mesh
-        position={[hx, 1.25, hz]}
+        position={[hx, 1.35, hz + halfD * 0.15]}
         onClick={(e) => {
           e.stopPropagation()
           onSelect(room.id)
         }}
       >
-        <cylinderGeometry args={[needsAttention ? 0.26 : 0.2, needsAttention ? 0.26 : 0.2, 0.06, 24]} />
+        <cylinderGeometry
+          args={[needsAttention ? 0.26 : 0.2, needsAttention ? 0.26 : 0.2, 0.06, 24]}
+        />
         <meshStandardMaterial ref={hotMat} color="#ffffff" {...MATTE} />
       </mesh>
-      <Billboard position={[hx, 1.55, hz]}>
+      <Billboard position={[hx, 1.65, hz + halfD * 0.15]}>
         <Text
           fontSize={0.26}
           color="#37352f"
@@ -448,7 +801,7 @@ function RoomZone({
       </Billboard>
       {needsAttention && (
         <DecisionHotspotBadge
-          position={[hx + 0.72, 1.7, hz]}
+          position={[hx + 0.72, 1.8, hz + halfD * 0.15]}
           count={attentionCount}
           reduceMotion={reduceMotion}
         />
@@ -470,10 +823,20 @@ function OfficeBuilding({
 }) {
   return (
     <group>
+      {/* Building shell + shared corridor floor */}
       <mesh position={[0, -0.02, 0]}>
         <boxGeometry args={[12.2, 0.08, 10.6]} />
-        <FlatMat color="#fafaf9" />
+        <FlatMat color="#f3f1ee" />
       </mesh>
+      <mesh position={[0, 0.03, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <planeGeometry args={[1.35, 9.4]} />
+        <meshStandardMaterial color="#e9e5df" {...MATTE} />
+      </mesh>
+      <mesh position={[0, 0.035, 1.7]} rotation={[-Math.PI / 2, 0, 0]}>
+        <planeGeometry args={[7.2, 1.15]} />
+        <meshStandardMaterial color="#e9e5df" {...MATTE} />
+      </mesh>
+
       <mesh position={[0, 1.05, -5.2]}>
         <boxGeometry args={[12.2, 2.1, 0.1]} />
         <FlatMat color="#f0eeec" />
@@ -489,6 +852,19 @@ function OfficeBuilding({
       <mesh position={[0, 1.05, 5.2]}>
         <boxGeometry args={[12.2, 2.1, 0.08]} />
         <FlatMat color="#e6e0f5" />
+      </mesh>
+
+      {/* Corridor props */}
+      <Plant position={[0, 0, 1.7]} scale={1.05} />
+      <Plant position={[-0.85, 0, -1.4]} scale={0.8} />
+      <Plant position={[0.85, 0, -1.4]} scale={0.8} />
+      <Cabinet position={[0, 0, -4.55]} wide={1.1} />
+      <RoundedBox args={[0.7, 0.05, 0.45]} radius={0.02} position={[0, 0.38, 0.2]}>
+        <FlatMat color="#efebe6" />
+      </RoundedBox>
+      <mesh position={[0, 0.18, 0.2]}>
+        <cylinderGeometry args={[0.05, 0.07, 0.34, 8]} />
+        <FlatMat color="#d8d4ce" />
       </mesh>
 
       {ROOMS.map((room) => (
