@@ -12,12 +12,57 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>
 }
 
+export type SpendCampaign = {
+  id?: string
+  name?: string
+  channel?: string
+  spend?: number
+  roas?: number
+  cpa?: number
+  conversions?: number
+  daily_budget?: number
+  flags?: string[]
+  healthy?: boolean
+}
+
+export type SpendDiagnosis = {
+  channel: string
+  totals: {
+    campaigns: number
+    healthy: number
+    waste: number
+    spend: number
+    waste_spend: number
+    waste_spend_pct: number
+  }
+  thresholds?: { min_roas: number; max_cpa: number }
+  campaigns: SpendCampaign[]
+}
+
+export type SeoChange = {
+  url: string
+  before: { title?: string; meta_description?: string; h1?: string }
+  after: { title?: string; meta_description?: string; h1?: string }
+  issues?: { code: string; severity: string; detail: string }[]
+  status?: string
+}
+
+export type Report = {
+  markdown?: string
+  proposal_count?: number
+  proposals?: Record<string, unknown>[]
+  spend_channels?: SpendDiagnosis[]
+  seo_change_set?: { status?: string; changes?: SeoChange[] } | null
+  seo_findings?: Record<string, unknown>[]
+}
+
 export type ChatResponse = {
   thread_id: string
   reply: string
   status: string
   approval_ids: string[]
-  report?: Record<string, unknown> | null
+  report?: Report | null
+  findings?: Record<string, unknown>[]
 }
 
 export type Approval = {
@@ -31,12 +76,47 @@ export type Approval = {
   created_at: string
   decided_at?: string | null
   note?: string | null
+  apply_result?: Record<string, unknown> | null
 }
 
 export type TenantListItem = { tenant_id: string; display_name: string }
 
+export type TenantConfig = {
+  tenant_id: string
+  display_name: string
+  shopify: {
+    shop_domain: string
+    api_version: string
+    auth: { secret_ref: string }
+    scopes_expected: string[]
+  }
+  ads: {
+    google?: { customer_id: string; login_customer_id?: string | null; secret_ref: string } | null
+    meta?: { ad_account_id: string; secret_ref: string } | null
+  }
+  site: {
+    base_url: string
+    sitemap_url?: string | null
+    cms_adapter: string
+    locales: string[]
+    priority_urls?: string[]
+  }
+  policy: {
+    hitl_default: boolean
+    spend: {
+      max_budget_delta_pct: number
+      auto_apply: { enabled: boolean; allow: string[] }
+      thresholds: { min_roas: number; max_cpa: number; lookback_days: number }
+    }
+    seo: { auto_apply: boolean; max_urls_per_run: number }
+  }
+  integrations?: {
+    search_console?: { site_url: string; secret_ref: string } | null
+  }
+}
+
 export type TenantDetail = {
-  config: Record<string, unknown>
+  config: TenantConfig
   secrets: { secret_ref: string; configured: boolean }[]
   path: string
 }
@@ -53,8 +133,11 @@ export function chat(body: {
   })
 }
 
-export function listApprovals(tenant_id?: string) {
-  const q = tenant_id ? `?tenant_id=${encodeURIComponent(tenant_id)}` : ''
+export function listApprovals(tenant_id?: string, status = 'pending') {
+  const params = new URLSearchParams()
+  if (tenant_id) params.set('tenant_id', tenant_id)
+  if (status) params.set('status', status)
+  const q = params.toString() ? `?${params}` : ''
   return request<Approval[]>(`/api/approvals${q}`)
 }
 
@@ -77,7 +160,7 @@ export function getTenant(tenantId: string) {
   return request<TenantDetail>(`/api/tenants/${tenantId}`)
 }
 
-export function putTenant(tenantId: string, config: Record<string, unknown>) {
+export function putTenant(tenantId: string, config: TenantConfig) {
   return request<{ ok: boolean; path: string }>(`/api/tenants/${tenantId}`, {
     method: 'PUT',
     body: JSON.stringify({ config }),

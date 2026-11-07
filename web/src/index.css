@@ -377,6 +377,143 @@ a {
   }
 }
 
+.quick-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-bottom: 0.85rem;
+}
+
+.report-panel {
+  margin-top: 1.25rem;
+  animation: rise 680ms ease both;
+}
+
+.report-block {
+  margin-top: 0.85rem;
+}
+
+.report-block h3 {
+  margin: 0 0 0.55rem;
+  font-family: var(--font-display);
+  font-size: 1.2rem;
+  color: var(--forest);
+}
+
+.channel-block + .channel-block {
+  margin-top: 1rem;
+}
+
+.channel-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.4rem;
+  font-size: 0.92rem;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.data-table th,
+.data-table td {
+  text-align: left;
+  padding: 0.45rem 0.35rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.data-table th {
+  font-size: 0.72rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: rgba(11, 31, 24, 0.55);
+}
+
+.row-warn td {
+  background: rgba(180, 35, 24, 0.05);
+}
+
+.seo-change {
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.seo-change:last-child {
+  border-bottom: 0;
+}
+
+.seo-url {
+  font-weight: 600;
+  margin-bottom: 0.45rem;
+  word-break: break-all;
+}
+
+.seo-diff {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.seo-diff .muted {
+  font-size: 0.72rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: rgba(11, 31, 24, 0.5);
+}
+
+.seo-diff .before {
+  color: rgba(11, 31, 24, 0.55);
+  text-decoration: line-through;
+  font-size: 0.88rem;
+}
+
+.seo-diff .after {
+  color: var(--forest);
+  font-weight: 500;
+  font-size: 0.92rem;
+}
+
+.issue-list {
+  margin: 0.45rem 0 0;
+  padding-left: 1.1rem;
+  font-size: 0.85rem;
+}
+
+.sev {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.sev-high {
+  color: var(--danger);
+}
+
+.sev-medium {
+  color: #9a6700;
+}
+
+.sev-low {
+  color: rgba(11, 31, 24, 0.55);
+}
+
+.field-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.75rem;
+}
+
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.92rem;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

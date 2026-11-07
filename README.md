@@ -10,14 +10,16 @@ monny/
   src/monny/          # Python agent + FastAPI
   tenants/demo/       # Sample portable tenant.yaml
   fixtures/spend/     # Mock Ads metrics for dry-run
+  fixtures/seo/       # HTML fixtures for .example hosts
   web/                # Vite + React UI (Agent + Admin)
-  data/               # Runtime (checkpoints, approvals, artifacts)
+  data/               # Runtime (checkpoints, approvals, artifacts, audit)
+  tests/
 ```
 
 ## Product surfaces
 
-1. **Agent UI** (`/`) — chat/console to steer the agent, review replies, approve/reject proposals.
-2. **Admin UI** (`/admin`) — edit tenant configuration (Shopify, Google Ads, Meta, site/SEO, policy/HITL). Secrets are **references** (`secret_ref` env names), never raw values in git.
+1. **Agent UI** (`/#agent`) — chat/console, structured spend tables, SEO change-set diffs, approve/reject.
+2. **Admin UI** (`/#admin`) — form editor for Shopify, Google Ads, Meta, site/SEO, policy/HITL, and secret_ref status (never raw secrets).
 
 ## Quick start (dry-run / mock)
 
@@ -32,11 +34,15 @@ source .venv/bin/activate
 pip install -e ".[dev]"
 cp .env.example .env
 
-# CLI loop
+# CLI — spend report
 python -m monny --tenant demo --goal "report spend ultimi 7 giorni"
+
+# CLI — SEO audit
+python -m monny --tenant demo --goal "seo audit of priority pages"
 
 # API
 uvicorn monny.api.app:app --reload --host 127.0.0.1 --port 8000
+# or: ./scripts/dev.sh
 ```
 
 ### 2. Web UI
@@ -47,8 +53,10 @@ npm install
 npm run dev
 ```
 
-Open http://127.0.0.1:5173 — Agent console.  
-Admin: http://127.0.0.1:5173/admin
+- Agent: http://127.0.0.1:5173  
+- Admin: http://127.0.0.1:5173/#admin  
+
+Vite proxies `/api` → `:8000`.
 
 ### 3. Tests
 
@@ -56,42 +64,44 @@ Admin: http://127.0.0.1:5173/admin
 pytest
 ```
 
+## Try the HITL loop
+
+1. Start API + UI.
+2. In Agent UI, click **Spend report** (or **SEO audit**) → Send.
+3. Review structured report (campaign table / SEO diffs).
+4. Approve or reject pending proposals in the right panel.
+5. Approved actions run apply stubs only (`applied_stub`) and append to `data/<tenant>/audit.jsonl`.
+
 ## Portability
 
-Onboard a new shop by adding `tenants/<id>/tenant.yaml` with Shopify / Ads / site / policy blocks and `secret_ref` names. Put real tokens in the environment (or a secret manager) under those names. The agent code never embeds shop domains or account IDs.
+Onboard a new shop by adding `tenants/<id>/tenant.yaml` with Shopify / Ads / site / policy blocks and `secret_ref` names. Put real tokens in the environment under those names. The agent never embeds shop domains or account IDs in code.
 
-Example secret refs for the demo tenant (see `.env.example`):
+Demo secret refs (see `.env.example`): `SHOPIFY_TOKEN_DEMO`, `GOOGLE_ADS_DEMO`, `META_ADS_DEMO`, `GSC_DEMO`.
 
-- `SHOPIFY_TOKEN_DEMO`
-- `GOOGLE_ADS_DEMO`
-- `META_ADS_DEMO`
-- `GSC_DEMO`
-
-Leave them empty to stay in mock mode.
+Optional `site.priority_urls` drives the SEO audit target list; `.example` hosts load HTML from `fixtures/seo/`.
 
 ## Live mode (later)
 
-Set `MONNY_LIVE=1` and `MONNY_DRY_RUN=0`, then populate the secret refs. Live API clients are hooks/stubs in this scaffold slice — no production mutations yet.
+Set `MONNY_LIVE=1` and `MONNY_DRY_RUN=0`, then populate secret refs. Live Ads/Shopify clients remain hooks — this slice never mutates production APIs.
 
-## API (dev)
+## API
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| `POST` | `/api/chat` | Steer the agent |
-| `GET` | `/api/approvals` | List pending approvals |
-| `POST` | `/api/approvals/{id}/decide` | Approve / reject |
+| `POST` | `/api/chat` | Steer the agent (returns structured `report`) |
+| `GET` | `/api/approvals` | List approvals (`?tenant_id=&status=pending`) |
+| `POST` | `/api/approvals/{id}/decide` | Approve / reject (+ apply stub + audit) |
 | `GET` | `/api/tenants` | List tenants |
-| `GET` | `/api/tenants/{id}` | Read config + secret status |
-| `PUT` | `/api/tenants/{id}` | Update tenant.yaml |
+| `GET` | `/api/tenants/{id}` | Config + secret status |
+| `PUT` | `/api/tenants/{id}` | Save `tenant.yaml` |
+| `GET` | `/api/tenants/{id}/audit` | Recent audit events |
 
 ## Skills (MVP)
 
 | Skill | Status |
 |-------|--------|
-| `spend_google` | Mock read + proposals |
-| `spend_meta` | Mock read + proposals |
-| `seo_audit` | Stub audit / change set |
-| `seo_apply` | Stub (gated) |
-| `reporting` | Assembles markdown report |
-| `shopify_promo` | Disabled stub |
-| `lead_warming` | Disabled stub |
+| `spend_google` / `spend_meta` | Fixture metrics + CPA/ROAS diagnosis + proposals |
+| `seo_audit` | Fetch/fixture HTML → title/meta/H1 issues → SeoChangeSet |
+| `seo_apply` | Stub on approve |
+| `reporting` | Markdown + structured payload for UI |
+| `shopify_promo` / `lead_warming` | Disabled stubs |
