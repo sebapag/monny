@@ -997,12 +997,164 @@ a {
   }
 }
 
+/* —— Piano reparti —— */
+.piano {
+  animation: rise 360ms ease both;
+}
+
+.dept-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 0.85rem;
+}
+
+.dept-tile {
+  display: grid;
+  gap: 0.55rem;
+  text-align: left;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-lg);
+  padding: 1.15rem 1.2rem 1.05rem;
+  min-height: 168px;
+  cursor: pointer;
+  box-shadow: var(--shadow-soft);
+  transition: transform 160ms ease, border-color 160ms ease;
+  color: var(--charcoal);
+}
+
+.dept-tile:hover {
+  transform: translateY(-2px);
+  border-color: var(--hairline-strong);
+}
+
+.dept-tile.tint-yellow {
+  background: linear-gradient(165deg, var(--tint-yellow-bold) 0%, var(--canvas) 62%);
+}
+.dept-tile.tint-sky {
+  background: linear-gradient(165deg, var(--tint-sky) 0%, var(--canvas) 62%);
+}
+.dept-tile.tint-mint {
+  background: linear-gradient(165deg, var(--tint-mint) 0%, var(--canvas) 62%);
+}
+.dept-tile.tint-peach {
+  background: linear-gradient(165deg, var(--tint-peach) 0%, var(--canvas) 62%);
+}
+.dept-tile.tint-rose {
+  background: linear-gradient(165deg, var(--tint-rose) 0%, var(--canvas) 62%);
+}
+
+.dept-tile-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.dept-tile-top strong {
+  font-size: 1.12rem;
+  letter-spacing: -0.02em;
+  color: var(--brand-navy);
+}
+
+.dept-tile p {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--slate);
+  line-height: 1.4;
+}
+
+.dept-pending {
+  flex-shrink: 0;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  padding: 0.22rem 0.5rem;
+  border-radius: var(--radius-pill);
+  background: rgba(10, 21, 48, 0.08);
+  color: var(--brand-navy);
+}
+
+.dept-enter {
+  margin-top: auto;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+/* —— Vista reparto —— */
+.dept-shell {
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-lg);
+  padding: 1rem 1.1rem 1.25rem;
+  background: var(--canvas);
+  box-shadow: var(--shadow-soft);
+  animation: rise 360ms ease both;
+}
+
+.dept-shell.tint-yellow {
+  background: linear-gradient(180deg, var(--tint-yellow) 0%, var(--canvas) 28%);
+}
+.dept-shell.tint-sky {
+  background: linear-gradient(180deg, var(--tint-sky) 0%, var(--canvas) 28%);
+}
+.dept-shell.tint-mint {
+  background: linear-gradient(180deg, var(--tint-mint) 0%, var(--canvas) 28%);
+}
+.dept-shell.tint-peach {
+  background: linear-gradient(180deg, var(--tint-peach) 0%, var(--canvas) 28%);
+}
+.dept-shell.tint-rose {
+  background: linear-gradient(180deg, var(--tint-rose) 0%, var(--canvas) 28%);
+}
+
+.dept-header {
+  display: grid;
+  gap: 0.65rem;
+  margin-bottom: 1rem;
+  padding-bottom: 0.85rem;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.dept-header h1 {
+  margin: 0;
+  font-size: 1.4rem;
+  letter-spacing: -0.02em;
+  color: var(--brand-navy);
+}
+
+.dept-header p {
+  margin: 0.25rem 0 0;
+  color: var(--slate);
+  max-width: 52ch;
+}
+
+.back-btn {
+  width: fit-content;
+}
+
+.dept-body.single {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.dept-body.layout-split {
+  display: grid;
+  grid-template-columns: 1.35fr 0.95fr;
+  gap: 1rem;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
     animation: none !important;
     transition: none !important;
+  }
+}
+
+@media (max-width: 900px) {
+  .dept-body.layout-split {
+    grid-template-columns: 1fr;
   }
 }
 

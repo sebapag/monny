@@ -20,23 +20,31 @@ import {
   startRun,
 } from './api'
 import {
+  DEPARTMENTS,
+  type DeptId,
+  type RouteState,
+  countByDept,
+  filterApprovals,
+  filterSteps,
+  getDept,
+  hashFor,
+  parseHash,
+} from './depts'
+import {
   friendlyAgentReply,
   friendlyDecideNote,
   friendlySkillDetail,
   plainApproval,
-  runHasUserTurns,
   skillLabel,
 } from './labels'
 import './index.css'
 
-type View = 'agent' | 'admin'
 type Msg = {
   role: 'user' | 'agent'
   text: string
   report?: Report | null
   timeline?: TimelineStep[]
   runStatus?: string
-  coach?: boolean
 }
 
 const TENANT_KEY = 'monny.tenantId'
@@ -54,26 +62,28 @@ function skillFamily(skill: string): string {
 
 function SkillRail({
   run,
+  steps,
   compact = false,
 }: {
   run: AgentRun | null
+  steps: TimelineStep[]
   compact?: boolean
 }) {
-  if (!run) return null
-  const active = run.steps.find((s) => s.status === 'running' || s.status === 'waiting')
+  if (!run || steps.length === 0) return null
+  const active = steps.find((s) => s.status === 'running' || s.status === 'waiting')
   return (
     <div className={`skill-rail ${compact ? 'compact' : ''} status-${run.status}`}>
       {!compact && (
         <div className="skill-rail-head">
           <span className="skill-pulse" aria-hidden />
           <div>
-            <strong>{active?.label ?? skillLabel(active?.skill || 'planner')}</strong>
+            <strong>{active?.label ?? skillLabel(active?.skill || steps[0]?.skill || '')}</strong>
             <p>{run.status_line}</p>
           </div>
         </div>
       )}
       <ol className="skill-steps">
-        {run.steps.map((step) => (
+        {steps.map((step) => (
           <li
             key={step.id}
             className={`skill-step family-${skillFamily(step.skill)} status-${step.status}`}
@@ -86,44 +96,6 @@ function SkillRail({
           </li>
         ))}
       </ol>
-    </div>
-  )
-}
-
-function CoachCard({ onPick }: { onPick: (draft: string) => void }) {
-  return (
-    <div className="coach" data-testid="first-run-coach">
-      <h3>Come funziona (3 passi)</h3>
-      <ol className="coach-steps">
-        <li>
-          <strong>Scegli un’azione</strong>
-          <span>Usa i pulsanti sotto o scrivi cosa vuoi controllare.</span>
-        </li>
-        <li>
-          <strong>Guarda le skill</strong>
-          <span>Monny ti mostra in tempo reale cosa sta facendo.</span>
-        </li>
-        <li>
-          <strong>Approva o rifiuta</strong>
-          <span>Niente parte senza di te: ogni proposta aspetta la tua ok.</span>
-        </li>
-      </ol>
-      <div className="coach-cta">
-        <button
-          type="button"
-          className="btn btn-primary"
-          onClick={() => onPick('report spend ultimi 7 giorni')}
-        >
-          Controlla le ads
-        </button>
-        <button
-          type="button"
-          className="btn btn-ghost"
-          onClick={() => onPick('seo audit of priority pages')}
-        >
-          Controlla SEO
-        </button>
-      </div>
     </div>
   )
 }
@@ -171,20 +143,53 @@ function ApprovalCard({
         )}
       </div>
       <div className="approval-actions">
-        <button
-          className="btn btn-ok"
-          onClick={() => onDecide(approval.id, 'approved')}
-        >
+        <button className="btn btn-ok" onClick={() => onDecide(approval.id, 'approved')}>
           Approva
         </button>
-        <button
-          className="btn btn-danger"
-          onClick={() => onDecide(approval.id, 'rejected')}
-        >
+        <button className="btn btn-danger" onClick={() => onDecide(approval.id, 'rejected')}>
           Rifiuta
         </button>
       </div>
     </div>
+  )
+}
+
+function ApprovalsList({
+  items,
+  lastDecide,
+  onDecide,
+  emptyHint,
+}: {
+  items: Approval[]
+  lastDecide: string | null
+  onDecide: (id: string, decision: 'approved' | 'rejected') => void
+  emptyHint: string
+}) {
+  const primary = items[0]
+  const rest = items.slice(1)
+  return (
+    <section className="panel" id="approvals">
+      <h2>Approvazioni</h2>
+      {lastDecide && <p className="status-line">{lastDecide}</p>}
+      {items.length === 0 && <p className="status-line">{emptyHint}</p>}
+      {primary && (
+        <ApprovalCard
+          approval={primary}
+          primary
+          onDecide={(id, d) => onDecide(id, d)}
+        />
+      )}
+      {rest.length > 0 && (
+        <div className="approval-rest">
+          <p className="status-line">
+            Altre {rest.length} {rest.length === 1 ? 'proposta' : 'proposte'}
+          </p>
+          {rest.map((a) => (
+            <ApprovalCard key={a.id} approval={a} onDecide={(id, d) => onDecide(id, d)} />
+          ))}
+        </div>
+      )}
+    </section>
   )
 }
 
@@ -196,39 +201,18 @@ function SpendPanel({ channels }: { channels: SpendDiagnosis[] }) {
       {channels.map((ch) => (
         <div key={ch.channel} className="channel-block">
           <div className="channel-head">
-            <strong>{ch.channel === 'google' ? 'Google Ads' : ch.channel === 'meta' ? 'Meta Ads' : ch.channel}</strong>
+            <strong>
+              {ch.channel === 'google'
+                ? 'Google Ads'
+                : ch.channel === 'meta'
+                  ? 'Meta Ads'
+                  : ch.channel}
+            </strong>
             <span>
               Spesa €{ch.totals.spend} · poco efficace €{ch.totals.waste_spend} (
               {ch.totals.waste_spend_pct}%)
             </span>
           </div>
-          <details className="approval-details">
-            <summary>Dettagli campagne</summary>
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Campagna</th>
-                  <th>ROAS</th>
-                  <th>CPA</th>
-                  <th>Spesa</th>
-                  <th>Conv.</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {ch.campaigns.map((c) => (
-                  <tr key={`${ch.channel}-${c.id}`} className={c.flags?.length ? 'row-warn' : ''}>
-                    <td>{c.name}</td>
-                    <td>{c.roas}</td>
-                    <td>{c.cpa}</td>
-                    <td>€{c.spend}</td>
-                    <td>{c.conversions}</td>
-                    <td>{c.flags?.length ? c.flags.join(', ') : 'ok'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </details>
         </div>
       ))}
     </div>
@@ -248,16 +232,6 @@ function SeoPanel({ changes }: { changes: SeoChange[] }) {
               <span className="muted">titolo</span>
               <div className="before">{change.before.title || '(vuoto)'}</div>
               <div className="after">{change.after.title}</div>
-            </div>
-            <div>
-              <span className="muted">meta</span>
-              <div className="before">{change.before.meta_description || '(vuoto)'}</div>
-              <div className="after">{change.after.meta_description}</div>
-            </div>
-            <div>
-              <span className="muted">H1</span>
-              <div className="before">{change.before.h1 || '(vuoto)'}</div>
-              <div className="after">{change.after.h1}</div>
             </div>
           </div>
         </div>
@@ -319,7 +293,6 @@ function AdminForm({
               set('shopify', { ...cfg.shopify, api_version: e.target.value })
             }
           />
-          <FieldHelp>Lascia il default se non sei sicuro.</FieldHelp>
         </div>
       </div>
       <div className="secret-status-row">
@@ -345,7 +318,6 @@ function AdminForm({
             })
           }
         />
-        <FieldHelp>Il numero account che vedi in Google Ads.</FieldHelp>
       </div>
       <div className="secret-status-row">
         <span>Credenziali Google Ads</span>
@@ -371,7 +343,6 @@ function AdminForm({
             })
           }
         />
-        <FieldHelp>Di solito inizia con act_…</FieldHelp>
       </div>
       <div className="secret-status-row">
         <span>Credenziali Meta</span>
@@ -390,7 +361,6 @@ function AdminForm({
             value={cfg.site.base_url}
             onChange={(e) => set('site', { ...cfg.site, base_url: e.target.value })}
           />
-          <FieldHelp>URL pubblico del tuo e-commerce.</FieldHelp>
         </div>
         <div className="field">
           <label>Sitemap (opzionale)</label>
@@ -415,7 +385,6 @@ function AdminForm({
             })
           }
         />
-        <FieldHelp>Home, collezioni e landing più importanti.</FieldHelp>
       </div>
 
       <div className="section-title">Regole di sicurezza</div>
@@ -449,7 +418,6 @@ function AdminForm({
               })
             }
           />
-          <FieldHelp>Sotto questa soglia Monny propone un intervento.</FieldHelp>
         </div>
         <div className="field">
           <label>CPA massimo accettabile</label>
@@ -486,7 +454,6 @@ function AdminForm({
               })
             }
           />
-          <FieldHelp>Limite alla riduzione proposta in un solo passo.</FieldHelp>
         </div>
       </div>
 
@@ -494,26 +461,70 @@ function AdminForm({
         <button className="btn btn-primary" disabled={busy} onClick={() => void onSave(cfg)}>
           {busy ? 'Salvataggio…' : 'Salva configurazione'}
         </button>
-        {savePathHint(detail.path)}
+        <span className="status-line">
+          Salvato in {detail.path.split('/').slice(-2).join('/')}
+        </span>
       </div>
     </div>
   )
 }
 
-function savePathHint(path: string) {
-  return <span className="status-line">Salvato in {path.split('/').slice(-2).join('/')}</span>
+function PianoReparti({
+  tenantLabel,
+  counts,
+  onEnter,
+}: {
+  tenantLabel: string
+  counts: Record<DeptId, number>
+  onEnter: (id: DeptId) => void
+}) {
+  return (
+    <section className="piano" data-testid="piano-reparti">
+      <div className="page-intro">
+        <div>
+          <h1>Piano reparti</h1>
+          <p>
+            Ogni reparto lavora per conto suo per <strong>{tenantLabel}</strong>. Entra in uno
+            per agire, senza mescolare le attività.
+          </p>
+        </div>
+      </div>
+      <div className="dept-grid">
+        {DEPARTMENTS.map((d) => {
+          const n = counts[d.id] || 0
+          return (
+            <button
+              key={d.id}
+              type="button"
+              className={`dept-tile tint-${d.tint}`}
+              onClick={() => onEnter(d.id)}
+            >
+              <div className="dept-tile-top">
+                <strong>{d.name}</strong>
+                {n > 0 && (
+                  <span className="dept-pending">
+                    {n} {n === 1 ? 'in attesa' : 'in attesa'}
+                  </span>
+                )}
+              </div>
+              <p>{d.blurb}</p>
+              <span className="dept-enter">Entra nel reparto</span>
+            </button>
+          )
+        })}
+      </div>
+    </section>
+  )
 }
 
 function App() {
-  const [view, setView] = useState<View>(
-    () => (window.location.hash === '#admin' ? 'admin' : 'agent'),
-  )
+  const [route, setRoute] = useState<RouteState>(() => parseHash(window.location.hash))
   const [tenants, setTenants] = useState<TenantListItem[]>([])
   const [tenantId, setTenantId] = useState(
     () => localStorage.getItem(TENANT_KEY) || 'demo',
   )
-  const [threadId, setThreadId] = useState<string | undefined>()
-  const [messages, setMessages] = useState<Msg[]>([])
+  const [threadByDept, setThreadByDept] = useState<Partial<Record<DeptId, string>>>({})
+  const [messagesByDept, setMessagesByDept] = useState<Partial<Record<DeptId, Msg[]>>>({})
   const [draft, setDraft] = useState('')
   const [busy, setBusy] = useState(false)
   const [approvals, setApprovals] = useState<Approval[]>([])
@@ -523,12 +534,23 @@ function App() {
   const [saveNote, setSaveNote] = useState<string | null>(null)
   const [latestReport, setLatestReport] = useState<Report | null>(null)
   const [artifactNames, setArtifactNames] = useState<string[]>([])
-  const [highlightApprovals, setHighlightApprovals] = useState(false)
   const [liveRun, setLiveRun] = useState<AgentRun | null>(null)
+  const [liveDept, setLiveDept] = useState<DeptId | null>(null)
+
+  const navigate = useCallback((next: RouteState) => {
+    setRoute(next)
+    const h = hashFor(next)
+    if (window.location.hash !== h) {
+      window.location.hash = h
+    }
+  }, [])
 
   useEffect(() => {
-    const onHash = () => setView(window.location.hash === '#admin' ? 'admin' : 'agent')
+    const onHash = () => setRoute(parseHash(window.location.hash))
     window.addEventListener('hashchange', onHash)
+    if (!window.location.hash) {
+      window.location.hash = '#agent'
+    }
     return () => window.removeEventListener('hashchange', onHash)
   }, [])
 
@@ -559,11 +581,8 @@ function App() {
       const listed = await listTenantArtifacts(id)
       setArtifactNames(listed.artifacts.map((a) => a.name))
       const last = await getTenantArtifact(id, 'last_report.json').catch(() => null)
-      if (last?.payload) {
-        setLatestReport(last.payload as Report)
-      } else {
-        setLatestReport(null)
-      }
+      if (last?.payload) setLatestReport(last.payload as Report)
+      else setLatestReport(null)
     } catch {
       setArtifactNames([])
       setLatestReport(null)
@@ -579,56 +598,58 @@ function App() {
   }, [tenantId, refreshApprovals, loadArtifacts])
 
   useEffect(() => {
-    if (view !== 'admin') return
+    if (route.mode !== 'admin') return
     getTenant(tenantId)
       .then((detail) => {
         setTenantDetail(detail)
         setSaveNote(null)
       })
       .catch((err: Error) => setError(err.message))
-  }, [view, tenantId])
+  }, [route.mode, tenantId])
 
   const tenantMeta = useMemo(
     () => tenants.find((t) => t.tenant_id === tenantId),
     [tenants, tenantId],
   )
   const tenantLabel = tenantMeta?.display_name ?? tenantId
-  const hasUserTurns = runHasUserTurns(messages)
-  const primaryApproval = approvals[0]
-  const otherApprovals = approvals.slice(1)
+  const deptCounts = useMemo(() => countByDept(approvals), [approvals])
+  const activeDept = route.mode === 'dept' ? getDept(route.dept) : null
+  const deptId = activeDept?.id ?? null
+  const deptMessages = deptId ? messagesByDept[deptId] || [] : []
+  const deptApprovals = deptId ? filterApprovals(approvals, deptId) : []
+  const filteredLiveSteps =
+    liveRun && liveDept ? filterSteps(liveRun.steps, liveDept) : []
 
   const switchTenant = (id: string) => {
     if (id === tenantId) return
     setTenantId(id)
-    setThreadId(undefined)
+    setThreadByDept({})
+    setMessagesByDept({})
     setLastDecide(null)
-    setHighlightApprovals(false)
     setLiveRun(null)
-    setMessages([])
+    setLiveDept(null)
     setDraft('')
   }
 
-  const scrollToApprovals = () => {
-    setHighlightApprovals(false)
-    const el = document.getElementById('first-approval') || document.getElementById('approvals')
-    el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }
-
-  const send = async (override?: string) => {
+  const sendInDept = async (dept: DeptId, override?: string) => {
     const text = (override ?? draft).trim()
     if (!text || busy) return
     setBusy(true)
     setError(null)
-    setMessages((m) => [...m, { role: 'user', text }])
+    setMessagesByDept((prev) => ({
+      ...prev,
+      [dept]: [...(prev[dept] || []), { role: 'user', text }],
+    }))
     setDraft('')
     try {
       const started = await startRun({
         tenant_id: tenantId,
         message: text,
-        thread_id: threadId,
+        thread_id: threadByDept[dept],
       })
-      setThreadId(started.thread_id)
+      setThreadByDept((prev) => ({ ...prev, [dept]: started.thread_id }))
       setLiveRun(started)
+      setLiveDept(dept)
 
       const terminal = new Set(['completed', 'awaiting_approval', 'error'])
       let current = started
@@ -639,31 +660,33 @@ function App() {
       }
 
       setLatestReport(current.report ?? null)
-      setMessages((m) => [
-        ...m,
-        {
-          role: 'agent',
-          text: friendlyAgentReply(current.reply, current.report, current.status),
-          report: current.report,
-          timeline: current.steps,
-          runStatus: current.status,
-        },
-      ])
-      if (current.status === 'awaiting_approval') {
-        setHighlightApprovals(true)
-      }
-      const pending = await refreshApprovals(tenantId)
-      if (current.approval_ids.length || pending.length) {
-        setHighlightApprovals(true)
-      }
+      const scopedSteps = filterSteps(current.steps, dept)
+      setMessagesByDept((prev) => ({
+        ...prev,
+        [dept]: [
+          ...(prev[dept] || []),
+          {
+            role: 'agent',
+            text: friendlyAgentReply(current.reply, current.report, current.status),
+            report: current.report,
+            timeline: scopedSteps,
+            runStatus: current.status,
+          },
+        ],
+      }))
+      await refreshApprovals(tenantId)
       await loadArtifacts(tenantId)
       await refreshTenants()
       if (current.status !== 'awaiting_approval') {
-        setTimeout(() => setLiveRun(null), 800)
+        setTimeout(() => {
+          setLiveRun(null)
+          setLiveDept(null)
+        }, 800)
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
       setLiveRun(null)
+      setLiveDept(null)
     } finally {
       setBusy(false)
     }
@@ -681,6 +704,7 @@ function App() {
         ),
       )
       setLiveRun(null)
+      setLiveDept(null)
       await refreshApprovals(tenantId)
       await refreshTenants()
     } catch (err) {
@@ -695,8 +719,7 @@ function App() {
     try {
       const res = await putTenant(tenantId, config)
       setSaveNote(`Configurazione salvata (${res.path.split('/').slice(-2).join('/')}).`)
-      const detail = await getTenant(tenantId)
-      setTenantDetail(detail)
+      setTenantDetail(await getTenant(tenantId))
       await refreshTenants()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -739,15 +762,21 @@ function App() {
         <nav className="nav">
           <a
             href="#agent"
-            className={view === 'agent' ? 'active' : ''}
-            onClick={() => setView('agent')}
+            className={route.mode !== 'admin' ? 'active' : ''}
+            onClick={(e) => {
+              e.preventDefault()
+              navigate({ mode: 'piano' })
+            }}
           >
             Agent
           </a>
           <a
             href="#admin"
-            className={view === 'admin' ? 'active' : ''}
-            onClick={() => setView('admin')}
+            className={route.mode === 'admin' ? 'active' : ''}
+            onClick={(e) => {
+              e.preventDefault()
+              navigate({ mode: 'admin' })
+            }}
           >
             Admin
           </a>
@@ -755,169 +784,7 @@ function App() {
       </header>
 
       <main className="page">
-        {view === 'agent' ? (
-          <>
-            <section className="page-intro">
-              <div>
-                <h1>Agent</h1>
-                <p>
-                  Ti guido su spend e SEO per <strong>{tenantLabel}</strong>. Tu scegli
-                  l’azione, Monny propone, tu decidi.
-                </p>
-              </div>
-            </section>
-
-            {liveRun && (
-              <div className="skill-stage" data-testid="skill-rail-live">
-                <SkillRail run={liveRun} />
-              </div>
-            )}
-
-            {approvals.length > 0 && (
-              <div className={`approval-banner ${highlightApprovals ? 'pulse' : ''}`}>
-                <strong>
-                  Hai {approvals.length}{' '}
-                  {approvals.length === 1 ? 'decisione' : 'decisioni'} da prendere
-                </strong>
-                <button type="button" className="banner-link" onClick={scrollToApprovals}>
-                  Vai alla prima
-                </button>
-              </div>
-            )}
-
-            <div className="layout-split">
-              <section className="panel console-panel">
-                <h2>Console · {tenantLabel}</h2>
-                <div className="quick-actions">
-                  <button
-                    type="button"
-                    className="btn btn-ghost"
-                    onClick={() => setDraft('report spend ultimi 7 giorni')}
-                  >
-                    Controlla le ads
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-ghost"
-                    onClick={() => setDraft('seo audit of priority pages')}
-                  >
-                    Controlla SEO
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-ghost"
-                    onClick={() => setDraft('propose shopify promo discount')}
-                  >
-                    Prova promo
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-ghost"
-                    onClick={() => setDraft('lead warming sequence stub')}
-                  >
-                    Prova lead
-                  </button>
-                </div>
-
-                {!hasUserTurns && !liveRun ? (
-                  <CoachCard
-                    onPick={(text) => {
-                      setDraft(text)
-                      void send(text)
-                    }}
-                  />
-                ) : (
-                  <div className="chat-log">
-                    {messages.map((m, i) => (
-                      <div key={`${m.role}-${i}`} className={`bubble ${m.role}`}>
-                        {m.text}
-                        {m.timeline && m.timeline.length > 0 && (
-                          <div className="thread-timeline">
-                            <SkillRail
-                              compact
-                              run={{
-                                id: `hist-${i}`,
-                                tenant_id: tenantId,
-                                thread_id: threadId || '',
-                                goal: '',
-                                status: m.runStatus || 'completed',
-                                status_line: '',
-                                steps: m.timeline,
-                                approval_ids: [],
-                                created_at: '',
-                                updated_at: '',
-                              }}
-                            />
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                <div className="composer">
-                  <textarea
-                    value={draft}
-                    onChange={(e) => setDraft(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void send()
-                    }}
-                    placeholder="Es. Controlla le ads degli ultimi 7 giorni…"
-                  />
-                  <button className="btn btn-primary" disabled={busy} onClick={() => void send()}>
-                    {busy ? 'In corso…' : 'Invia'}
-                  </button>
-                </div>
-                {error && <p className="error">{error}</p>}
-              </section>
-
-              <section className="panel" id="approvals">
-                <h2>Approvazioni</h2>
-                {lastDecide && <p className="status-line">{lastDecide}</p>}
-                {approvals.length === 0 && (
-                  <p className="status-line">
-                    Nessuna decisione in sospeso. Quando Monny propone qualcosa, compare qui.
-                  </p>
-                )}
-                {primaryApproval && (
-                  <ApprovalCard
-                    approval={primaryApproval}
-                    primary
-                    onDecide={(id, d) => void onDecide(id, d)}
-                  />
-                )}
-                {otherApprovals.length > 0 && (
-                  <div className="approval-rest">
-                    <p className="status-line">
-                      Altre {otherApprovals.length}{' '}
-                      {otherApprovals.length === 1 ? 'proposta' : 'proposte'}
-                    </p>
-                    {otherApprovals.map((a) => (
-                      <ApprovalCard
-                        key={a.id}
-                        approval={a}
-                        onDecide={(id, d) => void onDecide(id, d)}
-                      />
-                    ))}
-                  </div>
-                )}
-              </section>
-            </div>
-
-            {(artifactNames.length > 0 || spendFromArtifact.length > 0 || seoFromArtifact.length > 0) && (
-              <section className="panel report-panel">
-                <h2>Ultimi risultati</h2>
-                <p className="status-line">
-                  {artifactNames.length
-                    ? `Salvati: ${artifactNames.join(', ')}`
-                    : 'Risultati dell’ultima analisi.'}
-                </p>
-                <SpendPanel channels={spendFromArtifact} />
-                <SeoPanel changes={seoFromArtifact} />
-              </section>
-            )}
-          </>
-        ) : (
+        {route.mode === 'admin' ? (
           <>
             <section className="page-intro">
               <div>
@@ -928,7 +795,6 @@ function App() {
                 </p>
               </div>
             </section>
-
             <section className="panel">
               <h2>I tuoi negozi</h2>
               <div className="tenant-chips">
@@ -942,15 +808,12 @@ function App() {
                     <strong>{t.display_name}</strong>
                     <span className="meta">
                       {(t.secrets_configured ?? 0) > 0 ? 'Accessi ok' : 'Accessi da completare'}
-                      {t.pending_approvals
-                        ? ` · ${t.pending_approvals} da decidere`
-                        : ''}
+                      {t.pending_approvals ? ` · ${t.pending_approvals} da decidere` : ''}
                     </span>
                   </button>
                 ))}
               </div>
             </section>
-
             <section className="panel">
               <h2>Configurazione · {tenantLabel}</h2>
               {tenantDetail && (
@@ -960,7 +823,183 @@ function App() {
               {error && <p className="error">{error}</p>}
             </section>
           </>
-        )}
+        ) : route.mode === 'piano' ? (
+          <PianoReparti
+            tenantLabel={tenantLabel}
+            counts={deptCounts}
+            onEnter={(id) => navigate({ mode: 'dept', dept: id })}
+          />
+        ) : activeDept ? (
+          <>
+            <div className={`dept-shell tint-${activeDept.tint}`}>
+              <div className="dept-header">
+                <button
+                  type="button"
+                  className="btn btn-ghost back-btn"
+                  onClick={() => navigate({ mode: 'piano' })}
+                >
+                  ← Piano reparti
+                </button>
+                <div>
+                  <h1>{activeDept.name}</h1>
+                  <p>{activeDept.blurb}</p>
+                </div>
+              </div>
+
+              {liveRun && liveDept === activeDept.id && filteredLiveSteps.length > 0 && (
+                <div className="skill-stage" data-testid="skill-rail-live">
+                  <SkillRail run={liveRun} steps={filteredLiveSteps} />
+                </div>
+              )}
+
+              {activeDept.id === 'direzione' ? (
+                <div className="dept-body single">
+                  {approvals.length > 0 && (
+                    <div className="approval-banner">
+                      <strong>
+                        Hai {approvals.length}{' '}
+                        {approvals.length === 1 ? 'decisione' : 'decisioni'} da prendere
+                      </strong>
+                      <button
+                        type="button"
+                        className="banner-link"
+                        onClick={() =>
+                          document
+                            .getElementById('first-approval')
+                            ?.scrollIntoView({ behavior: 'smooth' })
+                        }
+                      >
+                        Vai alla prima
+                      </button>
+                    </div>
+                  )}
+                  <ApprovalsList
+                    items={approvals}
+                    lastDecide={lastDecide}
+                    onDecide={(id, d) => void onDecide(id, d)}
+                    emptyHint="Nessuna decisione in sospeso. Quando un reparto propone qualcosa, arriva qui."
+                  />
+                </div>
+              ) : (
+                <div className="dept-body layout-split">
+                  <section className="panel console-panel">
+                    <h2>Attività del reparto</h2>
+                    {activeDept.actions.length > 0 && (
+                      <div className="quick-actions">
+                        {activeDept.actions.map((a) => (
+                          <button
+                            key={a.goal}
+                            type="button"
+                            className="btn btn-ghost"
+                            onClick={() => {
+                              setDraft(a.goal)
+                              void sendInDept(activeDept.id, a.goal)
+                            }}
+                          >
+                            {a.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {deptMessages.length === 0 && !liveRun ? (
+                      <div className="coach">
+                        <h3>Questo reparto</h3>
+                        <p className="status-line" style={{ marginBottom: '0.75rem' }}>
+                          {activeDept.blurb} Avvia un’azione qui sotto: vedrai solo le skill di
+                          questo reparto.
+                        </p>
+                        {activeDept.actions[0] && (
+                          <button
+                            type="button"
+                            className="btn btn-primary"
+                            onClick={() => void sendInDept(activeDept.id, activeDept.actions[0].goal)}
+                          >
+                            {activeDept.actions[0].label}
+                          </button>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="chat-log">
+                        {deptMessages.map((m, i) => (
+                          <div key={`${m.role}-${i}`} className={`bubble ${m.role}`}>
+                            {m.text}
+                            {m.timeline && m.timeline.length > 0 && (
+                              <div className="thread-timeline">
+                                <SkillRail
+                                  compact
+                                  run={{
+                                    id: `hist-${i}`,
+                                    tenant_id: tenantId,
+                                    thread_id: threadByDept[activeDept.id] || '',
+                                    goal: '',
+                                    status: m.runStatus || 'completed',
+                                    status_line: '',
+                                    steps: m.timeline,
+                                    approval_ids: [],
+                                    created_at: '',
+                                    updated_at: '',
+                                  }}
+                                  steps={m.timeline}
+                                />
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="composer">
+                      <textarea
+                        value={draft}
+                        onChange={(e) => setDraft(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                            void sendInDept(activeDept.id)
+                          }
+                        }}
+                        placeholder={activeDept.placeholder}
+                      />
+                      <button
+                        className="btn btn-primary"
+                        disabled={busy}
+                        onClick={() => void sendInDept(activeDept.id)}
+                      >
+                        {busy ? 'In corso…' : 'Invia'}
+                      </button>
+                    </div>
+                    {error && <p className="error">{error}</p>}
+                  </section>
+
+                  <ApprovalsList
+                    items={deptApprovals}
+                    lastDecide={lastDecide}
+                    onDecide={(id, d) => void onDecide(id, d)}
+                    emptyHint="Nessuna proposta di questo reparto in attesa."
+                  />
+                </div>
+              )}
+
+              {activeDept.id === 'spend' && spendFromArtifact.length > 0 && (
+                <section className="panel report-panel">
+                  <h2>Ultimi risultati ads</h2>
+                  <SpendPanel channels={spendFromArtifact} />
+                </section>
+              )}
+              {activeDept.id === 'seo' && seoFromArtifact.length > 0 && (
+                <section className="panel report-panel">
+                  <h2>Ultimi risultati SEO</h2>
+                  <SeoPanel changes={seoFromArtifact} />
+                </section>
+              )}
+              {activeDept.id === 'shopify' && artifactNames.length > 0 && (
+                <p className="status-line" style={{ marginTop: '1rem' }}>
+                  Artifact: {artifactNames.join(', ')}
+                </p>
+              )}
+            </div>
+          </>
+        ) : null}
       </main>
     </div>
   )
