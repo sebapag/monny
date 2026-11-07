@@ -1,119 +1,26 @@
-"""Skill: SEO audit — fetch/analyze pages, emit SeoChangeSet (no live apply)."""
+"""Skill: SEO audit — uses seo_crawler subagent, emits SeoChangeSet (no live apply)."""
 
 from __future__ import annotations
 
-import re
-from html.parser import HTMLParser
-from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-import httpx
-
+from monny.adapters.live_mode import use_live
 from monny.config.models import TenantConfig
-
-REPO_ROOT = Path(__file__).resolve().parents[3]
-FIXTURES_SEO = REPO_ROOT / "fixtures" / "seo"
-
-
-class _PageParser(HTMLParser):
-    def __init__(self) -> None:
-        super().__init__()
-        self.title_parts: list[str] = []
-        self.meta_description: str | None = None
-        self.h1_parts: list[str] = []
-        self._capture: str | None = None
-
-    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        ad = {k: (v or "") for k, v in attrs}
-        if tag == "title":
-            self._capture = "title"
-        elif tag == "h1":
-            self._capture = "h1"
-        elif tag == "meta":
-            name = (ad.get("name") or ad.get("property") or "").lower()
-            if name in {"description", "og:description"} and ad.get("content"):
-                if self.meta_description is None or name == "description":
-                    self.meta_description = ad["content"].strip()
-
-    def handle_endtag(self, tag: str) -> None:
-        if tag in {"title", "h1"} and self._capture == tag:
-            self._capture = None
-
-    def handle_data(self, data: str) -> None:
-        if self._capture == "title":
-            self.title_parts.append(data)
-        elif self._capture == "h1":
-            self.h1_parts.append(data)
-
-
-def _parse_html(html: str) -> dict[str, Any]:
-    parser = _PageParser()
-    parser.feed(html)
-    title = re.sub(r"\s+", " ", "".join(parser.title_parts)).strip()
-    h1 = re.sub(r"\s+", " ", "".join(parser.h1_parts)).strip()
-    meta = (parser.meta_description or "").strip()
-    return {"title": title, "meta_description": meta, "h1": h1}
-
-
-def _fixture_for_url(url: str) -> Path | None:
-    path = urlparse(url).path.rstrip("/") or "/"
-    mapping = {
-        "/": "home.html",
-        "/collections/all": "collections-all.html",
-        "/products/sample": "products-sample.html",
-    }
-    name = mapping.get(path)
-    if not name:
-        # slugify last segment
-        slug = path.strip("/").replace("/", "-") or "home"
-        candidate = FIXTURES_SEO / f"{slug}.html"
-        return candidate if candidate.exists() else None
-    path_obj = FIXTURES_SEO / name
-    return path_obj if path_obj.exists() else None
-
-
-def _load_page(url: str, *, dry_run: bool, timeout: float = 8.0) -> dict[str, Any]:
-    host = urlparse(url).hostname or ""
-    # Prefer fixtures for .example hosts or when dry-run fetch would be pointless
-    fixture = _fixture_for_url(url)
-    if host.endswith(".example") and fixture is not None:
-        html = fixture.read_text(encoding="utf-8")
-        parsed = _parse_html(html)
-        return {**parsed, "source": "fixture", "url": url, "ok": True}
-
-    try:
-        with httpx.Client(follow_redirects=True, timeout=timeout) as client:
-            resp = client.get(url, headers={"User-Agent": "MonnySEOAudit/0.1"})
-            resp.raise_for_status()
-            parsed = _parse_html(resp.text)
-            return {**parsed, "source": "live", "url": url, "ok": True, "status_code": resp.status_code}
-    except Exception as exc:
-        if fixture is not None and dry_run:
-            html = fixture.read_text(encoding="utf-8")
-            parsed = _parse_html(html)
-            return {
-                **parsed,
-                "source": "fixture_fallback",
-                "url": url,
-                "ok": True,
-                "fetch_error": str(exc),
-            }
-        return {
-            "url": url,
-            "ok": False,
-            "error": str(exc),
-            "title": "",
-            "meta_description": "",
-            "h1": "",
-            "source": "error",
-        }
+from monny.config.settings import get_settings
+from monny.subagents import seo_crawler
 
 
 def _issues_for(page: dict[str, Any]) -> list[dict[str, str]]:
     issues: list[dict[str, str]] = []
     if not page.get("ok"):
-        issues.append({"code": "fetch_failed", "severity": "high", "detail": page.get("error") or "fetch failed"})
+        issues.append(
+            {
+                "code": "fetch_failed",
+                "severity": "high",
+                "detail": page.get("error") or "fetch failed",
+            }
+        )
         return issues
     title = page.get("title") or ""
     meta = page.get("meta_description") or ""
@@ -121,15 +28,23 @@ def _issues_for(page: dict[str, Any]) -> list[dict[str, str]]:
     if not title:
         issues.append({"code": "missing_title", "severity": "high", "detail": "Missing <title>"})
     elif len(title) < 15:
-        issues.append({"code": "title_short", "severity": "medium", "detail": f"Title too short ({len(title)} chars)"})
+        issues.append(
+            {"code": "title_short", "severity": "medium", "detail": f"Title too short ({len(title)} chars)"}
+        )
     elif len(title) > 60:
-        issues.append({"code": "title_long", "severity": "medium", "detail": f"Title too long ({len(title)} chars)"})
+        issues.append(
+            {"code": "title_long", "severity": "medium", "detail": f"Title too long ({len(title)} chars)"}
+        )
     if not meta:
         issues.append({"code": "missing_meta", "severity": "high", "detail": "Missing meta description"})
     elif len(meta) < 50:
-        issues.append({"code": "meta_short", "severity": "medium", "detail": f"Meta too short ({len(meta)} chars)"})
+        issues.append(
+            {"code": "meta_short", "severity": "medium", "detail": f"Meta too short ({len(meta)} chars)"}
+        )
     elif len(meta) > 160:
-        issues.append({"code": "meta_long", "severity": "low", "detail": f"Meta too long ({len(meta)} chars)"})
+        issues.append(
+            {"code": "meta_long", "severity": "low", "detail": f"Meta too long ({len(meta)} chars)"}
+        )
     if not h1:
         issues.append({"code": "missing_h1", "severity": "high", "detail": "Missing H1"})
     return issues
@@ -177,14 +92,21 @@ def run(
     dry_run: bool = True,
     urls: list[str] | None = None,
 ) -> dict[str, Any]:
+    settings = get_settings()
     max_urls = tenant.policy.seo.max_urls_per_run
     target_urls = (urls or _default_urls(tenant))[:max_urls]
+
+    # Live crawl only when explicitly live AND dry-run is off (fixtures still win for .example)
+    allow_live = use_live(dry_run=dry_run) and settings.monny_live
+
+    crawl_result = seo_crawler.crawl(target_urls, allow_live=allow_live)
+    pages = crawl_result.get("pages") or []
 
     findings: list[dict[str, Any]] = []
     changes: list[dict[str, Any]] = []
 
-    for url in target_urls:
-        page = _load_page(url, dry_run=dry_run)
+    for page in pages:
+        url = page.get("url") or ""
         issues = _issues_for(page)
         findings.append(
             {
@@ -240,10 +162,18 @@ def run(
         "skill": "seo_audit",
         "mode": "dry_run" if dry_run else "live",
         "summary": (
-            f"Audited {len(target_urls)} URLs; "
+            f"Audited {len(target_urls)} URLs via seo_crawler "
+            f"(sources={','.join(crawl_result.get('sources') or [])}); "
             f"{sum(1 for f in findings if f['issues'])} with issues; "
             f"proposed {len(changes)} changes."
         ),
+        "crawler": {
+            "subagent": "seo_crawler",
+            "url_count": crawl_result.get("url_count"),
+            "ok_count": crawl_result.get("ok_count"),
+            "sources": crawl_result.get("sources"),
+            # Omit full page HTML; only compact stats for planner context
+        },
         "findings": findings,
         "change_set": change_set,
         "proposals": proposals,
