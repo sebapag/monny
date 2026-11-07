@@ -20,7 +20,6 @@ import {
   startRun,
 } from './api'
 import {
-  DEPARTMENTS,
   type DeptId,
   type RouteState,
   countByDept,
@@ -37,6 +36,8 @@ import {
   plainApproval,
   skillLabel,
 } from './labels'
+import { litDeptsFromAgentRun, type RoomLightState } from './lights'
+import { OfficeTwin } from './OfficeTwin'
 import './index.css'
 
 type Msg = {
@@ -469,52 +470,13 @@ function AdminForm({
   )
 }
 
-function PianoReparti({
-  tenantLabel,
-  counts,
-  onEnter,
-}: {
-  tenantLabel: string
-  counts: Record<DeptId, number>
-  onEnter: (id: DeptId) => void
-}) {
-  return (
-    <section className="piano" data-testid="piano-reparti">
-      <div className="page-intro">
-        <div>
-          <h1>Piano reparti</h1>
-          <p>
-            Ogni reparto lavora per conto suo per <strong>{tenantLabel}</strong>. Entra in uno
-            per agire, senza mescolare le attività.
-          </p>
-        </div>
-      </div>
-      <div className="dept-grid">
-        {DEPARTMENTS.map((d) => {
-          const n = counts[d.id] || 0
-          return (
-            <button
-              key={d.id}
-              type="button"
-              className={`dept-tile tint-${d.tint}`}
-              onClick={() => onEnter(d.id)}
-            >
-              <div className="dept-tile-top">
-                <strong>{d.name}</strong>
-                {n > 0 && (
-                  <span className="dept-pending">
-                    {n} {n === 1 ? 'in attesa' : 'in attesa'}
-                  </span>
-                )}
-              </div>
-              <p>{d.blurb}</p>
-              <span className="dept-enter">Entra nel reparto</span>
-            </button>
-          )
-        })}
-      </div>
-    </section>
-  )
+function mergeOfficeLights(
+  runLights: Record<DeptId, RoomLightState>,
+  pendingTotal: number,
+): Record<DeptId, RoomLightState> {
+  const next = { ...runLights }
+  if (pendingTotal > 0 && next.direzione === 'off') next.direzione = 'soft'
+  return next
 }
 
 function App() {
@@ -730,6 +692,47 @@ function App() {
 
   const spendFromArtifact = (latestReport?.spend_channels ?? []) as SpendDiagnosis[]
   const seoFromArtifact = (latestReport?.seo_change_set?.changes ?? []) as SeoChange[]
+  const officeLights = mergeOfficeLights(
+    litDeptsFromAgentRun(liveRun),
+    approvals.length,
+  )
+
+  /** Start a run while staying on the office twin so room lights update live. */
+  const runFromOffice = async (goal: string) => {
+    if (!goal.trim() || busy) return
+    setBusy(true)
+    setError(null)
+    try {
+      const started = await startRun({
+        tenant_id: tenantId,
+        message: goal,
+      })
+      setLiveRun(started)
+      setLiveDept(null)
+      const terminal = new Set(['completed', 'awaiting_approval', 'error'])
+      let current = started
+      while (!terminal.has(current.status)) {
+        await new Promise((r) => setTimeout(r, 280))
+        current = await getRun(started.id)
+        setLiveRun({ ...current })
+      }
+      setLatestReport(current.report ?? null)
+      await refreshApprovals(tenantId)
+      await loadArtifacts(tenantId)
+      await refreshTenants()
+      // Keep lit soft briefly after completion / HITL
+      setTimeout(() => {
+        if (current.status !== 'awaiting_approval') {
+          setLiveRun(null)
+        }
+      }, 2500)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+      setLiveRun(null)
+    } finally {
+      setBusy(false)
+    }
+  }
 
   return (
     <div className="app-shell">
@@ -824,11 +827,17 @@ function App() {
             </section>
           </>
         ) : route.mode === 'piano' ? (
-          <PianoReparti
-            tenantLabel={tenantLabel}
-            counts={deptCounts}
-            onEnter={(id) => navigate({ mode: 'dept', dept: id })}
-          />
+          <>
+            <OfficeTwin
+              lights={officeLights}
+              pending={deptCounts}
+              statusLine={liveRun?.status_line}
+              busy={busy}
+              onSelect={(id) => navigate({ mode: 'dept', dept: id })}
+              onQuickAction={(goal) => void runFromOffice(goal)}
+            />
+            {error && <p className="error">{error}</p>}
+          </>
         ) : activeDept ? (
           <>
             <div className={`dept-shell tint-${activeDept.tint}`}>

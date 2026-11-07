@@ -997,70 +997,159 @@ a {
   }
 }
 
-/* —— Piano reparti —— */
-.piano {
+/* —— Office digital twin —— */
+.office-twin {
   animation: rise 360ms ease both;
 }
 
-.dept-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 0.85rem;
+.office-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
 }
 
-.dept-tile {
-  display: grid;
-  gap: 0.55rem;
-  text-align: left;
+.office-status {
+  font-size: 0.82rem;
+  color: var(--steel);
+  padding: 0.3rem 0.55rem;
+  border-radius: var(--radius-md);
+  background: var(--tint-gray);
+}
+
+.office-status.lit {
+  background: var(--tint-yellow-bold);
+  color: var(--brand-navy);
+  font-weight: 600;
+}
+
+.office-viewport {
   border: 1px solid var(--hairline);
   border-radius: var(--radius-lg);
-  padding: 1.15rem 1.2rem 1.05rem;
-  min-height: 168px;
-  cursor: pointer;
+  overflow: hidden;
+  background: #1a2438;
   box-shadow: var(--shadow-soft);
-  transition: transform 160ms ease, border-color 160ms ease;
-  color: var(--charcoal);
+  min-height: 420px;
+  height: min(58vh, 560px);
 }
 
-.dept-tile:hover {
-  transform: translateY(-2px);
-  border-color: var(--hairline-strong);
+.office-viewport.is-2d {
+  background: var(--surface);
+  padding: 0.75rem;
 }
 
-.dept-tile.tint-yellow {
-  background: linear-gradient(165deg, var(--tint-yellow-bold) 0%, var(--canvas) 62%);
-}
-.dept-tile.tint-sky {
-  background: linear-gradient(165deg, var(--tint-sky) 0%, var(--canvas) 62%);
-}
-.dept-tile.tint-mint {
-  background: linear-gradient(165deg, var(--tint-mint) 0%, var(--canvas) 62%);
-}
-.dept-tile.tint-peach {
-  background: linear-gradient(165deg, var(--tint-peach) 0%, var(--canvas) 62%);
-}
-.dept-tile.tint-rose {
-  background: linear-gradient(165deg, var(--tint-rose) 0%, var(--canvas) 62%);
+.office-viewport canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
 }
 
-.dept-tile-top {
+.office-hint {
+  margin: 0.55rem 0 0;
+  font-size: 0.8rem;
+  color: var(--steel);
+}
+
+.office-hotspot {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 0.5rem;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.22rem 0.45rem 0.22rem 0.22rem;
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid var(--hairline);
+  box-shadow: var(--shadow-soft);
+  white-space: nowrap;
+  font-family: var(--font);
 }
 
-.dept-tile-top strong {
-  font-size: 1.12rem;
-  letter-spacing: -0.02em;
+.office-hotspot.lit {
+  border-color: #e8d48a;
+  background: var(--tint-yellow-bold);
+}
+
+.office-hotspot-num {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--brand-navy);
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.office-hotspot-label {
+  font-size: 0.75rem;
+  font-weight: 700;
   color: var(--brand-navy);
+  padding-right: 0.2rem;
 }
 
-.dept-tile p {
-  margin: 0;
-  font-size: 0.9rem;
+.office-floorplan {
+  display: grid;
+  grid-template-areas:
+    'shopify shopify lead lead'
+    'spend spend seo seo'
+    'direzione direzione direzione direzione';
+  gap: 0.55rem;
+  height: 100%;
+  min-height: 380px;
+}
+
+.floor-room {
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-lg);
+  padding: 0.85rem;
+  text-align: left;
+  cursor: pointer;
+  display: grid;
+  gap: 0.25rem;
+  align-content: start;
+  transition: box-shadow 160ms ease, filter 160ms ease;
+}
+
+.floor-room.tint-yellow { background: var(--tint-yellow); }
+.floor-room.tint-sky { background: var(--tint-sky); }
+.floor-room.tint-mint { background: var(--tint-mint); }
+.floor-room.tint-peach { background: var(--tint-peach); }
+.floor-room.tint-rose { background: var(--tint-rose); }
+
+.floor-room.light-off {
+  filter: saturate(0.55) brightness(0.96);
+}
+.floor-room.light-on {
+  box-shadow: 0 0 0 2px rgba(245, 215, 94, 0.55), var(--shadow-soft);
+  filter: brightness(1.05);
+}
+.floor-room.light-soft {
+  box-shadow: var(--shadow-soft);
+}
+
+.floor-hotspot {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--brand-navy);
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.floor-room strong {
+  color: var(--brand-navy);
+  font-size: 0.95rem;
+}
+
+.floor-state {
+  font-size: 0.78rem;
   color: var(--slate);
-  line-height: 1.4;
 }
 
 .dept-pending {
@@ -1072,13 +1161,7 @@ a {
   border-radius: var(--radius-pill);
   background: rgba(10, 21, 48, 0.08);
   color: var(--brand-navy);
-}
-
-.dept-enter {
-  margin-top: auto;
-  font-size: 0.82rem;
-  font-weight: 700;
-  color: var(--primary);
+  width: fit-content;
 }
 
 /* —— Vista reparto —— */
