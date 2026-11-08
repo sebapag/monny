@@ -3,8 +3,11 @@ import { DEPARTMENTS, type DeptId } from './depts'
 
 export type RoomLightState = 'off' | 'soft' | 'on'
 
-/** Keep room lights (and lit ometti) fully ON this long after a skill finishes. */
-export const LIGHT_LINGER_MS = 2000
+/**
+ * Keep room lights (and lit ometti) fully ON this long after a skill finishes.
+ * Working rooms stay lit for the whole execution window, then this linger, then fade.
+ */
+export const LIGHT_LINGER_MS = 1000
 
 /** Map a skill id to its office room (null = planner / unknown). */
 export function skillToDept(skill: string): DeptId | null {
@@ -28,25 +31,31 @@ export function stepIsLingering(step: TimelineStep, nowMs: number = Date.now()):
   return nowMs - finished < LIGHT_LINGER_MS
 }
 
-/**
- * Which rooms should light up from a live run timeline.
- * - running / waiting → on
- * - done/error within LIGHT_LINGER_MS → still on (linger before fade)
- * - done older than linger → soft (recent activity)
- * - awaiting_approval status → direzione on
- */
-export function litDeptsFromRun(
-  steps: TimelineStep[],
-  runStatus?: string | null,
-  nowMs: number = Date.now(),
-): Record<DeptId, RoomLightState> {
-  const state: Record<DeptId, RoomLightState> = {
+function emptyLights(): Record<DeptId, RoomLightState> {
+  return {
     direzione: 'off',
     spend: 'off',
     seo: 'off',
     shopify: 'off',
     lead: 'off',
   }
+}
+
+/**
+ * Which rooms should light up from a live run timeline.
+ * - running / waiting → on for that skill’s room (and ometti) for the whole execution
+ * - done/error within LIGHT_LINGER_MS → still on (1s linger before fade)
+ * - done older than linger → soft (recent activity)
+ * - active_skill (if set) → that room on (belt-and-suspenders with step status)
+ * - awaiting_approval status → direzione on (Leadership HITL cue; extra to working-room lights)
+ */
+export function litDeptsFromRun(
+  steps: TimelineStep[],
+  runStatus?: string | null,
+  nowMs: number = Date.now(),
+  activeSkill?: string | null,
+): Record<DeptId, RoomLightState> {
+  const state = emptyLights()
 
   const rank = (s: RoomLightState) => (s === 'on' ? 2 : s === 'soft' ? 1 : 0)
   const raise = (dept: DeptId, next: RoomLightState) => {
@@ -68,6 +77,12 @@ export function litDeptsFromRun(
     }
   }
 
+  // Prefer the store’s active_skill so a room stays lit even if a poll gaps a step edge.
+  if (activeSkill) {
+    const dept = skillToDept(activeSkill)
+    if (dept) raise(dept, 'on')
+  }
+
   if (runStatus === 'awaiting_approval') {
     raise('direzione', 'on')
   }
@@ -79,20 +94,18 @@ export function litDeptsFromAgentRun(
   run: AgentRun | null,
   nowMs: number = Date.now(),
 ): Record<DeptId, RoomLightState> {
-  if (!run) {
-    return {
-      direzione: 'off',
-      spend: 'off',
-      seo: 'off',
-      shopify: 'off',
-      lead: 'off',
-    }
-  }
-  return litDeptsFromRun(run.steps, run.status, nowMs)
+  if (!run) return emptyLights()
+  return litDeptsFromRun(run.steps, run.status, nowMs, run.active_skill)
 }
 
-/** True if any finished step is still inside the linger window (UI should tick). */
+/**
+ * True while the UI should keep a clock tick so linger → soft/off (and mid-run
+ * finishes) re-render on time. Ticks for the whole execution window; HITL
+ * waiting is steady-state (Leadership stays on without a clock).
+ */
 export function runNeedsLightTick(run: AgentRun | null, nowMs: number = Date.now()): boolean {
   if (!run) return false
+  if (run.status === 'running' || run.status === 'queued') return true
+  if (run.steps.some((step) => step.status === 'running')) return true
   return run.steps.some((step) => stepIsLingering(step, nowMs))
 }

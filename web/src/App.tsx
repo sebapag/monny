@@ -736,7 +736,7 @@ function App() {
   const [artifactNames, setArtifactNames] = useState<string[]>([])
   const [liveRun, setLiveRun] = useState<AgentRun | null>(null)
   const [liveDept, setLiveDept] = useState<DeptId | null>(null)
-  /** Clock tick so room lights drop from linger → soft/off after ~2s. */
+  /** Clock tick so room lights drop from linger → soft/off after execution + 1s. */
   const [nowMs, setNowMs] = useState(() => Date.now())
 
   const navigate = useCallback((next: RouteState) => {
@@ -875,6 +875,7 @@ function App() {
       while (!terminal.has(current.status)) {
         await new Promise((r) => setTimeout(r, 280))
         current = await getRun(started.id)
+        setNowMs(Date.now())
         setLiveRun({ ...current })
       }
 
@@ -975,18 +976,20 @@ function App() {
       })
       setLiveRun(started)
       setLiveDept(null)
+      setNowMs(Date.now())
       const terminal = new Set(['completed', 'awaiting_approval', 'error'])
       let current = started
       while (!terminal.has(current.status)) {
         await new Promise((r) => setTimeout(r, 280))
         current = await getRun(started.id)
+        setNowMs(Date.now())
         setLiveRun({ ...current })
       }
       setLatestReport(current.report ?? null)
       await refreshApprovals(tenantId)
       await loadArtifacts(tenantId)
       await refreshTenants()
-      // Hold run so linger (~2s ON) + existing ease-off can finish
+      // Hold run so linger (execution + 1s ON) + existing ease-off can finish
       setTimeout(() => {
         if (current.status !== 'awaiting_approval') {
           setLiveRun(null)
