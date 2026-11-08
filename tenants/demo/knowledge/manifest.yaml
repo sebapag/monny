@@ -1,0 +1,22 @@
+sources:
+  - id: brand-voice
+    title: Tono di voce
+    type: markdown
+    path: brand-voice.md
+    tags: [brand, copy, spend, seo]
+    enabled: true
+  - id: product-faq
+    title: FAQ prodotti
+    type: markdown
+    path: product-faq.md
+    tags: [commerce, support]
+    enabled: true
+  - id: spend-guidelines
+    title: Linee guida spend
+    type: markdown
+    path: spend-guidelines.md
+    tags: [spend, ads, brand]
+    enabled: true
+index:
+  backend: local_stub
+  embedding: stub_hash

@@ -17,11 +17,14 @@ from monny.api.schemas import (
     ApprovalOut,
     ChatRequest,
     ChatResponse,
+    KnowledgeRetrieveRequest,
+    KnowledgeSourceToggle,
     RunOut,
     RunStartRequest,
     SecretStatus,
     TenantUpsert,
 )
+from monny.knowledge import list_sources, load_manifest, retrieve, set_source_enabled
 from monny.config.entitlements import (
     ENTITLEMENT_LABELS_IT,
     blocked_entitlements_for_text,
@@ -354,6 +357,66 @@ def create_app() -> FastAPI:
         if payload is None:
             raise HTTPException(status_code=404, detail=f"Artifact not found: {name}")
         return {"tenant_id": tenant_id, "name": name, "payload": payload}
+
+    def _require_tenant(tenant_id: str) -> None:
+        try:
+            load_tenant(tenant_id, Path(settings.monny_tenants_dir))
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.get("/api/tenants/{tenant_id}/knowledge")
+    def knowledge_list(tenant_id: str) -> dict[str, Any]:
+        """List knowledge sources for Admin «Conoscenza aziendale»."""
+        _require_tenant(tenant_id)
+        root = Path(settings.monny_tenants_dir)
+        manifest = load_manifest(tenant_id, root)
+        sources = [s.to_dict() for s in list_sources(tenant_id, root)]
+        return {
+            "tenant_id": tenant_id,
+            "sources": sources,
+            "index": manifest.get("index") or {},
+            "path": str(root / tenant_id / "knowledge"),
+        }
+
+    @app.post("/api/tenants/{tenant_id}/knowledge/retrieve")
+    def knowledge_retrieve(tenant_id: str, body: KnowledgeRetrieveRequest) -> dict[str, Any]:
+        """Stub retrieval used by planner/skills (markdown + tags, dry-run friendly)."""
+        _require_tenant(tenant_id)
+        root = Path(settings.monny_tenants_dir)
+        chunks = retrieve(
+            tenant_id,
+            body.query,
+            tags=body.tags,
+            limit=body.limit,
+            root=root,
+        )
+        return {
+            "tenant_id": tenant_id,
+            "query": body.query,
+            "tags": body.tags or [],
+            "chunks": [c.to_dict() for c in chunks],
+        }
+
+    @app.patch("/api/tenants/{tenant_id}/knowledge/sources/{source_id}")
+    def knowledge_toggle(
+        tenant_id: str,
+        source_id: str,
+        body: KnowledgeSourceToggle,
+    ) -> dict[str, Any]:
+        """Enable / disable a knowledge source (persists to manifest.yaml)."""
+        _require_tenant(tenant_id)
+        root = Path(settings.monny_tenants_dir)
+        try:
+            source = set_source_enabled(tenant_id, source_id, body.enabled, root=root)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        append_audit(
+            settings.monny_data_dir,
+            tenant_id,
+            "knowledge_source_toggled",
+            {"source_id": source_id, "enabled": body.enabled},
+        )
+        return {"ok": True, "source": source.to_dict()}
 
     return app
 

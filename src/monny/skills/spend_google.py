@@ -7,6 +7,8 @@ from typing import Any
 
 from monny.adapters import google_ads
 from monny.config.models import TenantConfig
+from monny.config.settings import get_settings
+from monny.knowledge import retrieve
 from monny.skills.spend_diagnose import diagnose_campaigns
 
 
@@ -15,6 +17,20 @@ def run(tenant: TenantConfig, *, dry_run: bool, fixtures_dir: Path) -> dict[str,
     campaigns = data.get("campaigns", [])
     diagnosis = diagnose_campaigns(campaigns, channel="google", tenant=tenant)
     totals = diagnosis["totals"]
+
+    # Optional company knowledge context (stub retrieve — no embedding API).
+    settings = get_settings()
+    knowledge_chunks = [
+        c.to_dict()
+        for c in retrieve(
+            tenant.tenant_id,
+            "spend ads budget brand voce",
+            tags=["spend", "brand", "ads"],
+            limit=3,
+            root=Path(settings.monny_tenants_dir),
+        )
+    ]
+
     return {
         "skill": "spend_google",
         "mode": "dry_run" if dry_run else "live",
@@ -26,4 +42,5 @@ def run(tenant: TenantConfig, *, dry_run: bool, fixtures_dir: Path) -> dict[str,
         "diagnosis": diagnosis,
         "campaigns": diagnosis["campaigns"],
         "proposals": diagnosis["proposals"],
+        "knowledge": knowledge_chunks,
     }

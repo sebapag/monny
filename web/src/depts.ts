@@ -29,7 +29,7 @@ export const DEPARTMENTS: DeptDef[] = [
     name: 'Spend pubblicitario',
     blurb: 'Google Ads e Meta: controlla la spesa e le campagne poco efficaci.',
     tint: 'sky',
-    skills: ['spend_google', 'spend_meta', 'reporting'],
+    skills: ['knowledge', 'spend_google', 'spend_meta', 'reporting'],
     actions: [
       { label: 'Controlla le ads', goal: 'report spend ultimi 7 giorni' },
     ],

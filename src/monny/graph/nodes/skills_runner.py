@@ -71,6 +71,9 @@ def skills_runner_node(state: AgentState) -> dict:
             continue
 
         if skill_name == "spend_google":
+            timeline.start(run_id, "knowledge", "Consulto la knowledge aziendale…")
+            _pause_for_presence()
+            timeline.done(run_id, "knowledge", "Contesto pronto")
             timeline.start(run_id, "spend_google", "Analizzo campagne Google Ads…")
             _pause_for_presence()
             result = spend_google.run(tenant, dry_run=dry_run, fixtures_dir=fixtures_dir)

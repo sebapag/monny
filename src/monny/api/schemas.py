@@ -86,3 +86,13 @@ class TenantUpsert(BaseModel):
 class SecretStatus(BaseModel):
     secret_ref: str
     configured: bool
+
+
+class KnowledgeRetrieveRequest(BaseModel):
+    query: str = ""
+    tags: list[str] | None = None
+    limit: int = Field(default=5, ge=1, le=20)
+
+
+class KnowledgeSourceToggle(BaseModel):
+    enabled: bool
