@@ -47,3 +47,10 @@ integrations:
   search_console:
     site_url: https://www.demo-shop.example/
     secret_ref: GSC_DEMO
+subscription:
+  plan: growth
+  skills:
+    spend: true
+    seo: true
+    shopify: false
+    leads: false

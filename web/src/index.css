@@ -1132,6 +1132,39 @@ a {
   margin-bottom: 0.75rem;
 }
 
+.skill-toggles {
+  display: grid;
+  gap: 0.45rem;
+  margin: 0.5rem 0 1rem;
+  padding: 0.85rem 1rem;
+  background: var(--surface-soft);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-lg);
+}
+
+.skill-toggle strong {
+  color: var(--brand-navy);
+}
+
+.floor-room.is-locked {
+  filter: grayscale(0.55) brightness(0.92);
+  opacity: 0.78;
+  cursor: not-allowed;
+}
+
+.floor-room.is-locked .floor-state {
+  color: var(--warning);
+  font-weight: 600;
+}
+
+.locked-panel {
+  max-width: 36rem;
+}
+
+.dept-shell.dept-locked {
+  opacity: 0.95;
+}
+
 .sr-only {
   position: absolute;
   width: 1px;

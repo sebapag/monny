@@ -37,6 +37,12 @@ import {
   skillLabel,
 } from './labels'
 import {
+  assertGoalAllowed,
+  isDeptEnabled,
+  lockedHintIt,
+  skillsFromConfig,
+} from './entitlements'
+import {
   LIGHT_LINGER_MS,
   litDeptsFromAgentRun,
   runNeedsLightTick,
@@ -396,6 +402,74 @@ function AdminForm({
         />
       </div>
 
+      <div className="section-title">Attivazione piano / reparti</div>
+      <FieldHelp>
+        Scegli i reparti inclusi nella sottoscrizione. Leadership (decisioni HITL) resta
+        sempre disponibile. I reparti spenti non partono nell’agent e restano chiusi
+        nell’ufficio 3D.
+      </FieldHelp>
+      <div className="field">
+        <label>Piano</label>
+        <select
+          value={cfg.subscription?.plan ?? 'growth'}
+          onChange={(e) =>
+            set('subscription', {
+              plan: e.target.value as 'starter' | 'growth' | 'scale',
+              skills: {
+                spend: true,
+                seo: true,
+                shopify: false,
+                leads: false,
+                ...(cfg.subscription?.skills ?? {}),
+              },
+            })
+          }
+        >
+          <option value="starter">Starter</option>
+          <option value="growth">Growth</option>
+          <option value="scale">Scale</option>
+        </select>
+      </div>
+      <div className="skill-toggles">
+        {(
+          [
+            ['spend', 'Spend pubblicitario', 'Google Ads e Meta'],
+            ['seo', 'SEO', 'Title, meta e H1'],
+            ['shopify', 'Negozio Shopify', 'Promo e anteprime negozio'],
+            ['leads', 'Lead', 'Sequenze di lead warming'],
+          ] as const
+        ).map(([key, title, hint]) => {
+          const skills = {
+            spend: true,
+            seo: true,
+            shopify: false,
+            leads: false,
+            ...(cfg.subscription?.skills ?? {}),
+          }
+          return (
+            <label key={key} className="check-row skill-toggle">
+              <input
+                type="checkbox"
+                checked={Boolean(skills[key])}
+                onChange={(e) =>
+                  set('subscription', {
+                    plan: cfg.subscription?.plan ?? 'growth',
+                    skills: { ...skills, [key]: e.target.checked },
+                  })
+                }
+              />
+              <span>
+                <strong>{title}</strong>
+                <span className="muted"> — {hint}</span>
+              </span>
+            </label>
+          )
+        })}
+        <p className="status-line" style={{ marginTop: '0.35rem' }}>
+          Leadership / decisioni: sempre attivo
+        </p>
+      </div>
+
       <div className="section-title">Regole di sicurezza</div>
       <label className="check-row">
         <input
@@ -664,9 +738,20 @@ function App() {
     setDraft('')
   }
 
+  const entitlementSkills = skillsFromConfig(tenantDetail?.config)
+
   const sendInDept = async (dept: DeptId, override?: string) => {
     const text = (override ?? draft).trim()
     if (!text || busy) return
+    if (!isDeptEnabled(dept, entitlementSkills)) {
+      setError(lockedHintIt(dept))
+      return
+    }
+    const blocked = assertGoalAllowed(text, entitlementSkills)
+    if (blocked) {
+      setError(blocked)
+      return
+    }
     setBusy(true)
     setError(null)
     setMessagesByDept((prev) => ({
@@ -767,10 +852,19 @@ function App() {
     litDeptsFromAgentRun(liveRun, nowMs),
     approvals.length,
   )
+  // Disabled skills never show false lights
+  for (const id of ['spend', 'seo', 'shopify', 'lead'] as DeptId[]) {
+    if (!isDeptEnabled(id, entitlementSkills)) officeLights[id] = 'off'
+  }
 
   /** Start a run while staying on the office twin so room lights update live. */
   const runFromOffice = async (goal: string) => {
     if (!goal.trim() || busy) return
+    const blocked = assertGoalAllowed(goal, entitlementSkills)
+    if (blocked) {
+      setError(blocked)
+      return
+    }
     setBusy(true)
     setError(null)
     try {
@@ -915,16 +1009,28 @@ function App() {
             <OfficeTwin
               lights={officeLights}
               pending={deptCounts}
+              enabled={entitlementSkills}
               statusLine={liveRun?.status_line}
               busy={busy}
-              onSelect={(id) => navigate({ mode: 'dept', dept: id })}
+              onSelect={(id) => {
+                if (!isDeptEnabled(id, entitlementSkills)) {
+                  setError(lockedHintIt(id))
+                  return
+                }
+                setError(null)
+                navigate({ mode: 'dept', dept: id })
+              }}
               onQuickAction={(goal) => void runFromOffice(goal)}
             />
             {error && <p className="error">{error}</p>}
           </>
         ) : activeDept ? (
           <>
-            <div className={`dept-shell tint-${activeDept.tint}`}>
+            <div
+              className={`dept-shell tint-${activeDept.tint}${
+                !isDeptEnabled(activeDept.id, entitlementSkills) ? ' dept-locked' : ''
+              }`}
+            >
               <div className="dept-header">
                 <button
                   type="button"
@@ -939,13 +1045,31 @@ function App() {
                 </div>
               </div>
 
-              {liveRun && liveDept === activeDept.id && filteredLiveSteps.length > 0 && (
+              {!isDeptEnabled(activeDept.id, entitlementSkills) ? (
+                <section className="panel locked-panel">
+                  <h2>Reparto non attivo</h2>
+                  <p className="status-line">{lockedHintIt(activeDept.id)}</p>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={() => navigate({ mode: 'admin' })}
+                  >
+                    Vai ad Attivazione piano
+                  </button>
+                </section>
+              ) : null}
+
+              {isDeptEnabled(activeDept.id, entitlementSkills) &&
+                liveRun &&
+                liveDept === activeDept.id &&
+                filteredLiveSteps.length > 0 && (
                 <div className="skill-stage" data-testid="skill-rail-live">
                   <SkillRail run={liveRun} steps={filteredLiveSteps} />
                 </div>
               )}
 
-              {activeDept.id === 'direzione' ? (
+              {isDeptEnabled(activeDept.id, entitlementSkills) &&
+              activeDept.id === 'direzione' ? (
                 <div className="dept-body single">
                   {approvals.length > 0 && (
                     <div className="approval-banner">
@@ -973,7 +1097,7 @@ function App() {
                     emptyHint="Nessuna decisione in sospeso. Quando un reparto propone qualcosa, arriva qui."
                   />
                 </div>
-              ) : (
+              ) : isDeptEnabled(activeDept.id, entitlementSkills) ? (
                 <div className="dept-body layout-split">
                   <section className="panel console-panel">
                     <h2>Attività del reparto</h2>
@@ -1071,21 +1195,27 @@ function App() {
                     emptyHint="Nessuna proposta di questo reparto in attesa."
                   />
                 </div>
-              )}
+              ) : null}
 
-              {activeDept.id === 'spend' && spendFromArtifact.length > 0 && (
+              {isDeptEnabled(activeDept.id, entitlementSkills) &&
+                activeDept.id === 'spend' &&
+                spendFromArtifact.length > 0 && (
                 <section className="panel report-panel">
                   <h2>Ultimi risultati ads</h2>
                   <SpendPanel channels={spendFromArtifact} />
                 </section>
               )}
-              {activeDept.id === 'seo' && seoFromArtifact.length > 0 && (
+              {isDeptEnabled(activeDept.id, entitlementSkills) &&
+                activeDept.id === 'seo' &&
+                seoFromArtifact.length > 0 && (
                 <section className="panel report-panel">
                   <h2>Ultimi risultati SEO</h2>
                   <SeoPanel changes={seoFromArtifact} />
                 </section>
               )}
-              {activeDept.id === 'shopify' && artifactNames.length > 0 && (
+              {isDeptEnabled(activeDept.id, entitlementSkills) &&
+                activeDept.id === 'shopify' &&
+                artifactNames.length > 0 && (
                 <p className="status-line" style={{ marginTop: '1rem' }}>
                   Artifact: {artifactNames.join(', ')}
                 </p>

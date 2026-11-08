@@ -1,0 +1,64 @@
+# Local stack aligned with the production API image.
+# Usage:
+#   docker compose up --build
+#   API:  http://127.0.0.1:8000/health
+#   Web:  http://127.0.0.1:5173  (optional profile)
+#
+# Frontend against a remote API (Cloud Run): set VITE_API_BASE_URL and run web locally
+# or deploy web on Netlify — see netlify.toml / README.
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: monny-api:local
+    ports:
+      - "8000:8000"
+    environment:
+      MONNY_DRY_RUN: "1"
+      MONNY_LIVE: "0"
+      MONNY_TENANTS_DIR: /app/tenants
+      MONNY_DATA_DIR: /app/data
+      MONNY_DEFAULT_TENANT: demo
+      MONNY_CORS_ORIGINS: "http://127.0.0.1:5173,http://localhost:5173,http://127.0.0.1:4173,http://localhost:4173"
+    volumes:
+      # Persist runtime data (approvals, runs, artifacts)
+      - monny-data:/app/data
+      # Live-edit tenant YAML without rebuild (optional)
+      - ./tenants:/app/tenants:ro
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)",
+        ]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  # Optional: static preview of the Vite build (profile "web").
+  # Prefer `cd web && npm run dev` for hot reload during UI work.
+  web:
+    profiles: ["web"]
+    image: node:22-alpine
+    working_dir: /web
+    volumes:
+      - ./web:/web
+      - web-node-modules:/web/node_modules
+    environment:
+      # Empty = same-origin / Vite proxy in dev; set to Cloud Run URL for remote API
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-}
+    ports:
+      - "5173:5173"
+    command: sh -c "npm ci && npm run dev -- --host 0.0.0.0 --port 5173"
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  monny-data:
+  web-node-modules:

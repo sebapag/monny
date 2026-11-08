@@ -22,6 +22,11 @@ from monny.api.schemas import (
     SecretStatus,
     TenantUpsert,
 )
+from monny.config.entitlements import (
+    ENTITLEMENT_LABELS_IT,
+    blocked_entitlements_for_text,
+    entitlement_summary,
+)
 from monny.config.loader import (
     list_tenant_ids,
     load_tenant,
@@ -61,13 +66,48 @@ def create_app() -> FastAPI:
     def runs():
         return get_run_store(settings.monny_data_dir)
 
-    @app.get("/health")
-    def health() -> dict[str, Any]:
+    def _health_payload() -> dict[str, Any]:
         return {
             "ok": True,
             "dry_run": settings.dry_run,
             "default_tenant": settings.monny_default_tenant,
         }
+
+    @app.get("/health")
+    def health() -> dict[str, Any]:
+        return _health_payload()
+
+    @app.get("/api/health")
+    def api_health() -> dict[str, Any]:
+        return _health_payload()
+
+    def _refuse_disabled_skills(cfg: TenantConfig, goal: str, message: str) -> None:
+        """Refuse when every skill implied by the text is disabled on the plan."""
+        text = f"{goal} {message}"
+        blocked = blocked_entitlements_for_text(cfg, text)
+        if not blocked:
+            return
+        # Infer all requested keys (enabled + disabled).
+        lowered = text.lower()
+        requested: list[str] = []
+        for key, words in (
+            ("shopify", ("promo", "promotion", "discount", "price rule", "shopify promo")),
+            ("leads", ("lead", "warming", "nurture", "crm", "sequence")),
+            ("spend", ("spend", "ads", "budget", "roas", "cpa", "meta", "google")),
+            ("seo", ("seo", "title", "meta", "page", "sitemap", "crawl")),
+        ):
+            if any(w in lowered for w in words):
+                requested.append(key)
+        if not requested:
+            return
+        if set(requested) <= set(blocked):
+            labels = [ENTITLEMENT_LABELS_IT.get(k, k) for k in blocked]
+            detail = (
+                "Reparto non attivo nel piano: "
+                + ", ".join(labels)
+                + ". Attivalo in Admin → Attivazione piano / reparti."
+            )
+            raise HTTPException(status_code=403, detail=detail)
 
     def _start_background_run(
         *,
@@ -75,8 +115,9 @@ def create_app() -> FastAPI:
         goal: str,
         message: str,
         thread_id: str,
+        tenant: TenantConfig,
     ) -> str:
-        plan = _infer_plan(goal, message)
+        plan = _infer_plan(goal, message, tenant=tenant)
         # Include shopify_read in planned UX steps
         planned = ["shopify_read", *plan]
         run = runs().create(
@@ -104,16 +145,18 @@ def create_app() -> FastAPI:
     @app.post("/api/runs", response_model=RunOut)
     def start_run(body: RunStartRequest) -> RunOut:
         try:
-            load_tenant(body.tenant_id, Path(settings.monny_tenants_dir))
+            cfg = load_tenant(body.tenant_id, Path(settings.monny_tenants_dir))
         except FileNotFoundError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         thread_id = body.thread_id or f"{body.tenant_id}-web"
         goal = body.goal or body.message
+        _refuse_disabled_skills(cfg, goal, body.message)
         run_id = _start_background_run(
             tenant_id=body.tenant_id,
             goal=goal,
             message=body.message,
             thread_id=thread_id,
+            tenant=cfg,
         )
         run = runs().get(run_id)
         assert run is not None
@@ -150,13 +193,14 @@ def create_app() -> FastAPI:
     def chat(body: ChatRequest) -> ChatResponse:
         """Sync chat (CLI-compatible). Prefer POST /api/runs for live skill UX."""
         try:
-            load_tenant(body.tenant_id, Path(settings.monny_tenants_dir))
+            cfg = load_tenant(body.tenant_id, Path(settings.monny_tenants_dir))
         except FileNotFoundError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
         thread_id = body.thread_id or f"{body.tenant_id}-web"
         goal = body.goal or body.message
-        plan = _infer_plan(goal, body.message)
+        _refuse_disabled_skills(cfg, goal, body.message)
+        plan = _infer_plan(goal, body.message, tenant=cfg)
         run = runs().create(
             tenant_id=body.tenant_id,
             thread_id=thread_id,
@@ -241,6 +285,7 @@ def create_app() -> FastAPI:
                     "secrets_configured": sum(1 for s in secrets if s["configured"]),
                     "secrets_total": len(secrets),
                     "pending_approvals": len(pending),
+                    "subscription": entitlement_summary(cfg),
                 }
             )
         return out
@@ -257,6 +302,7 @@ def create_app() -> FastAPI:
             "config": data,
             "secrets": [SecretStatus(**secret_status(r)).model_dump() for r in refs],
             "path": str(tenants_root(settings.monny_tenants_dir) / tenant_id / "tenant.yaml"),
+            "subscription": entitlement_summary(cfg),
         }
 
     @app.put("/api/tenants/{tenant_id}")

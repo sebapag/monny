@@ -19,7 +19,9 @@ import {
   type PointLight as PointLightType,
   type Texture,
 } from 'three'
+import type { SubscriptionSkills } from './api'
 import { DEPARTMENTS, type DeptId } from './depts'
+import { isDeptEnabled, lockedHintIt } from './entitlements'
 import type { RoomLightState } from './lights'
 
 /** Soft Notion pastels — always readable, brighter when lit. */
@@ -790,12 +792,14 @@ function DecisionHotspotBadge({
 function RoomZone({
   room,
   light,
+  locked,
   attentionCount = 0,
   onSelect,
   reduceMotion,
 }: {
   room: RoomLayout
   light: RoomLightState
+  locked: boolean
   attentionCount?: number
   onSelect: (id: DeptId) => void
   reduceMotion: boolean
@@ -812,6 +816,8 @@ function RoomZone({
   const floorLit = useMemo(() => new Color(room.floorLit), [room.floorLit])
   const accent = useMemo(() => new Color(room.accent), [room.accent])
   const white = useMemo(() => new Color('#ffffff'), [])
+  const lockedFloor = useMemo(() => new Color('#c8c4be'), [])
+  const lockedHot = useMemo(() => new Color('#9a9690'), [])
   const ceilIdle = useMemo(() => new Color('#f7f2ea'), [])
   const ceilWarm = useMemo(() => new Color('#fff8ec'), [])
   const black = useMemo(() => new Color('#000000'), [])
@@ -833,7 +839,7 @@ function RoomZone({
   }, [hx, hz, room.people])
 
   useFrame(({ clock }, dt) => {
-    const target = lightLevel(light)
+    const target = locked ? 0 : lightLevel(light)
     const k = reduceMotion ? 1 : 1 - Math.exp(-EASE * dt)
     level.current = lerp(level.current, target, k)
     let L = level.current
@@ -846,30 +852,36 @@ function RoomZone({
 
     if (floorMat.current) {
       tmp.copy(floorIdle).lerp(floorLit, L)
+      if (locked) tmp.copy(floorIdle).lerp(lockedFloor, 0.45)
       floorMat.current.color.copy(tmp)
       floorMat.current.emissive.copy(accent)
-      floorMat.current.emissiveIntensity = (needsAttention ? 0.42 : 0.28) * L
+      floorMat.current.emissiveIntensity = locked ? 0 : (needsAttention ? 0.42 : 0.28) * L
     }
     if (ceilMat.current) {
       tmp.copy(ceilIdle).lerp(ceilWarm, Math.min(1, L * 1.4))
       ceilMat.current.color.copy(tmp)
       tmp2.copy(black).lerp(accent, L)
       ceilMat.current.emissive.copy(tmp2)
-      ceilMat.current.emissiveIntensity = (needsAttention ? 0.62 : 0.45) * L
+      ceilMat.current.emissiveIntensity = locked ? 0 : (needsAttention ? 0.62 : 0.45) * L
     }
     if (hotMat.current) {
-      tmp.copy(white).lerp(accent, L)
-      hotMat.current.color.copy(tmp)
-      hotMat.current.emissive.copy(tmp)
-      hotMat.current.emissiveIntensity = lerp(0.05, needsAttention ? 0.55 : 0.35, L)
+      if (locked) {
+        hotMat.current.color.copy(lockedHot)
+        hotMat.current.emissive.copy(lockedHot)
+      } else {
+        tmp.copy(white).lerp(accent, L)
+        hotMat.current.color.copy(tmp)
+        hotMat.current.emissive.copy(tmp)
+      }
+      hotMat.current.emissiveIntensity = locked ? 0.02 : lerp(0.05, needsAttention ? 0.55 : 0.35, L)
     }
     if (lamp.current) {
-      lamp.current.intensity = lerp(0.08, needsAttention ? 1.45 : 1.1, L)
+      lamp.current.intensity = locked ? 0.02 : lerp(0.08, needsAttention ? 1.45 : 1.1, L)
       lamp.current.color.copy(lampWarm).lerp(accent, L)
     }
   })
 
-  const active = light === 'on' || needsAttention
+  const active = (!locked && light === 'on') || needsAttention
   const rugColor =
     room.id === 'direzione'
       ? '#f3e7b0'
@@ -890,7 +902,7 @@ function RoomZone({
           onSelect(room.id)
         }}
         onPointerOver={() => {
-          document.body.style.cursor = 'pointer'
+          document.body.style.cursor = locked ? 'not-allowed' : 'pointer'
         }}
         onPointerOut={() => {
           document.body.style.cursor = 'default'
@@ -1000,13 +1012,13 @@ function RoomZone({
       <Billboard position={[hx, 1.65, hz + halfD * 0.15]}>
         <Text
           fontSize={0.26}
-          color="#37352f"
+          color={locked ? '#787671' : '#37352f'}
           anchorX="center"
           anchorY="middle"
           outlineWidth={0.015}
           outlineColor="#ffffff"
         >
-          {`${room.hotspot} · ${room.label}`}
+          {locked ? `${room.hotspot} · ${room.label} · chiuso` : `${room.hotspot} · ${room.label}`}
         </Text>
       </Billboard>
       {needsAttention && (
@@ -1022,11 +1034,13 @@ function RoomZone({
 
 function OfficeBuilding({
   lights,
+  enabled,
   pendingCount,
   onSelect,
   reduceMotion,
 }: {
   lights: Record<DeptId, RoomLightState>
+  enabled: SubscriptionSkills
   pendingCount: number
   onSelect: (id: DeptId) => void
   reduceMotion: boolean
@@ -1114,6 +1128,7 @@ function OfficeBuilding({
           key={room.id}
           room={room}
           light={lights[room.id]}
+          locked={!isDeptEnabled(room.id, enabled)}
           attentionCount={room.id === 'direzione' ? pendingCount : 0}
           onSelect={onSelect}
           reduceMotion={reduceMotion}
@@ -1126,10 +1141,12 @@ function OfficeBuilding({
 function FloorPlan2D({
   lights,
   pending,
+  enabled,
   onSelect,
 }: {
   lights: Record<DeptId, RoomLightState>
   pending: Record<DeptId, number>
+  enabled: SubscriptionSkills
   onSelect: (id: DeptId) => void
 }) {
   const direzionePending = pending.direzione || 0
@@ -1138,16 +1155,18 @@ function FloorPlan2D({
       {ROOMS.map((room) => {
         const light = lights[room.id]
         const dept = DEPARTMENTS.find((d) => d.id === room.id)
-        const needsDecision = room.id === 'direzione' && direzionePending > 0
+        const locked = !isDeptEnabled(room.id, enabled)
+        const needsDecision = !locked && room.id === 'direzione' && direzionePending > 0
         return (
           <button
             key={room.id}
             type="button"
-            className={`floor-room light-${light} tint-${dept?.tint ?? 'gray'}${
-              needsDecision ? ' needs-decision' : ''
-            }`}
+            className={`floor-room light-${locked ? 'off' : light} tint-${dept?.tint ?? 'gray'}${
+              locked ? ' is-locked' : ''
+            }${needsDecision ? ' needs-decision' : ''}`}
             style={{ gridArea: room.id }}
             onClick={() => onSelect(room.id)}
+            title={locked ? lockedHintIt(room.id) : undefined}
           >
             <span className="floor-hotspot-row">
               <span className="floor-hotspot">{room.hotspot}</span>
@@ -1162,20 +1181,22 @@ function FloorPlan2D({
               {Array.from({ length: room.people }).map((_, i) => (
                 <span
                   key={i}
-                  className={`ometto-2d ${light === 'on' || needsDecision ? 'active' : ''}`}
+                  className={`ometto-2d ${!locked && (light === 'on' || needsDecision) ? 'active' : ''}`}
                 />
               ))}
             </div>
             <span className="floor-state">
-              {needsDecision
-                ? 'Decisioni in attesa'
-                : light === 'on'
-                  ? 'Luci accese'
-                  : light === 'soft'
-                    ? 'Si stanno spegnendo…'
-                    : 'In attesa'}
+              {locked
+                ? 'Non nel piano'
+                : needsDecision
+                  ? 'Decisioni in attesa'
+                  : light === 'on'
+                    ? 'Luci accese'
+                    : light === 'soft'
+                      ? 'Si stanno spegnendo…'
+                      : 'In attesa'}
             </span>
-            {(pending[room.id] || 0) > 0 && room.id !== 'direzione' && (
+            {!locked && (pending[room.id] || 0) > 0 && room.id !== 'direzione' && (
               <span className="dept-pending">{pending[room.id]} in attesa</span>
             )}
           </button>
@@ -1237,6 +1258,7 @@ class CanvasErrorBoundary extends Component<
 export function OfficeTwin({
   lights,
   pending,
+  enabled,
   statusLine,
   busy,
   onSelect,
@@ -1244,6 +1266,7 @@ export function OfficeTwin({
 }: {
   lights: Record<DeptId, RoomLightState>
   pending: Record<DeptId, number>
+  enabled: SubscriptionSkills
   statusLine?: string | null
   busy?: boolean
   onSelect: (id: DeptId) => void
@@ -1258,11 +1281,14 @@ export function OfficeTwin({
 
   const litNames = useMemo(
     () =>
-      DEPARTMENTS.filter((d) => lights[d.id] === 'on')
+      DEPARTMENTS.filter((d) => lights[d.id] === 'on' && isDeptEnabled(d.id, enabled))
         .map((d) => d.name)
         .join(', '),
-    [lights],
+    [lights, enabled],
   )
+
+  const spendOn = isDeptEnabled('spend', enabled)
+  const seoOn = isDeptEnabled('seo', enabled)
 
   const sendGoal = (goal: string) => {
     const text = goal.trim()
@@ -1279,6 +1305,7 @@ export function OfficeTwin({
           <p>
             Ufficio digitale dei reparti. Scrivi cosa vuoi che Monny faccia, oppure
             scegli un suggerimento. Quando una skill lavora, si accendono luci e ometti.
+            I reparti non nel piano restano chiusi.
           </p>
         </div>
       </div>
@@ -1319,17 +1346,21 @@ export function OfficeTwin({
 
       <div className="office-shortcuts">
         <span className="office-shortcuts-label">Suggerimenti</span>
-        {OFFICE_SHORTCUTS.map((s) => (
-          <button
-            key={s.goal}
-            type="button"
-            className="chip-shortcut"
-            disabled={busy}
-            onClick={() => sendGoal(s.goal)}
-          >
-            {s.label}
-          </button>
-        ))}
+        {OFFICE_SHORTCUTS.map((s) => {
+          const allowed = s.goal.includes('seo') ? seoOn : spendOn
+          return (
+            <button
+              key={s.goal}
+              type="button"
+              className="chip-shortcut"
+              disabled={busy || !allowed}
+              title={allowed ? undefined : lockedHintIt(s.goal.includes('seo') ? 'seo' : 'spend')}
+              onClick={() => sendGoal(s.goal)}
+            >
+              {s.label}
+            </button>
+          )
+        })}
         {statusLine && <span className="office-status">{statusLine}</span>}
         {litNames && <span className="office-status lit">Luci: {litNames}</span>}
         {pendingTotal > 0 && (
@@ -1345,7 +1376,12 @@ export function OfficeTwin({
         }`}
       >
         {use2d ? (
-          <FloorPlan2D lights={lights} pending={pending} onSelect={onSelect} />
+          <FloorPlan2D
+            lights={lights}
+            pending={pending}
+            enabled={enabled}
+            onSelect={onSelect}
+          />
         ) : (
           <CanvasErrorBoundary onError={() => setFailed(true)}>
             <Canvas
@@ -1366,6 +1402,7 @@ export function OfficeTwin({
                 <directionalLight position={[5, 10, 3]} intensity={0.35} />
                 <OfficeBuilding
                   lights={lights}
+                  enabled={enabled}
                   pendingCount={pendingTotal}
                   onSelect={onSelect}
                   reduceMotion={reduceMotion}

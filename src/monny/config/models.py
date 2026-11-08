@@ -81,6 +81,20 @@ class IntegrationsConfig(BaseModel):
     search_console: SearchConsoleConfig | None = None
 
 
+class SubscriptionSkills(BaseModel):
+    """Activatable product skills / reparti. Leadership (HITL) is always on."""
+
+    spend: bool = True
+    seo: bool = True
+    shopify: bool = False
+    leads: bool = False
+
+
+class SubscriptionConfig(BaseModel):
+    plan: Literal["starter", "growth", "scale"] = "growth"
+    skills: SubscriptionSkills = Field(default_factory=SubscriptionSkills)
+
+
 class TenantConfig(BaseModel):
     tenant_id: str
     display_name: str
@@ -89,3 +103,4 @@ class TenantConfig(BaseModel):
     site: SiteConfig
     policy: PolicyConfig = Field(default_factory=PolicyConfig)
     integrations: IntegrationsConfig = Field(default_factory=IntegrationsConfig)
+    subscription: SubscriptionConfig = Field(default_factory=SubscriptionConfig)
