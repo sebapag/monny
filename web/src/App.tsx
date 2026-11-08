@@ -39,8 +39,11 @@ import {
   plainApproval,
   skillLabel,
 } from './labels'
+import type { OfficeMode } from './api'
 import {
   assertGoalAllowed,
+  effectiveOfficeMode,
+  featuresFromConfig,
   isDeptEnabled,
   lockedHintIt,
   skillsFromConfig,
@@ -507,7 +510,7 @@ function AdminForm({
       <FieldHelp>
         Scegli i reparti inclusi nella sottoscrizione. Leadership (decisioni HITL) resta
         sempre disponibile. I reparti spenti non partono nell’agent e restano chiusi
-        nell’ufficio 3D.
+        nell’ufficio.
       </FieldHelp>
       <div className="field">
         <label>Piano</label>
@@ -523,6 +526,11 @@ function AdminForm({
                 leads: false,
                 ...(cfg.subscription?.skills ?? {}),
               },
+              features: {
+                office_view: false,
+                ...(cfg.subscription?.features ?? {}),
+              },
+              office_mode: cfg.subscription?.office_mode ?? 'auto',
             })
           }
         >
@@ -556,6 +564,11 @@ function AdminForm({
                   set('subscription', {
                     plan: cfg.subscription?.plan ?? 'growth',
                     skills: { ...skills, [key]: e.target.checked },
+                    features: {
+                      office_view: false,
+                      ...(cfg.subscription?.features ?? {}),
+                    },
+                    office_mode: cfg.subscription?.office_mode ?? 'auto',
                   })
                 }
               />
@@ -570,6 +583,85 @@ function AdminForm({
           Leadership / decisioni: sempre attivo
         </p>
       </div>
+
+      <div className="section-title">Vista ufficio</div>
+      <FieldHelp>
+        Opzione a pagamento: scegli se l’home Agent mostra la vista completa 3D, la
+        vista leggera (2D), o lascia che Monny scelga in automatico in base al browser.
+        Senza questa opzione resta sempre la modalità automatica.
+      </FieldHelp>
+      {(() => {
+        const features = {
+          office_view: false,
+          ...(cfg.subscription?.features ?? {}),
+        }
+        const officeMode = (cfg.subscription?.office_mode ?? 'auto') as OfficeMode
+        const entitled = Boolean(features.office_view)
+        return (
+          <div className="skill-toggles office-view-toggles">
+            <label className="check-row skill-toggle">
+              <input
+                type="checkbox"
+                checked={entitled}
+                onChange={(e) =>
+                  set('subscription', {
+                    plan: cfg.subscription?.plan ?? 'growth',
+                    skills: {
+                      spend: true,
+                      seo: true,
+                      shopify: false,
+                      leads: false,
+                      ...(cfg.subscription?.skills ?? {}),
+                    },
+                    features: { ...features, office_view: e.target.checked },
+                    office_mode: e.target.checked ? officeMode : 'auto',
+                  })
+                }
+              />
+              <span>
+                <strong>Modalità vista ufficio</strong>
+                <span className="muted">
+                  {' '}
+                  — Sblocca la scelta Completa / Leggera / Automatica
+                </span>
+              </span>
+            </label>
+            <div className="field" style={{ marginTop: '0.35rem' }}>
+              <label htmlFor="office-mode-select">Presentazione ufficio</label>
+              <select
+                id="office-mode-select"
+                data-testid="office-mode-select"
+                disabled={!entitled}
+                value={entitled ? officeMode : 'auto'}
+                onChange={(e) =>
+                  set('subscription', {
+                    plan: cfg.subscription?.plan ?? 'growth',
+                    skills: {
+                      spend: true,
+                      seo: true,
+                      shopify: false,
+                      leads: false,
+                      ...(cfg.subscription?.skills ?? {}),
+                    },
+                    features,
+                    office_mode: e.target.value as OfficeMode,
+                  })
+                }
+              >
+                <option value="auto">Automatica (consigliata)</option>
+                <option value="full">Completa (3D)</option>
+                <option value="light">Leggera</option>
+              </select>
+              {!entitled && (
+                <p className="status-line" style={{ marginTop: '0.35rem' }}>
+                  Opzione non attiva: resta Automatica. Attivala qui per venderla come
+                  extra frontend.
+                </p>
+              )}
+            </div>
+          </div>
+        )
+      })()}
 
       <div className="section-title">Regole di sicurezza</div>
       <label className="check-row">
@@ -840,6 +932,8 @@ function App() {
   }
 
   const entitlementSkills = skillsFromConfig(tenantDetail?.config)
+  const officeFeatures = featuresFromConfig(tenantDetail?.config)
+  const officeMode = effectiveOfficeMode(tenantDetail?.config)
 
   const sendInDept = async (dept: DeptId, override?: string) => {
     const text = (override ?? draft).trim()
@@ -1118,6 +1212,8 @@ function App() {
               lights={officeLights}
               pending={deptCounts}
               enabled={entitlementSkills}
+              officeMode={officeMode}
+              officeViewEntitled={officeFeatures.office_view}
               statusLine={liveRun?.status_line}
               busy={busy}
               onSelect={(id) => {

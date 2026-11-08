@@ -119,16 +119,31 @@ export type SubscriptionSkills = {
   leads: boolean
 }
 
+export type SubscriptionFeatures = {
+  /** Paid: Admin can choose full 3D / light / auto for the office twin. */
+  office_view: boolean
+}
+
+export type OfficeMode = 'auto' | 'full' | 'light'
+
 export type SubscriptionConfig = {
   plan: 'starter' | 'growth' | 'scale'
   skills: SubscriptionSkills
+  features?: SubscriptionFeatures
+  office_mode?: OfficeMode
 }
 
 export type SubscriptionSummary = {
   plan: string
   skills: SubscriptionSkills
+  features?: SubscriptionFeatures
+  office_mode?: OfficeMode
+  office_mode_preference?: OfficeMode
+  office_view?: boolean
   leadership: boolean
   labels_it?: Record<string, string>
+  feature_labels_it?: Record<string, string>
+  office_mode_labels_it?: Record<string, string>
 }
 
 export type TenantListItem = {

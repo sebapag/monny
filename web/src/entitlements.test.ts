@@ -1,9 +1,43 @@
 import { describe, expect, it } from 'vitest'
 import {
   assertGoalAllowed,
+  effectiveOfficeMode,
+  featuresFromConfig,
   isDeptEnabled,
   skillsFromConfig,
 } from './entitlements'
+import type { TenantConfig } from './api'
+
+function stubConfig(partial: Partial<TenantConfig['subscription']>): TenantConfig {
+  return {
+    tenant_id: 'demo',
+    display_name: 'Demo',
+    shopify: {
+      shop_domain: 'x.myshopify.com',
+      api_version: '2025-10',
+      auth: { secret_ref: 'X' },
+      scopes_expected: [],
+    },
+    ads: {},
+    site: { base_url: 'https://x.example', cms_adapter: 'generic_http', locales: ['it'] },
+    policy: {
+      hitl_default: true,
+      spend: {
+        max_budget_delta_pct: 15,
+        auto_apply: { enabled: false, allow: [] },
+        thresholds: { min_roas: 2, max_cpa: 40, lookback_days: 14 },
+      },
+      seo: { auto_apply: false, max_urls_per_run: 50 },
+    },
+    subscription: {
+      plan: 'growth',
+      skills: { spend: true, seo: true, shopify: false, leads: false },
+      features: { office_view: false },
+      office_mode: 'auto',
+      ...partial,
+    },
+  }
+}
 
 describe('entitlements', () => {
   it('defaults demo-like growth plan', () => {
@@ -37,5 +71,25 @@ describe('entitlements', () => {
     }
     expect(assertGoalAllowed('report spend ultimi 7 giorni', skills)).toBeNull()
     expect(assertGoalAllowed('lead warming sequence', skills)).toMatch(/non attivo/)
+  })
+
+  it('office_view gates mode choice; default is auto', () => {
+    expect(featuresFromConfig(null).office_view).toBe(false)
+    expect(effectiveOfficeMode(null)).toBe('auto')
+
+    const locked = stubConfig({
+      features: { office_view: false },
+      office_mode: 'full',
+    })
+    expect(effectiveOfficeMode(locked)).toBe('auto')
+
+    const entitled = stubConfig({
+      features: { office_view: true },
+      office_mode: 'light',
+    })
+    expect(effectiveOfficeMode(entitled)).toBe('light')
+    expect(effectiveOfficeMode(stubConfig({ features: { office_view: true }, office_mode: 'full' }))).toBe(
+      'full',
+    )
   })
 })

@@ -2,7 +2,7 @@ tenant_id: demo
 display_name: Demo Shop
 shopify:
   shop_domain: demo-shop.myshopify.com
-  api_version: '2025-10'
+  api_version: 2025-10
   auth:
     secret_ref: SHOPIFY_TOKEN_DEMO
   scopes_expected:
@@ -31,7 +31,7 @@ site:
 policy:
   hitl_default: true
   spend:
-    max_budget_delta_pct: 15
+    max_budget_delta_pct: 15.0
     auto_apply:
       enabled: false
       allow:
@@ -54,3 +54,6 @@ subscription:
     seo: true
     shopify: false
     leads: false
+  features:
+    office_view: true
+  office_mode: auto

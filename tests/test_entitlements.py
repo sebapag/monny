@@ -3,9 +3,20 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from monny.api.app import create_app
-from monny.config.entitlements import filter_plan, is_skill_allowed
+from monny.config.entitlements import (
+    effective_office_mode,
+    entitlement_summary,
+    filter_plan,
+    is_office_view_entitled,
+    is_skill_allowed,
+)
 from monny.config.loader import load_tenant
-from monny.config.models import SubscriptionConfig, SubscriptionSkills, TenantConfig
+from monny.config.models import (
+    SubscriptionConfig,
+    SubscriptionFeatures,
+    SubscriptionSkills,
+    TenantConfig,
+)
 from monny.config.settings import get_settings
 from monny.graph.nodes.planner import _infer_plan
 
@@ -32,6 +43,32 @@ def test_demo_seed_subscription_defaults():
     assert cfg.subscription.skills.seo is True
     assert cfg.subscription.skills.shopify is False
     assert cfg.subscription.skills.leads is False
+    assert cfg.subscription.features.office_view is True
+    assert cfg.subscription.office_mode == "auto"
+
+
+def test_office_view_entitlement_gates_mode():
+    cfg = load_tenant("acme", ROOT / "tenants")
+    assert is_office_view_entitled(cfg) is False
+    assert effective_office_mode(cfg) == "auto"
+
+    entitled = cfg.model_copy(
+        update={
+            "subscription": SubscriptionConfig(
+                plan="growth",
+                skills=cfg.subscription.skills,
+                features=SubscriptionFeatures(office_view=True),
+                office_mode="light",
+            )
+        }
+    )
+    assert is_office_view_entitled(entitled) is True
+    assert effective_office_mode(entitled) == "light"
+
+    summary = entitlement_summary(entitled)
+    assert summary["office_view"] is True
+    assert summary["office_mode"] == "light"
+    assert "office_view" in summary["feature_labels_it"]
 
 
 def test_filter_plan_drops_disabled_skills():

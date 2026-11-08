@@ -90,9 +90,19 @@ class SubscriptionSkills(BaseModel):
     leads: bool = False
 
 
+class SubscriptionFeatures(BaseModel):
+    """Paid frontend / UX entitlements (not graph skills)."""
+
+    # Admin may choose full 3D / light / auto for the office twin.
+    office_view: bool = False
+
+
 class SubscriptionConfig(BaseModel):
     plan: Literal["starter", "growth", "scale"] = "growth"
     skills: SubscriptionSkills = Field(default_factory=SubscriptionSkills)
+    features: SubscriptionFeatures = Field(default_factory=SubscriptionFeatures)
+    # Presentation preference; without features.office_view runtime always uses auto.
+    office_mode: Literal["auto", "full", "light"] = "auto"
 
 
 class TenantConfig(BaseModel):
