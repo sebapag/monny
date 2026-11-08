@@ -52,3 +52,6 @@ subscription:
     seo: false
     shopify: false
     leads: false
+  features:
+    office_view: false
+  office_mode: auto

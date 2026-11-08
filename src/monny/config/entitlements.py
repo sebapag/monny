@@ -34,6 +34,16 @@ ENTITLEMENT_LABELS_IT: dict[str, str] = {
     "leads": "Lead",
 }
 
+FEATURE_LABELS_IT: dict[str, str] = {
+    "office_view": "Modalità vista ufficio",
+}
+
+OFFICE_MODE_LABELS_IT: dict[str, str] = {
+    "auto": "Automatica",
+    "full": "Completa (3D)",
+    "light": "Leggera",
+}
+
 
 def skills_enabled(tenant: TenantConfig) -> SubscriptionSkills:
     return tenant.subscription.skills
@@ -46,6 +56,24 @@ def is_skill_allowed(tenant: TenantConfig, skill_name: str) -> bool:
     if key is None:
         return False
     return bool(getattr(tenant.subscription.skills, key, False))
+
+
+def is_office_view_entitled(tenant: TenantConfig) -> bool:
+    """Paid frontend entitlement: Admin may lock full / light / auto."""
+    return bool(tenant.subscription.features.office_view)
+
+
+def effective_office_mode(tenant: TenantConfig) -> str:
+    """
+    Without office_view entitlement, always auto.
+    With entitlement, honor subscription.office_mode.
+    """
+    if not is_office_view_entitled(tenant):
+        return "auto"
+    mode = tenant.subscription.office_mode
+    if mode in ("auto", "full", "light"):
+        return mode
+    return "auto"
 
 
 def filter_plan(tenant: TenantConfig, plan: Iterable[str]) -> list[str]:
@@ -79,9 +107,16 @@ def blocked_entitlements_for_text(tenant: TenantConfig, text: str) -> list[str]:
 
 def entitlement_summary(tenant: TenantConfig) -> dict:
     skills = tenant.subscription.skills
+    features = tenant.subscription.features
     return {
         "plan": tenant.subscription.plan,
         "skills": skills.model_dump(),
+        "features": features.model_dump(),
+        "office_mode": effective_office_mode(tenant),
+        "office_mode_preference": tenant.subscription.office_mode,
+        "office_view": is_office_view_entitled(tenant),
         "leadership": True,
         "labels_it": ENTITLEMENT_LABELS_IT,
+        "feature_labels_it": FEATURE_LABELS_IT,
+        "office_mode_labels_it": OFFICE_MODE_LABELS_IT,
     }

@@ -1,4 +1,9 @@
-import type { SubscriptionSkills, TenantConfig } from './api'
+import type {
+  OfficeMode,
+  SubscriptionFeatures,
+  SubscriptionSkills,
+  TenantConfig,
+} from './api'
 import type { DeptId } from './depts'
 
 export const DEFAULT_SKILLS: SubscriptionSkills = {
@@ -8,11 +13,37 @@ export const DEFAULT_SKILLS: SubscriptionSkills = {
   leads: false,
 }
 
+export const DEFAULT_FEATURES: SubscriptionFeatures = {
+  office_view: false,
+}
+
 export function skillsFromConfig(cfg?: TenantConfig | null): SubscriptionSkills {
   return {
     ...DEFAULT_SKILLS,
     ...(cfg?.subscription?.skills ?? {}),
   }
+}
+
+export function featuresFromConfig(cfg?: TenantConfig | null): SubscriptionFeatures {
+  return {
+    ...DEFAULT_FEATURES,
+    ...(cfg?.subscription?.features ?? {}),
+  }
+}
+
+/** Without office_view entitlement, preference is ignored → auto. */
+export function effectiveOfficeMode(cfg?: TenantConfig | null): OfficeMode {
+  const features = featuresFromConfig(cfg)
+  if (!features.office_view) return 'auto'
+  const mode = cfg?.subscription?.office_mode
+  if (mode === 'full' || mode === 'light' || mode === 'auto') return mode
+  return 'auto'
+}
+
+export function officeModePreference(cfg?: TenantConfig | null): OfficeMode {
+  const mode = cfg?.subscription?.office_mode
+  if (mode === 'full' || mode === 'light' || mode === 'auto') return mode
+  return 'auto'
 }
 
 /** Map office / dept id → subscription skill key. Leadership always entitled. */

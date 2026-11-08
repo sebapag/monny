@@ -19,10 +19,15 @@ import {
   type PointLight as PointLightType,
   type Texture,
 } from 'three'
-import type { SubscriptionSkills } from './api'
+import type { OfficeMode, SubscriptionSkills } from './api'
 import { DEPARTMENTS, type DeptId } from './depts'
 import { isDeptEnabled, lockedHintIt } from './entitlements'
 import type { RoomLightState } from './lights'
+import {
+  probeOfficeCapability,
+  resolvePresentation,
+  type OfficeCapability,
+} from './officeMode'
 
 /** Soft Notion pastels — always readable, brighter when lit. */
 type RoomLayout = {
@@ -1093,70 +1098,89 @@ function OfficeBuilding({
   )
 }
 
-function FloorPlan2D({
+/** Intentional light (2D/CSS) twin — same rooms, lights, HITL cues, click-to-dept. */
+function OfficeLightTwin({
   lights,
   pending,
   enabled,
   onSelect,
+  reduceMotion,
 }: {
   lights: Record<DeptId, RoomLightState>
   pending: Record<DeptId, number>
   enabled: SubscriptionSkills
   onSelect: (id: DeptId) => void
+  reduceMotion: boolean
 }) {
   const direzionePending = pending.direzione || 0
   return (
-    <div className="office-floorplan" data-testid="office-floorplan-2d">
-      {ROOMS.map((room) => {
-        const light = lights[room.id]
-        const dept = DEPARTMENTS.find((d) => d.id === room.id)
-        const locked = !isDeptEnabled(room.id, enabled)
-        const needsDecision = !locked && room.id === 'direzione' && direzionePending > 0
-        return (
-          <button
-            key={room.id}
-            type="button"
-            className={`floor-room light-${locked ? 'off' : light} tint-${dept?.tint ?? 'gray'}${
-              locked ? ' is-locked' : ''
-            }${needsDecision ? ' needs-decision' : ''}`}
-            style={{ gridArea: room.id }}
-            onClick={() => onSelect(room.id)}
-            title={locked ? lockedHintIt(room.id) : undefined}
-          >
-            <span className="floor-hotspot-row">
-              <span className="floor-hotspot">{room.hotspot}</span>
-              {needsDecision && (
-                <span className="decision-count-badge" aria-label={`${direzionePending} decisioni`}>
-                  {direzionePending}
-                </span>
+    <div
+      className={`office-light-twin${reduceMotion ? ' reduce-motion' : ''}`}
+      data-testid="office-floorplan-2d"
+    >
+      <div className="office-light-stage" aria-hidden>
+        <div className="office-light-window office-light-window-n" />
+        <div className="office-light-window office-light-window-s" />
+        <div className="office-light-corridor" />
+      </div>
+      <div className="office-floorplan office-floorplan-light">
+        {ROOMS.map((room) => {
+          const light = lights[room.id]
+          const dept = DEPARTMENTS.find((d) => d.id === room.id)
+          const locked = !isDeptEnabled(room.id, enabled)
+          const needsDecision = !locked && room.id === 'direzione' && direzionePending > 0
+          return (
+            <button
+              key={room.id}
+              type="button"
+              className={`floor-room light-${locked ? 'off' : light} tint-${dept?.tint ?? 'gray'}${
+                locked ? ' is-locked' : ''
+              }${needsDecision ? ' needs-decision' : ''}`}
+              style={{ gridArea: room.id }}
+              onClick={() => onSelect(room.id)}
+              title={locked ? lockedHintIt(room.id) : `Entra in ${room.label}`}
+            >
+              <span className="floor-hotspot-row">
+                <span className="floor-hotspot">{room.hotspot}</span>
+                {needsDecision && (
+                  <span
+                    className="decision-count-badge"
+                    aria-label={`${direzionePending} decisioni`}
+                  >
+                    {direzionePending}
+                  </span>
+                )}
+              </span>
+              <strong>{room.label}</strong>
+              <div className="floor-people" aria-hidden>
+                {Array.from({ length: room.people }).map((_, i) => (
+                  <span
+                    key={i}
+                    className={`ometto-2d ${
+                      !locked && (light === 'on' || needsDecision) ? 'active' : ''
+                    }`}
+                    style={{ animationDelay: `${-i * 0.7}s` }}
+                  />
+                ))}
+              </div>
+              <span className="floor-state">
+                {locked
+                  ? 'Non nel piano'
+                  : needsDecision
+                    ? 'Decisioni in attesa'
+                    : light === 'on'
+                      ? 'Luci accese'
+                      : light === 'soft'
+                        ? 'Si stanno spegnendo…'
+                        : 'In attesa'}
+              </span>
+              {!locked && (pending[room.id] || 0) > 0 && room.id !== 'direzione' && (
+                <span className="dept-pending">{pending[room.id]} in attesa</span>
               )}
-            </span>
-            <strong>{dept?.name ?? room.label}</strong>
-            <div className="floor-people" aria-hidden>
-              {Array.from({ length: room.people }).map((_, i) => (
-                <span
-                  key={i}
-                  className={`ometto-2d ${!locked && (light === 'on' || needsDecision) ? 'active' : ''}`}
-                />
-              ))}
-            </div>
-            <span className="floor-state">
-              {locked
-                ? 'Non nel piano'
-                : needsDecision
-                  ? 'Decisioni in attesa'
-                  : light === 'on'
-                    ? 'Luci accese'
-                    : light === 'soft'
-                      ? 'Si stanno spegnendo…'
-                      : 'In attesa'}
-            </span>
-            {!locked && (pending[room.id] || 0) > 0 && room.id !== 'direzione' && (
-              <span className="dept-pending">{pending[room.id]} in attesa</span>
-            )}
-          </button>
-        )
-      })}
+            </button>
+          )
+        })}
+      </div>
     </div>
   )
 }
@@ -1166,26 +1190,22 @@ const OFFICE_SHORTCUTS = [
   { label: 'Controlla SEO', goal: 'seo audit of priority pages' },
 ] as const
 
-function usePreferFallback(): boolean {
-  const [fallback, setFallback] = useState(false)
+function useOfficeCapability(): OfficeCapability | null {
+  const [cap, setCap] = useState<OfficeCapability | null>(null)
   useEffect(() => {
-    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    let webgl = true
-    try {
-      const canvas = document.createElement('canvas')
-      webgl = !!(canvas.getContext('webgl') || canvas.getContext('experimental-webgl'))
-    } catch {
-      webgl = false
-    }
-    setFallback(reduced || !webgl)
+    setCap(probeOfficeCapability())
   }, [])
-  return fallback
+  return cap
 }
 
 function useReduceMotion(): boolean {
   const [reduced, setReduced] = useState(false)
   useEffect(() => {
-    setReduced(window.matchMedia('(prefers-reduced-motion: reduce)').matches)
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)')
+    const sync = () => setReduced(mq.matches)
+    sync()
+    mq.addEventListener?.('change', sync)
+    return () => mq.removeEventListener?.('change', sync)
   }, [])
   return reduced
 }
@@ -1210,10 +1230,75 @@ class CanvasErrorBoundary extends Component<
   }
 }
 
+/** Safer R3F Canvas: low DPR, soft WebGL attrs, context-loss → light twin. */
+function HardenedOfficeCanvas({
+  lights,
+  pendingTotal,
+  enabled,
+  onSelect,
+  reduceMotion,
+  onContextLost,
+}: {
+  lights: Record<DeptId, RoomLightState>
+  pendingTotal: number
+  enabled: SubscriptionSkills
+  onSelect: (id: DeptId) => void
+  reduceMotion: boolean
+  onContextLost: () => void
+}) {
+  return (
+    <Canvas
+      camera={{ position: [8.6, 9.6, 10.6], fov: 40, near: 0.1, far: 80 }}
+      dpr={[1, 1.25]}
+      gl={{
+        antialias: true,
+        alpha: false,
+        powerPreference: 'default',
+        failIfMajorPerformanceCaveat: false,
+        stencil: false,
+        depth: true,
+      }}
+      frameloop="always"
+      style={{ touchAction: 'manipulation' }}
+      onCreated={({ gl, camera }) => {
+        gl.setClearColor('#f3ebe0')
+        gl.shadowMap.enabled = false
+        camera.lookAt(0, 0.3, 0)
+        const canvas = gl.domElement
+        const onLost = (e: Event) => {
+          e.preventDefault()
+          onContextLost()
+        }
+        const onRestored = () => {
+          // Stay on light after a loss — safer than re-entering a flaky GPU path.
+        }
+        canvas.addEventListener('webglcontextlost', onLost, false)
+        canvas.addEventListener('webglcontextrestored', onRestored, false)
+      }}
+    >
+      <Suspense fallback={null}>
+        <FixedCamera />
+        <ambientLight intensity={0.92} />
+        <hemisphereLight args={['#ffffff', '#e8e4d8', 0.45]} />
+        <directionalLight position={[5, 10, 3]} intensity={0.35} />
+        <OfficeBuilding
+          lights={lights}
+          enabled={enabled}
+          pendingCount={pendingTotal}
+          onSelect={onSelect}
+          reduceMotion={reduceMotion}
+        />
+      </Suspense>
+    </Canvas>
+  )
+}
+
 export function OfficeTwin({
   lights,
   pending,
   enabled,
+  officeMode = 'auto',
+  officeViewEntitled = false,
   statusLine,
   busy,
   onSelect,
@@ -1222,17 +1307,26 @@ export function OfficeTwin({
   lights: Record<DeptId, RoomLightState>
   pending: Record<DeptId, number>
   enabled: SubscriptionSkills
+  /** Effective preference (already gated by entitlement on the server/client). */
+  officeMode?: OfficeMode
+  officeViewEntitled?: boolean
   statusLine?: string | null
   busy?: boolean
   onSelect: (id: DeptId) => void
   onQuickAction: (goal: string) => void
 }) {
-  const fallback = usePreferFallback()
+  const capability = useOfficeCapability()
   const reduceMotion = useReduceMotion()
   const [failed, setFailed] = useState(false)
   const [goalDraft, setGoalDraft] = useState('')
-  const use2d = fallback || failed
   const pendingTotal = pending.direzione || 0
+
+  const desired = useMemo(() => {
+    if (!capability) return null
+    return resolvePresentation(officeMode, capability)
+  }, [capability, officeMode])
+
+  const useLight = desired === 'light' || failed || (desired === 'full' && capability && !capability.webgl)
 
   const litNames = useMemo(
     () =>
@@ -1252,8 +1346,13 @@ export function OfficeTwin({
     setGoalDraft('')
   }
 
+  const modeBadge = useLight ? 'Vista leggera' : 'Vista completa'
+  const modeHint = useLight
+    ? 'Vista leggera dell’ufficio — stessa mappa dei reparti, ottimizzata per ogni browser. Clicca una stanza.'
+    : 'Vista fissa 3D dell’ufficio. Clicca hotspot, ometti o pavimento per entrare nel reparto.'
+
   return (
-    <section className="office-twin" data-testid="office-twin">
+    <section className="office-twin" data-testid="office-twin" data-office-mode={useLight ? 'light' : 'full'}>
       <div className="page-intro">
         <div>
           <h1>Ufficio Monny</h1>
@@ -1263,6 +1362,17 @@ export function OfficeTwin({
             I reparti non nel piano restano chiusi.
           </p>
         </div>
+        <span
+          className={`office-mode-badge ${useLight ? 'is-light' : 'is-full'}`}
+          data-testid="office-mode-badge"
+          title={
+            officeViewEntitled
+              ? `Preferenza: ${officeMode}`
+              : 'Modalità automatica (upgrade piano per scegliere Completa / Leggera)'
+          }
+        >
+          {modeBadge}
+        </span>
       </div>
 
       <form
@@ -1326,53 +1436,37 @@ export function OfficeTwin({
       </div>
 
       <div
-        className={`office-viewport flat-pastel locked-view ${use2d ? 'is-2d' : 'is-3d'}${
+        className={`office-viewport flat-pastel locked-view ${useLight ? 'is-2d is-light' : 'is-3d'}${
           pendingTotal > 0 ? ' has-decisions' : ''
         }`}
       >
-        {use2d ? (
-          <FloorPlan2D
+        {desired === null ? (
+          <div className="office-viewport-loading" aria-busy="true">
+            Preparo l’ufficio…
+          </div>
+        ) : useLight ? (
+          <OfficeLightTwin
             lights={lights}
             pending={pending}
             enabled={enabled}
             onSelect={onSelect}
+            reduceMotion={reduceMotion}
           />
         ) : (
           <CanvasErrorBoundary onError={() => setFailed(true)}>
-            <Canvas
-              camera={{ position: [8.6, 9.6, 10.6], fov: 40, near: 0.1, far: 80 }}
-              dpr={[1, 1.5]}
-              gl={{ antialias: true }}
-              style={{ touchAction: 'manipulation' }}
-              onCreated={({ gl, camera }) => {
-                gl.setClearColor('#f3ebe0')
-                gl.shadowMap.enabled = false
-                camera.lookAt(0, 0.3, 0)
-              }}
-            >
-              <Suspense fallback={null}>
-                <FixedCamera />
-                <ambientLight intensity={0.92} />
-                <hemisphereLight args={['#ffffff', '#e8e4d8', 0.45]} />
-                <directionalLight position={[5, 10, 3]} intensity={0.35} />
-                <OfficeBuilding
-                  lights={lights}
-                  enabled={enabled}
-                  pendingCount={pendingTotal}
-                  onSelect={onSelect}
-                  reduceMotion={reduceMotion}
-                />
-              </Suspense>
-            </Canvas>
+            <HardenedOfficeCanvas
+              lights={lights}
+              pendingTotal={pendingTotal}
+              enabled={enabled}
+              onSelect={onSelect}
+              reduceMotion={reduceMotion}
+              onContextLost={() => setFailed(true)}
+            />
           </CanvasErrorBoundary>
         )}
       </div>
 
-      <p className="office-hint">
-        {use2d
-          ? 'Vista pianta 2D (WebGL non disponibile o motion ridotta). Clicca una stanza.'
-          : 'Vista fissa dell’ufficio. Clicca hotspot, ometti o pavimento per entrare nel reparto.'}
-      </p>
+      <p className="office-hint">{modeHint}</p>
     </section>
   )
 }
