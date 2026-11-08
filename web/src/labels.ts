@@ -207,7 +207,7 @@ export function friendlyDecideNote(
   return `Hai rifiutato: ${title}.`
 }
 
-export function friendlySkillDetail(skill: string, detail: string): string {
+export function friendlySkillDetail(_skill: string, detail: string): string {
   if (!detail) return ''
   // "Piano: spend_google, spend_meta" → Italian labels
   if (detail.startsWith('Piano:')) {
