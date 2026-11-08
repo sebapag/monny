@@ -21,6 +21,7 @@ export const CHANNEL_LABELS: Record<string, string> = {
 export const SKILL_LABELS: Record<string, string> = {
   planner: 'Pianificazione',
   shopify_read: 'Lettura Shopify',
+  knowledge: 'Conoscenza aziendale',
   spend_google: 'Spend · Google Ads',
   spend_meta: 'Spend · Meta',
   seo_audit: 'Audit SEO',

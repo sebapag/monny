@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   type AgentRun,
   type Approval,
+  type KnowledgeSource,
   type Report,
   type SeoChange,
   type SpendDiagnosis,
@@ -14,10 +15,12 @@ import {
   getTenant,
   getTenantArtifact,
   listApprovals,
+  listKnowledge,
   listTenantArtifacts,
   listTenants,
   putTenant,
   startRun,
+  toggleKnowledgeSource,
 } from './api'
 import {
   type DeptId,
@@ -257,6 +260,104 @@ function SeoPanel({ changes }: { changes: SeoChange[] }) {
 
 function FieldHelp({ children }: { children: string }) {
   return <p className="field-help">{children}</p>
+}
+
+function KnowledgeAdminPanel({
+  tenantId,
+  busy,
+}: {
+  tenantId: string
+  busy: boolean
+}) {
+  const [sources, setSources] = useState<KnowledgeSource[]>([])
+  const [path, setPath] = useState<string | null>(null)
+  const [note, setNote] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [toggling, setToggling] = useState<string | null>(null)
+
+  const refresh = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const data = await listKnowledge(tenantId)
+      setSources(data.sources)
+      setPath(data.path)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+      setSources([])
+    } finally {
+      setLoading(false)
+    }
+  }, [tenantId])
+
+  useEffect(() => {
+    void refresh()
+  }, [refresh])
+
+  const onToggle = async (source: KnowledgeSource, enabled: boolean) => {
+    setToggling(source.id)
+    setNote(null)
+    setError(null)
+    try {
+      const res = await toggleKnowledgeSource(tenantId, source.id, enabled)
+      setSources((prev) => prev.map((s) => (s.id === source.id ? res.source : s)))
+      setNote(
+        enabled
+          ? `«${source.title}» attiva — le skill potranno usarla.`
+          : `«${source.title}» disattivata.`,
+      )
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setToggling(null)
+    }
+  }
+
+  return (
+    <div className="form-grid" data-testid="knowledge-admin">
+      <FieldHelp>
+        Documenti aziendali che Monny consulta prima di spend e SEO. Per ora sono file
+        markdown nel tenant; puoi attivare o spegnere ogni fonte.
+      </FieldHelp>
+      {loading ? (
+        <p className="status-line">Carico le fonti…</p>
+      ) : sources.length === 0 ? (
+        <p className="status-line">
+          Nessuna fonte ancora. Aggiungi file in{' '}
+          <code>tenants/{tenantId}/knowledge/</code>.
+        </p>
+      ) : (
+        <div className="skill-toggles">
+          {sources.map((source) => (
+            <label key={source.id} className="check-row skill-toggle">
+              <input
+                type="checkbox"
+                checked={source.enabled}
+                disabled={busy || toggling === source.id}
+                onChange={(e) => void onToggle(source, e.target.checked)}
+              />
+              <span>
+                <strong>{source.title}</strong>
+                <span className="muted">
+                  {' '}
+                  — {source.tags.length ? source.tags.join(', ') : source.type}
+                  {source.path ? ` · ${source.path}` : ''}
+                </span>
+              </span>
+            </label>
+          ))}
+        </div>
+      )}
+      {path && (
+        <p className="status-line" style={{ marginTop: '0.35rem' }}>
+          Cartella: {path.split('/').slice(-3).join('/')}
+        </p>
+      )}
+      {note && <p className="status-line">{note}</p>}
+      {error && <p className="error">{error}</p>}
+    </div>
+  )
 }
 
 function AdminForm({
@@ -1002,6 +1103,10 @@ function App() {
               )}
               {saveNote && <p className="status-line">{saveNote}</p>}
               {error && <p className="error">{error}</p>}
+            </section>
+            <section className="panel">
+              <h2>Conoscenza aziendale</h2>
+              <KnowledgeAdminPanel tenantId={tenantId} busy={busy} />
             </section>
           </>
         ) : route.mode === 'piano' ? (

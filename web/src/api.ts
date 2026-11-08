@@ -263,3 +263,58 @@ export function listTenantArtifacts(tenantId: string) {
 export function getTenantArtifact(tenantId: string, name: string) {
   return request<ArtifactPayload>(`/api/tenants/${tenantId}/artifacts/${name}`)
 }
+
+export type KnowledgeSource = {
+  id: string
+  title: string
+  type: string
+  path: string
+  tags: string[]
+  enabled: boolean
+}
+
+export type KnowledgeList = {
+  tenant_id: string
+  sources: KnowledgeSource[]
+  index: Record<string, unknown>
+  path: string
+}
+
+export type KnowledgeChunk = {
+  source_id: string
+  title: string
+  excerpt: string
+  tags: string[]
+  score: number
+}
+
+export type KnowledgeRetrieveResult = {
+  tenant_id: string
+  query: string
+  tags: string[]
+  chunks: KnowledgeChunk[]
+}
+
+export function listKnowledge(tenantId: string) {
+  return request<KnowledgeList>(`/api/tenants/${tenantId}/knowledge`)
+}
+
+export function retrieveKnowledge(
+  tenantId: string,
+  body: { query?: string; tags?: string[]; limit?: number },
+) {
+  return request<KnowledgeRetrieveResult>(`/api/tenants/${tenantId}/knowledge/retrieve`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
+export function toggleKnowledgeSource(tenantId: string, sourceId: string, enabled: boolean) {
+  return request<{ ok: boolean; source: KnowledgeSource }>(
+    `/api/tenants/${tenantId}/knowledge/sources/${sourceId}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({ enabled }),
+    },
+  )
+}

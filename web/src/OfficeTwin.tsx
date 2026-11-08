@@ -459,45 +459,6 @@ function Cabinet({
   )
 }
 
-/** Modern pendant — warm disc + stem. */
-function SoftLamp({
-  position,
-  light = 'off',
-  accent,
-}: {
-  position: [number, number, number]
-  light?: RoomLightState
-  accent: string
-}) {
-  const shade = useRef<MeshStandardMaterial>(null)
-  const litAmt = useRef(lightLevel(light))
-  const accentCol = useMemo(() => new Color(accent), [accent])
-  const warm = useMemo(() => new Color('#fff4e0'), [])
-  const tmp = useMemo(() => new Color(), [])
-  useFrame((_, dt) => {
-    const k = 1 - Math.exp(-EASE * dt)
-    litAmt.current = lerp(litAmt.current, lightLevel(light), k)
-    const lit = litAmt.current
-    if (!shade.current) return
-    tmp.copy(warm).lerp(accentCol, lit * 0.55)
-    shade.current.color.copy(tmp)
-    shade.current.emissive.copy(tmp)
-    shade.current.emissiveIntensity = 0.18 + 0.6 * lit
-  })
-  return (
-    <group position={position}>
-      <mesh position={[0, 0.22, 0]}>
-        <cylinderGeometry args={[0.015, 0.015, 0.28, 8]} />
-        <FlatMat color={WOOD_DARK} />
-      </mesh>
-      <mesh position={[0, 0.02, 0]}>
-        <cylinderGeometry args={[0.28, 0.22, 0.08, 20]} />
-        <meshStandardMaterial ref={shade} color="#fff4e0" {...SOFT} />
-      </mesh>
-    </group>
-  )
-}
-
 function Whiteboard({
   position,
   rotY = 0,
@@ -980,7 +941,7 @@ function RoomZone({
         />
       ))}
 
-      {/* Ceiling soft panels + hanging lamps */}
+      {/* Soft ceiling panels only — no hanging/pendant fixtures */}
       <mesh position={[hx - 0.55, 2.15, hz]}>
         <boxGeometry args={[0.95, 0.04, 0.4]} />
         <meshStandardMaterial ref={ceilMat} color="#f7f2ea" {...SOFT} />
@@ -989,12 +950,6 @@ function RoomZone({
         <boxGeometry args={[0.95, 0.04, 0.4]} />
         <meshStandardMaterial color="#f7f2ea" {...SOFT} />
       </mesh>
-      <SoftLamp position={[hx - 0.55, 1.95, hz]} accent={room.accent} light={light} />
-      <SoftLamp
-        position={[hx + 0.55, 1.95, hz]}
-        accent={room.accent}
-        light={light === 'off' && needsAttention ? 'on' : light}
-      />
       <pointLight ref={lamp} position={[hx, 2.0, hz]} intensity={0.08} distance={5.5} color="#fff8f0" />
 
       <mesh
