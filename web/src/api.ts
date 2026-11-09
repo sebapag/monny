@@ -117,6 +117,10 @@ export type SubscriptionSkills = {
   seo: boolean
   shopify: boolean
   leads: boolean
+  operations: boolean
+  design: boolean
+  it: boolean
+  controlling: boolean
 }
 
 export type SubscriptionFeatures = {

@@ -20,14 +20,26 @@ ALLOWED_SKILLS: frozenset[str] = frozenset(
         "seo_audit",
         "shopify_promo",
         "lead_warming",
+        "ops_orders",
+        "ops_inventory",
+        "ops_shipping",
+        "design_assets",
+        "design_ads",
+        "design_brand",
+        "it_integrations",
+        "it_access",
+        "it_monitoring",
+        "ctrl_budget",
+        "ctrl_kpi",
+        "ctrl_costs",
         "reporting",
     }
 )
 
-SYSTEM_PROMPT = """You are Monny's planner. Choose skills for a marketing run.
+SYSTEM_PROMPT = """You are Monny's planner. Choose skills for a marketing / ops run.
 Reply with ONLY a JSON object, no markdown, no explanation, no chain-of-thought:
 {"skills":["skill_id",...]}
-Allowed skill_id values: spend_google, spend_meta, seo_audit, shopify_promo, lead_warming, reporting.
+Allowed skill_id values: spend_google, spend_meta, seo_audit, shopify_promo, lead_warming, ops_orders, ops_inventory, ops_shipping, design_assets, design_ads, design_brand, it_integrations, it_access, it_monitoring, ctrl_budget, ctrl_kpi, ctrl_costs, reporting.
 Rules: pick the minimum useful skills for the goal; always include reporting last; never invent ids."""
 
 

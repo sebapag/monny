@@ -46,6 +46,7 @@ import {
   featuresFromConfig,
   isDeptEnabled,
   lockedHintIt,
+  mergeSkills,
   skillsFromConfig,
 } from './entitlements'
 import {
@@ -75,6 +76,10 @@ function skillFamily(skill: string): string {
   if (skill.startsWith('seo_')) return 'seo'
   if (skill.startsWith('shopify_')) return 'shopify'
   if (skill === 'lead_warming') return 'lead'
+  if (skill.startsWith('ops_')) return 'ops'
+  if (skill.startsWith('design_')) return 'design'
+  if (skill.startsWith('it_')) return 'it'
+  if (skill.startsWith('ctrl_')) return 'controlling'
   if (skill === 'reporting') return 'report'
   if (skill === 'hitl') return 'hitl'
   if (skill === 'planner') return 'planner'
@@ -519,13 +524,7 @@ function AdminForm({
           onChange={(e) =>
             set('subscription', {
               plan: e.target.value as 'starter' | 'growth' | 'scale',
-              skills: {
-                spend: true,
-                seo: true,
-                shopify: false,
-                leads: false,
-                ...(cfg.subscription?.skills ?? {}),
-              },
+              skills: mergeSkills(cfg.subscription?.skills),
               features: {
                 office_view: false,
                 ...(cfg.subscription?.features ?? {}),
@@ -546,15 +545,13 @@ function AdminForm({
             ['seo', 'SEO', 'Title, meta e H1'],
             ['shopify', 'Negozio Shopify', 'Promo e anteprime negozio'],
             ['leads', 'Lead', 'Sequenze di lead warming'],
+            ['operations', 'Operations', 'Ordini, giacenze, spedizioni'],
+            ['design', 'Graphic Designer', 'Asset, creatività ads, brand kit'],
+            ['it', 'IT', 'Integrazioni, accessi, monitoring'],
+            ['controlling', 'Controlling', 'Budget, KPI, costi anomali'],
           ] as const
         ).map(([key, title, hint]) => {
-          const skills = {
-            spend: true,
-            seo: true,
-            shopify: false,
-            leads: false,
-            ...(cfg.subscription?.skills ?? {}),
-          }
+          const skills = mergeSkills(cfg.subscription?.skills)
           return (
             <label key={key} className="check-row skill-toggle">
               <input
@@ -606,13 +603,7 @@ function AdminForm({
                 onChange={(e) =>
                   set('subscription', {
                     plan: cfg.subscription?.plan ?? 'growth',
-                    skills: {
-                      spend: true,
-                      seo: true,
-                      shopify: false,
-                      leads: false,
-                      ...(cfg.subscription?.skills ?? {}),
-                    },
+                    skills: mergeSkills(cfg.subscription?.skills),
                     features: { ...features, office_view: e.target.checked },
                     office_mode: e.target.checked ? officeMode : 'auto',
                   })
@@ -636,13 +627,7 @@ function AdminForm({
                 onChange={(e) =>
                   set('subscription', {
                     plan: cfg.subscription?.plan ?? 'growth',
-                    skills: {
-                      spend: true,
-                      seo: true,
-                      shopify: false,
-                      leads: false,
-                      ...(cfg.subscription?.skills ?? {}),
-                    },
+                    skills: mergeSkills(cfg.subscription?.skills),
                     features,
                     office_mode: e.target.value as OfficeMode,
                   })

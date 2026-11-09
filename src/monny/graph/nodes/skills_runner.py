@@ -12,6 +12,7 @@ from monny.config.settings import get_settings
 from monny.graph import timeline
 from monny.graph.state import AgentState
 from monny.skills import (
+    dept_stubs,
     lead_warming,
     reporting,
     seo_audit,
@@ -111,6 +112,13 @@ def skills_runner_node(state: AgentState) -> dict:
             result = lead_warming.run(tenant)
             findings.append(result)
             timeline.done(run_id, "lead_warming", result.get("summary") or "Stub")
+        elif skill_name in dept_stubs.ALL_STUB_SKILLS:
+            label = dept_stubs.STUB_META[skill_name]["entity_name"]
+            timeline.start(run_id, skill_name, f"Stub {label}…")
+            _pause_for_presence()
+            result = dept_stubs.run(skill_name, tenant)
+            findings.append(result)
+            timeline.done(run_id, skill_name, result.get("summary") or "Stub")
         else:
             findings.append(
                 {"skill": skill_name, "summary": "Skill not registered in MVP.", "status": "skipped"}

@@ -38,6 +38,10 @@ function emptyLights(): Record<DeptId, RoomLightState> {
     seo: 'off',
     shopify: 'off',
     lead: 'off',
+    ops: 'off',
+    design: 'off',
+    it: 'off',
+    controlling: 'off',
   }
 }
 

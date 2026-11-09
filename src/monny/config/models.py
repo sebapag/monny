@@ -88,6 +88,11 @@ class SubscriptionSkills(BaseModel):
     seo: bool = True
     shopify: bool = False
     leads: bool = False
+    # Phase-2 department wings — off by default / plan-gated like shopify & leads.
+    operations: bool = False
+    design: bool = False
+    it: bool = False
+    controlling: bool = False
 
 
 class SubscriptionFeatures(BaseModel):

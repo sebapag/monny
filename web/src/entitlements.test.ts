@@ -31,7 +31,16 @@ function stubConfig(partial: Partial<TenantConfig['subscription']>): TenantConfi
     },
     subscription: {
       plan: 'growth',
-      skills: { spend: true, seo: true, shopify: false, leads: false },
+      skills: {
+        spend: true,
+        seo: true,
+        shopify: false,
+        leads: false,
+        operations: false,
+        design: false,
+        it: false,
+        controlling: false,
+      },
       features: { office_view: false },
       office_mode: 'auto',
       ...partial,
@@ -46,6 +55,10 @@ describe('entitlements', () => {
     expect(skills.seo).toBe(true)
     expect(skills.shopify).toBe(false)
     expect(skills.leads).toBe(false)
+    expect(skills.operations).toBe(false)
+    expect(skills.design).toBe(false)
+    expect(skills.it).toBe(false)
+    expect(skills.controlling).toBe(false)
   })
 
   it('leadership always enabled; locked depts respect flags', () => {
@@ -54,12 +67,20 @@ describe('entitlements', () => {
       seo: false,
       shopify: false,
       leads: false,
+      operations: true,
+      design: false,
+      it: true,
+      controlling: false,
     }
     expect(isDeptEnabled('direzione', skills)).toBe(true)
     expect(isDeptEnabled('spend', skills)).toBe(true)
     expect(isDeptEnabled('seo', skills)).toBe(false)
     expect(isDeptEnabled('shopify', skills)).toBe(false)
     expect(isDeptEnabled('lead', skills)).toBe(false)
+    expect(isDeptEnabled('ops', skills)).toBe(true)
+    expect(isDeptEnabled('design', skills)).toBe(false)
+    expect(isDeptEnabled('it', skills)).toBe(true)
+    expect(isDeptEnabled('controlling', skills)).toBe(false)
   })
 
   it('blocks free-text for disabled skills', () => {
@@ -68,9 +89,15 @@ describe('entitlements', () => {
       seo: true,
       shopify: false,
       leads: false,
+      operations: false,
+      design: false,
+      it: false,
+      controlling: false,
     }
     expect(assertGoalAllowed('report spend ultimi 7 giorni', skills)).toBeNull()
     expect(assertGoalAllowed('lead warming sequence', skills)).toMatch(/non attivo/)
+    expect(assertGoalAllowed('stato ordini fulfillment', skills)).toMatch(/Operations/)
+    expect(assertGoalAllowed('accessi e credenziali da completare', skills)).toMatch(/IT/)
   })
 
   it('office_view gates mode choice; default is auto', () => {

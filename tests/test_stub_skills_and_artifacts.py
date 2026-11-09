@@ -14,6 +14,10 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_planner_routes_stub_skills():
     assert "shopify_promo" in _infer_plan("propose shopify promo discount", "")
     assert "lead_warming" in _infer_plan("lead warming sequence", "")
+    assert "ops_orders" in _infer_plan("stato ordini fulfillment overview", "")
+    assert "design_brand" in _infer_plan("check brand kit coerenza", "")
+    assert "it_access" in _infer_plan("accessi e credenziali da completare", "")
+    assert "ctrl_costs" in _infer_plan("alert costi anomali", "")
     assert "shopify_promo" not in _infer_plan("report spend", "")
 
 
@@ -30,7 +34,16 @@ def test_stub_skills_produce_proposals(tmp_path, monkeypatch):
         update={
             "subscription": SubscriptionConfig(
                 plan="scale",
-                skills=SubscriptionSkills(spend=True, seo=True, shopify=True, leads=True),
+                skills=SubscriptionSkills(
+                    spend=True,
+                    seo=True,
+                    shopify=True,
+                    leads=True,
+                    operations=True,
+                    design=True,
+                    it=True,
+                    controlling=True,
+                ),
             )
         }
     )
