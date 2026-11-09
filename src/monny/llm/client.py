@@ -9,14 +9,15 @@ import httpx
 from monny.config.settings import Settings, get_settings
 
 # Keep planner calls cheap and short (no mega agent loop).
+# Short timeout: on failure we fall back to the keyword stub; do not hang the UX.
 DEFAULT_TEMPERATURE = 0.1
 DEFAULT_MAX_TOKENS = 256
-DEFAULT_TIMEOUT_S = 20.0
+DEFAULT_TIMEOUT_S = 5.0
 
 
 def llm_configured(settings: Settings | None = None) -> bool:
     s = settings or get_settings()
-    return bool((s.xai_api_key or "").strip())
+    return s.llm_enabled
 
 
 def chat_completion(

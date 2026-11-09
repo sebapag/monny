@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     xai_api_key: str = ""
     monny_llm_model: str = "grok-4.20-0309-non-reasoning"
     monny_llm_base_url: str = "https://api.x.ai/v1"
+    # Explicit kill-switch: force stub even if XAI_API_KEY is set (local recovery).
+    monny_llm_enabled: bool = True
 
     @property
     def dry_run(self) -> bool:
@@ -34,6 +36,8 @@ class Settings(BaseSettings):
 
     @property
     def llm_enabled(self) -> bool:
+        if not self.monny_llm_enabled:
+            return False
         return bool((self.xai_api_key or "").strip())
 
 

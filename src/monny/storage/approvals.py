@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import logging
+import os
 import uuid
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
@@ -11,6 +13,8 @@ from typing import Any, Literal
 
 
 Decision = Literal["pending", "approved", "rejected"]
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -29,6 +33,14 @@ class Approval:
     note: str | None = None
 
 
+def _atomic_write_text(path: Path, text: str) -> None:
+    """Write via temp file + replace so a crash cannot leave an empty/truncated JSON."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(text, encoding="utf-8")
+    os.replace(tmp, path)
+
+
 class ApprovalStore:
     def __init__(self, data_dir: Path | str) -> None:
         self.data_dir = Path(data_dir)
@@ -40,14 +52,43 @@ class ApprovalStore:
     def _load(self) -> None:
         if not self.path.exists():
             return
-        raw = json.loads(self.path.read_text(encoding="utf-8"))
+        text = self.path.read_text(encoding="utf-8").strip()
+        if not text:
+            # Truncated/empty file (e.g. killed mid-write before atomic fix) — start clean.
+            logger.warning("Ignoring empty approvals file at %s", self.path)
+            return
+        try:
+            raw = json.loads(text)
+        except json.JSONDecodeError:
+            # Corrupt store must not brick every run at HITL.
+            bak = self.path.with_suffix(".json.corrupt")
+            try:
+                os.replace(self.path, bak)
+                logger.warning(
+                    "Corrupt approvals.json moved to %s; starting with empty store",
+                    bak,
+                )
+            except OSError:
+                logger.warning(
+                    "Corrupt approvals.json at %s; starting with empty store",
+                    self.path,
+                )
+            return
+        if not isinstance(raw, list):
+            logger.warning("approvals.json is not a list; ignoring")
+            return
         for item in raw:
-            approval = Approval(**item)
+            if not isinstance(item, dict):
+                continue
+            try:
+                approval = Approval(**item)
+            except TypeError:
+                continue
             self._items[approval.id] = approval
 
     def _persist(self) -> None:
         payload = [asdict(a) for a in self._items.values()]
-        self.path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        _atomic_write_text(self.path, json.dumps(payload, indent=2))
 
     def create(
         self,
