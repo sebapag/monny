@@ -195,11 +195,57 @@ function FlatMat({
 function FixedCamera() {
   const { camera } = useThree()
   useEffect(() => {
-    camera.position.set(8.6, 9.6, 10.6)
-    camera.lookAt(0, 0.3, 0)
+    camera.position.set(9.1, 10.2, 11.0)
+    camera.lookAt(0, 0.45, 0.15)
     camera.updateProjectionMatrix()
   }, [camera])
   return null
+}
+
+/** Soft room label chip — readable against warm oak / pastels. */
+function RoomLabelChip({
+  label,
+  hotspot,
+  locked,
+  lit,
+}: {
+  label: string
+  hotspot: number
+  locked: boolean
+  lit: boolean
+}) {
+  const bg = locked ? '#e8e4de' : lit ? '#fff4c8' : '#ffffff'
+  const ink = locked ? '#787671' : '#1a1a1a'
+  return (
+    <Billboard follow>
+      <RoundedBox args={[locked ? 2.55 : 2.15, 0.42, 0.06]} radius={0.08} position={[0, 0, 0]}>
+        <meshStandardMaterial color={bg} roughness={0.85} metalness={0} />
+      </RoundedBox>
+      <mesh position={[-0.82, 0, 0.04]}>
+        <circleGeometry args={[0.14, 20]} />
+        <meshStandardMaterial color="#0a1530" roughness={1} metalness={0} />
+      </mesh>
+      <Text
+        position={[-0.82, 0, 0.06]}
+        fontSize={0.15}
+        color="#ffffff"
+        anchorX="center"
+        anchorY="middle"
+      >
+        {String(hotspot)}
+      </Text>
+      <Text
+        position={[0.12, 0, 0.06]}
+        fontSize={0.18}
+        color={ink}
+        anchorX="center"
+        anchorY="middle"
+        maxWidth={1.7}
+      >
+        {locked ? `${label} · chiuso` : label}
+      </Text>
+    </Billboard>
+  )
 }
 
 /** Ease-in-out wave in [0,1] — calm bob without hard snaps. */
@@ -631,12 +677,12 @@ function ExteriorWindow({
         <boxGeometry args={[paneW, paneH, 0.03]} />
         <meshStandardMaterial
           color={SKY_GLASS}
-          emissive="#b8dcf0"
-          emissiveIntensity={0.35}
+          emissive="#c5e6f8"
+          emissiveIntensity={0.55}
           transparent
-          opacity={0.72}
-          roughness={0.18}
-          metalness={0.05}
+          opacity={0.78}
+          roughness={0.16}
+          metalness={0.04}
           depthWrite={false}
         />
       </mesh>
@@ -958,32 +1004,28 @@ function RoomZone({
       <pointLight ref={lamp} position={[hx, 2.0, hz]} intensity={0.08} distance={5.5} color="#fff8f0" />
 
       <mesh
-        position={[hx, 1.35, hz + halfD * 0.15]}
+        position={[hx, 1.28, hz + halfD * 0.15]}
         onClick={(e) => {
           e.stopPropagation()
           onSelect(room.id)
         }}
       >
         <cylinderGeometry
-          args={[needsAttention ? 0.26 : 0.2, needsAttention ? 0.26 : 0.2, 0.06, 24]}
+          args={[needsAttention ? 0.22 : 0.16, needsAttention ? 0.22 : 0.16, 0.05, 24]}
         />
         <meshStandardMaterial ref={hotMat} color="#ffffff" {...MATTE} />
       </mesh>
-      <Billboard position={[hx, 1.65, hz + halfD * 0.15]}>
-        <Text
-          fontSize={0.26}
-          color={locked ? '#787671' : '#37352f'}
-          anchorX="center"
-          anchorY="middle"
-          outlineWidth={0.015}
-          outlineColor="#ffffff"
-        >
-          {locked ? `${room.hotspot} · ${room.label} · chiuso` : `${room.hotspot} · ${room.label}`}
-        </Text>
-      </Billboard>
+      <group position={[hx, 1.72, hz + halfD * 0.18]}>
+        <RoomLabelChip
+          label={room.label}
+          hotspot={room.hotspot}
+          locked={locked}
+          lit={active}
+        />
+      </group>
       {needsAttention && (
         <DecisionHotspotBadge
-          position={[hx + 0.72, 1.8, hz + halfD * 0.15]}
+          position={[hx + 1.05, 1.85, hz + halfD * 0.15]}
           count={attentionCount}
           reduceMotion={reduceMotion}
         />
@@ -1009,6 +1051,15 @@ function OfficeBuilding({
 
   return (
     <group>
+      {/* Soft exterior apron so the building sits in daylight, not a void */}
+      <mesh position={[0, -0.12, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <planeGeometry args={[28, 24]} />
+        <meshStandardMaterial color="#d9e6f0" roughness={1} metalness={0} />
+      </mesh>
+      <mesh position={[0, -0.1, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <circleGeometry args={[9.5, 48]} />
+        <meshStandardMaterial color="#cfe0ec" roughness={1} metalness={0} transparent opacity={0.55} />
+      </mesh>
       {/* Warm oak plank building floor (not grey) */}
       <mesh position={[0, -0.02, 0]} rotation={[-Math.PI / 2, 0, 0]}>
         <planeGeometry args={[12.2, 10.6]} />
@@ -1098,7 +1149,7 @@ function OfficeBuilding({
   )
 }
 
-/** Intentional light (2D/CSS) twin — same rooms, lights, HITL cues, click-to-dept. */
+/** Intentional light (2D/CSS) twin — same spatial map as 3D, lights, HITL, click-to-dept. */
 function OfficeLightTwin({
   lights,
   pending,
@@ -1118,10 +1169,25 @@ function OfficeLightTwin({
       className={`office-light-twin${reduceMotion ? ' reduce-motion' : ''}`}
       data-testid="office-floorplan-2d"
     >
-      <div className="office-light-stage" aria-hidden>
-        <div className="office-light-window office-light-window-n" />
-        <div className="office-light-window office-light-window-s" />
+      <div className="office-light-blueprint" aria-hidden>
+        <div className="office-light-sky" />
+        <div className="office-light-floor-grain" />
+        <div className="office-light-wall wall-n" />
+        <div className="office-light-wall wall-s" />
+        <div className="office-light-wall wall-w" />
+        <div className="office-light-wall wall-e" />
+        <div className="office-light-window-row north">
+          <span className="office-light-pane" />
+          <span className="office-light-pane" />
+          <span className="office-light-pane" />
+          <span className="office-light-pane" />
+        </div>
+        <div className="office-light-window-row south">
+          <span className="office-light-pane" />
+          <span className="office-light-pane" />
+        </div>
         <div className="office-light-corridor" />
+        <div className="office-light-corridor-cross" />
       </div>
       <div className="office-floorplan office-floorplan-light">
         {ROOMS.map((room) => {
@@ -1140,6 +1206,10 @@ function OfficeLightTwin({
               onClick={() => onSelect(room.id)}
               title={locked ? lockedHintIt(room.id) : `Entra in ${room.label}`}
             >
+              <span className="floor-room-furniture" aria-hidden>
+                <span className="floor-desk" />
+                <span className="floor-desk" />
+              </span>
               <span className="floor-hotspot-row">
                 <span className="floor-hotspot">{room.hotspot}</span>
                 {needsDecision && (
@@ -1248,7 +1318,7 @@ function HardenedOfficeCanvas({
 }) {
   return (
     <Canvas
-      camera={{ position: [8.6, 9.6, 10.6], fov: 40, near: 0.1, far: 80 }}
+      camera={{ position: [9.1, 10.2, 11.0], fov: 38, near: 0.1, far: 80 }}
       dpr={[1, 1.25]}
       gl={{
         antialias: true,
@@ -1260,10 +1330,11 @@ function HardenedOfficeCanvas({
       }}
       frameloop="always"
       style={{ touchAction: 'manipulation' }}
-      onCreated={({ gl, camera }) => {
-        gl.setClearColor('#f3ebe0')
+      onCreated={({ gl, camera, scene }) => {
+        gl.setClearColor('#d9e8f2')
         gl.shadowMap.enabled = false
-        camera.lookAt(0, 0.3, 0)
+        scene.fog = null
+        camera.lookAt(0, 0.45, 0.15)
         const canvas = gl.domElement
         const onLost = (e: Event) => {
           e.preventDefault()
@@ -1278,9 +1349,12 @@ function HardenedOfficeCanvas({
     >
       <Suspense fallback={null}>
         <FixedCamera />
-        <ambientLight intensity={0.92} />
-        <hemisphereLight args={['#ffffff', '#e8e4d8', 0.45]} />
-        <directionalLight position={[5, 10, 3]} intensity={0.35} />
+        <ambientLight intensity={0.78} />
+        <hemisphereLight args={['#f5fbff', '#d8c9b2', 0.62]} />
+        <directionalLight position={[7, 12, 4]} intensity={0.55} color="#fff6ea" />
+        <directionalLight position={[-6, 6, -2]} intensity={0.22} color="#cfe6f5" />
+        <pointLight position={[5.4, 1.4, 2.4]} intensity={0.35} distance={8} color="#dff2ff" />
+        <pointLight position={[-5.4, 1.4, -2.2]} intensity={0.28} distance={8} color="#fff1df" />
         <OfficeBuilding
           lights={lights}
           enabled={enabled}
@@ -1348,125 +1422,130 @@ export function OfficeTwin({
 
   const modeBadge = useLight ? 'Vista leggera' : 'Vista completa'
   const modeHint = useLight
-    ? 'Vista leggera dell’ufficio — stessa mappa dei reparti, ottimizzata per ogni browser. Clicca una stanza.'
-    : 'Vista fissa 3D dell’ufficio. Clicca hotspot, ometti o pavimento per entrare nel reparto.'
+    ? 'Vista leggera — stessa pianta dei reparti, pensata per ogni browser. Tocca una stanza.'
+    : 'Vista fissa 3D. Tocca hotspot, ometti o pavimento per entrare nel reparto.'
 
   return (
     <section className="office-twin" data-testid="office-twin" data-office-mode={useLight ? 'light' : 'full'}>
-      <div className="page-intro">
-        <div>
-          <h1>Ufficio Monny</h1>
-          <p>
-            Ufficio digitale dei reparti. Scrivi cosa vuoi che Monny faccia, oppure
-            scegli un suggerimento. Quando una skill lavora, si accendono luci e ometti.
-            I reparti non nel piano restano chiusi.
-          </p>
-        </div>
-        <span
-          className={`office-mode-badge ${useLight ? 'is-light' : 'is-full'}`}
-          data-testid="office-mode-badge"
-          title={
-            officeViewEntitled
-              ? `Preferenza: ${officeMode}`
-              : 'Modalità automatica (upgrade piano per scegliere Completa / Leggera)'
-          }
-        >
-          {modeBadge}
-        </span>
-      </div>
-
-      <form
-        className="office-compose"
-        data-testid="office-compose"
-        onSubmit={(e) => {
-          e.preventDefault()
-          sendGoal(goalDraft)
-        }}
-      >
-        <label className="sr-only" htmlFor="office-goal">
-          Richiesta per Monny
-        </label>
-        <textarea
-          id="office-goal"
-          rows={2}
-          value={goalDraft}
-          disabled={busy}
-          placeholder="Scrivi cosa vuoi che Monny faccia…"
-          onChange={(e) => setGoalDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-              e.preventDefault()
-              sendGoal(goalDraft)
-            }
-          }}
-        />
-        <button
-          type="submit"
-          className="btn btn-primary"
-          disabled={busy || !goalDraft.trim()}
-        >
-          {busy ? 'In corso…' : 'Avvia'}
-        </button>
-      </form>
-
-      <div className="office-shortcuts">
-        <span className="office-shortcuts-label">Suggerimenti</span>
-        {OFFICE_SHORTCUTS.map((s) => {
-          const allowed = s.goal.includes('seo') ? seoOn : spendOn
-          return (
-            <button
-              key={s.goal}
-              type="button"
-              className="chip-shortcut"
-              disabled={busy || !allowed}
-              title={allowed ? undefined : lockedHintIt(s.goal.includes('seo') ? 'seo' : 'spend')}
-              onClick={() => sendGoal(s.goal)}
-            >
-              {s.label}
-            </button>
-          )
-        })}
-        {statusLine && <span className="office-status">{statusLine}</span>}
-        {litNames && <span className="office-status lit">Luci: {litNames}</span>}
-        {pendingTotal > 0 && (
-          <span className="office-status decisions">
-            {pendingTotal} {pendingTotal === 1 ? 'decisione' : 'decisioni'} · Direzione
-          </span>
-        )}
-      </div>
-
-      <div
-        className={`office-viewport flat-pastel locked-view ${useLight ? 'is-2d is-light' : 'is-3d'}${
-          pendingTotal > 0 ? ' has-decisions' : ''
-        }`}
-      >
-        {desired === null ? (
-          <div className="office-viewport-loading" aria-busy="true">
-            Preparo l’ufficio…
+      <div className="office-hero">
+        <header className="office-hero-head">
+          <div>
+            <p className="office-brand-mark">Monny</p>
+            <h1>Ufficio digitale</h1>
+            <p className="office-lede">
+              Scrivi cosa vuoi fare: luci e ometti si accendono mentre i reparti lavorano.
+            </p>
           </div>
-        ) : useLight ? (
-          <OfficeLightTwin
-            lights={lights}
-            pending={pending}
-            enabled={enabled}
-            onSelect={onSelect}
-            reduceMotion={reduceMotion}
-          />
-        ) : (
-          <CanvasErrorBoundary onError={() => setFailed(true)}>
-            <HardenedOfficeCanvas
-              lights={lights}
-              pendingTotal={pendingTotal}
-              enabled={enabled}
-              onSelect={onSelect}
-              reduceMotion={reduceMotion}
-              onContextLost={() => setFailed(true)}
-            />
-          </CanvasErrorBoundary>
-        )}
-      </div>
+          <span
+            className={`office-mode-badge ${useLight ? 'is-light' : 'is-full'}`}
+            data-testid="office-mode-badge"
+            title={
+              officeViewEntitled
+                ? `Preferenza: ${officeMode}`
+                : 'Modalità automatica (upgrade piano per scegliere Completa / Leggera)'
+            }
+          >
+            {modeBadge}
+          </span>
+        </header>
 
-      <p className="office-hint">{modeHint}</p>
+        <div className="office-stage">
+          <div className="office-stage-chrome">
+            <form
+              className="office-compose"
+              data-testid="office-compose"
+              onSubmit={(e) => {
+                e.preventDefault()
+                sendGoal(goalDraft)
+              }}
+            >
+              <label className="sr-only" htmlFor="office-goal">
+                Richiesta per Monny
+              </label>
+              <textarea
+                id="office-goal"
+                rows={2}
+                value={goalDraft}
+                disabled={busy}
+                placeholder="Scrivi cosa vuoi che Monny faccia…"
+                onChange={(e) => setGoalDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                    e.preventDefault()
+                    sendGoal(goalDraft)
+                  }
+                }}
+              />
+              <button
+                type="submit"
+                className="btn btn-primary"
+                disabled={busy || !goalDraft.trim()}
+              >
+                {busy ? 'In corso…' : 'Avvia'}
+              </button>
+            </form>
+
+            <div className="office-shortcuts">
+              <span className="office-shortcuts-label">Suggerimenti</span>
+              {OFFICE_SHORTCUTS.map((s) => {
+                const allowed = s.goal.includes('seo') ? seoOn : spendOn
+                return (
+                  <button
+                    key={s.goal}
+                    type="button"
+                    className="chip-shortcut"
+                    disabled={busy || !allowed}
+                    title={allowed ? undefined : lockedHintIt(s.goal.includes('seo') ? 'seo' : 'spend')}
+                    onClick={() => sendGoal(s.goal)}
+                  >
+                    {s.label}
+                  </button>
+                )
+              })}
+              {statusLine && <span className="office-status">{statusLine}</span>}
+              {litNames && <span className="office-status lit">Luci: {litNames}</span>}
+              {pendingTotal > 0 && (
+                <span className="office-status decisions">
+                  {pendingTotal} {pendingTotal === 1 ? 'decisione' : 'decisioni'} · Direzione
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div
+            className={`office-viewport flat-pastel locked-view ${useLight ? 'is-2d is-light' : 'is-3d'}${
+              pendingTotal > 0 ? ' has-decisions' : ''
+            }`}
+          >
+            {desired === null ? (
+              <div className="office-viewport-loading" aria-busy="true">
+                Preparo l’ufficio…
+              </div>
+            ) : useLight ? (
+              <OfficeLightTwin
+                lights={lights}
+                pending={pending}
+                enabled={enabled}
+                onSelect={onSelect}
+                reduceMotion={reduceMotion}
+              />
+            ) : (
+              <CanvasErrorBoundary onError={() => setFailed(true)}>
+                <HardenedOfficeCanvas
+                  lights={lights}
+                  pendingTotal={pendingTotal}
+                  enabled={enabled}
+                  onSelect={onSelect}
+                  reduceMotion={reduceMotion}
+                  onContextLost={() => setFailed(true)}
+                />
+              </CanvasErrorBoundary>
+            )}
+          </div>
+        </div>
+
+        <p className="office-hint">{modeHint}</p>
+      </div>
     </section>
   )
 }
