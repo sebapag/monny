@@ -57,6 +57,10 @@ def run_agent(
     thread_id: str | None = None,
     dry_run: bool | None = None,
     run_id: str | None = None,
+    plan: list[str] | None = None,
+    planner_source: str | None = None,
+    planner_note: str | None = None,
+    planner_detail: str | None = None,
 ) -> dict:
     settings = get_settings()
     graph = get_graph()
@@ -68,6 +72,15 @@ def run_agent(
         "thread_id": tid,
         "dry_run": settings.dry_run if dry_run is None else dry_run,
     }
+    # Optional precomputed plan (API) — avoids a second LLM call in planner_node.
+    if plan is not None:
+        state["plan"] = plan
+    if planner_source:
+        state["planner_source"] = planner_source
+    if planner_note:
+        state["planner_note"] = planner_note
+    if planner_detail:
+        state["planner_detail"] = planner_detail
     if run_id:
         state["run_id"] = run_id
         get_run_store(settings.monny_data_dir).set_run_status(

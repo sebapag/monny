@@ -92,6 +92,18 @@ pytest   # no live credentials required
 cd web && npm test && npm run build
 ```
 
+## Planner LLM (optional — xAI Grok)
+
+By default the LangGraph planner uses a **keyword stub** (no network). To enable a real model for short skill plans only (no heavy CoT / tool loop):
+
+```bash
+export XAI_API_KEY=...                         # required for live LLM
+export MONNY_LLM_MODEL=grok-4.20-0309-non-reasoning   # default: light non-reasoning
+export MONNY_LLM_BASE_URL=https://api.x.ai/v1         # OpenAI-compatible
+```
+
+If the key is missing or the call fails, Monny falls back to the stub planner (CI/local dry-run stay green). HITL and skills are unchanged.
+
 ## Secret refs & live mode
 
 Secrets are **names** in `tenant.yaml` (`secret_ref`), resolved from the environment at runtime. Never commit values.

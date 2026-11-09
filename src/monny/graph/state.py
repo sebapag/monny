@@ -13,6 +13,9 @@ class AgentState(TypedDict, total=False):
     dry_run: bool
     run_id: str
     plan: list[str]
+    planner_source: str
+    planner_note: str
+    planner_detail: str
     findings: list[dict[str, Any]]
     report: dict[str, Any]
     pending_proposals: list[dict[str, Any]]
