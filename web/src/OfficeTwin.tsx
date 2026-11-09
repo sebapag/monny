@@ -1300,7 +1300,7 @@ class CanvasErrorBoundary extends Component<
   }
 }
 
-/** Safer R3F Canvas: low DPR, soft WebGL attrs, context-loss → light twin. */
+/** Safer R3F Canvas: low DPR, soft WebGL attrs, context-loss / 0-size → light twin. */
 function HardenedOfficeCanvas({
   lights,
   pendingTotal,
@@ -1329,7 +1329,7 @@ function HardenedOfficeCanvas({
         depth: true,
       }}
       frameloop="always"
-      style={{ touchAction: 'manipulation' }}
+      style={{ touchAction: 'manipulation', width: '100%', height: '100%' }}
       onCreated={({ gl, camera, scene }) => {
         gl.setClearColor('#d9e8f2')
         gl.shadowMap.enabled = false
@@ -1345,6 +1345,10 @@ function HardenedOfficeCanvas({
         }
         canvas.addEventListener('webglcontextlost', onLost, false)
         canvas.addEventListener('webglcontextrestored', onRestored, false)
+        // Collapsed CSS stage (0×0) → fall back to Leggera instead of a blank WebGL plane.
+        requestAnimationFrame(() => {
+          if (canvas.clientWidth < 8 || canvas.clientHeight < 8) onContextLost()
+        })
       }}
     >
       <Suspense fallback={null}>
@@ -1449,7 +1453,7 @@ export function OfficeTwin({
           </span>
         </header>
 
-        <div className="office-stage">
+        <div className="office-stage" data-testid="office-stage">
           <div className="office-stage-chrome">
             <form
               className="office-compose"

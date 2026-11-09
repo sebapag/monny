@@ -1122,13 +1122,13 @@ a {
 /* —— Office digital twin —— */
 .office-twin {
   animation: rise 560ms cubic-bezier(0.22, 1, 0.36, 1) both;
-  width: min(1180px, calc(100% + 0px));
+  width: 100%;
   margin-inline: auto;
 }
 
 .office-hero {
   display: grid;
-  gap: 0.85rem;
+  gap: 0.65rem;
 }
 
 .office-hero-head {
@@ -1142,33 +1142,41 @@ a {
   margin: 0;
   font-family: var(--font-display);
   font-weight: 800;
-  font-size: clamp(2rem, 4.2vw, 2.75rem);
+  font-size: clamp(1.7rem, 3.6vw, 2.45rem);
   letter-spacing: -0.045em;
   line-height: 1;
   color: var(--brand-navy);
 }
 
 .office-hero-head h1 {
-  margin: 0.28rem 0 0;
+  margin: 0.2rem 0 0;
   font-family: var(--font-display);
-  font-size: clamp(1.05rem, 2vw, 1.25rem);
+  font-size: clamp(1rem, 1.8vw, 1.2rem);
   font-weight: 600;
   letter-spacing: -0.02em;
   color: var(--charcoal);
 }
 
 .office-lede {
-  margin: 0.35rem 0 0;
+  margin: 0.28rem 0 0;
   max-width: 42ch;
   color: var(--slate);
-  font-size: 0.95rem;
-  line-height: 1.45;
+  font-size: 0.92rem;
+  line-height: 1.4;
 }
 
+/*
+  Stage is height-capped to the viewport. Chrome (compose) is a top track;
+  the office viewport fills the remaining 1fr so Completa/Leggera never get
+  pushed below the fold by stacking chrome + a second 62vh block.
+*/
 .office-stage {
   position: relative;
   display: grid;
+  grid-template-rows: auto minmax(280px, 1fr);
   gap: 0;
+  height: min(68vh, 640px);
+  min-height: 420px;
   border-radius: 18px;
   overflow: hidden;
   background:
@@ -1185,9 +1193,9 @@ a {
   position: relative;
   z-index: 2;
   display: grid;
-  gap: 0.55rem;
-  padding: 0.85rem 0.95rem 0.65rem;
-  background: linear-gradient(180deg, rgba(255, 252, 248, 0.92), rgba(255, 252, 248, 0.72));
+  gap: 0.45rem;
+  padding: 0.7rem 0.85rem 0.55rem;
+  background: linear-gradient(180deg, rgba(255, 252, 248, 0.94), rgba(255, 252, 248, 0.78));
   backdrop-filter: blur(10px);
   border-bottom: 1px solid rgba(200, 188, 168, 0.35);
 }
@@ -1374,8 +1382,10 @@ a {
   overflow: hidden;
   background: transparent;
   box-shadow: none;
-  min-height: 440px;
-  height: min(62vh, 620px);
+  /* Fill the stage's 1fr row — never a second full-viewport stack. */
+  min-height: 280px;
+  height: 100%;
+  min-width: 0;
 }
 
 .office-viewport.flat-pastel.is-3d {
@@ -1423,7 +1433,8 @@ a {
 .office-viewport-loading {
   display: grid;
   place-items: center;
-  min-height: 400px;
+  height: 100%;
+  min-height: 220px;
   color: var(--steel);
   font-size: 0.9rem;
 }
@@ -1431,7 +1442,7 @@ a {
 .office-light-twin {
   position: relative;
   height: 100%;
-  min-height: 400px;
+  min-height: 0;
   border-radius: 14px;
   overflow: hidden;
   isolation: isolate;
@@ -1564,7 +1575,7 @@ a {
   position: relative;
   z-index: 2;
   height: 100%;
-  min-height: 400px;
+  min-height: 0;
   padding: 9% 5.5% 9%;
   gap: 3px;
   grid-template-columns: 1fr 1fr 1fr 1fr;
@@ -1700,7 +1711,7 @@ a {
     'direzione direzione direzione direzione';
   gap: 0.55rem;
   height: 100%;
-  min-height: 380px;
+  min-height: 0;
 }
 
 .office-floorplan-light .floor-room {
@@ -1915,27 +1926,56 @@ a {
 }
 
 @media (max-width: 720px) {
+  .office-hero {
+    gap: 0.45rem;
+  }
+
   .office-hero-head {
     flex-direction: column;
     align-items: stretch;
+    gap: 0.45rem;
   }
 
   .office-mode-badge {
     align-self: flex-start;
   }
 
+  .office-lede {
+    font-size: 0.86rem;
+  }
+
   .office-compose {
     grid-template-columns: 1fr;
   }
 
-  .office-viewport {
+  .office-compose textarea {
+    min-height: 44px;
+  }
+
+  .office-stage {
+    height: min(64vh, 560px);
     min-height: 360px;
-    height: min(54vh, 480px);
+    grid-template-rows: auto minmax(220px, 1fr);
+  }
+
+  .office-stage-chrome {
+    padding: 0.55rem 0.65rem 0.4rem;
+    gap: 0.3rem;
+  }
+
+  .office-viewport {
+    min-height: 220px;
+    height: 100%;
   }
 
   .office-floorplan-light {
     padding: 10% 4% 9%;
     gap: 0.35rem;
+    min-height: 0;
+  }
+
+  .office-light-twin {
+    min-height: 0;
   }
 
   .office-floorplan-light .floor-room {
