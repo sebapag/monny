@@ -40,7 +40,11 @@ from monny.config.loader import (
 from monny.config.models import TenantConfig
 from monny.config.settings import get_settings
 from monny.graph.app import run_agent
-from monny.graph.nodes.planner import _infer_plan, _infer_plan_with_meta
+from monny.graph.nodes.planner import (
+    _apply_entitlements,
+    _infer_plan_with_meta,
+    _stub_infer_plan_raw,
+)
 from monny.llm.client import llm_configured
 from monny.skills.apply_stub import apply_approved
 from monny.storage.approvals import ApprovalStore
@@ -128,10 +132,10 @@ def create_app() -> FastAPI:
         thread_id: str,
         tenant: TenantConfig,
     ) -> str:
-        inference = _infer_plan_with_meta(goal, message, tenant=tenant)
-        plan = inference.skills
-        # Include shopify_read in planned UX steps
-        planned = ["shopify_read", *plan]
+        # Instant keyword stub for the timeline so POST /api/runs never blocks on xAI.
+        # Optional LLM upgrade happens in the worker (same stub if key missing / fails).
+        stub_plan = _apply_entitlements(_stub_infer_plan_raw(goal, message), tenant)
+        planned = ["shopify_read", *stub_plan]
         run = runs().create(
             tenant_id=tenant_id,
             thread_id=thread_id,
@@ -141,6 +145,10 @@ def create_app() -> FastAPI:
 
         def _worker() -> None:
             try:
+                inference = _infer_plan_with_meta(goal, message, tenant=tenant)
+                plan = inference.skills
+                if plan != stub_plan:
+                    runs().replan(run.id, ["shopify_read", *plan])
                 run_agent(
                     tenant_id=tenant_id,
                     goal=goal,
@@ -216,7 +224,8 @@ def create_app() -> FastAPI:
         thread_id = body.thread_id or f"{body.tenant_id}-web"
         goal = body.goal or body.message
         _refuse_disabled_skills(cfg, goal, body.message)
-        plan = _infer_plan(goal, body.message, tenant=cfg)
+        inference = _infer_plan_with_meta(goal, body.message, tenant=cfg)
+        plan = inference.skills
         run = runs().create(
             tenant_id=body.tenant_id,
             thread_id=thread_id,
@@ -229,6 +238,10 @@ def create_app() -> FastAPI:
             message=body.message,
             thread_id=thread_id,
             run_id=run.id,
+            plan=plan,
+            planner_source=inference.source,
+            planner_note=inference.note_it,
+            planner_detail=inference.detail,
         )
         return ChatResponse(
             thread_id=thread_id,

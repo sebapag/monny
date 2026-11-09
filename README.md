@@ -98,11 +98,12 @@ By default the LangGraph planner uses a **keyword stub** (no network). To enable
 
 ```bash
 export XAI_API_KEY=...                         # required for live LLM
+export MONNY_LLM_ENABLED=1                     # set 0 to force stub even with a key
 export MONNY_LLM_MODEL=grok-4.20-0309-non-reasoning   # default: light non-reasoning
 export MONNY_LLM_BASE_URL=https://api.x.ai/v1         # OpenAI-compatible
 ```
 
-If the key is missing or the call fails, Monny falls back to the stub planner (CI/local dry-run stay green). HITL and skills are unchanged.
+If the key is missing, `MONNY_LLM_ENABLED=0`, or the call fails, Monny falls back to the stub planner (CI/local dry-run stay green). HITL and skills are unchanged. `POST /api/runs` never blocks on xAI — planning upgrades in the background worker.
 
 ## Secret refs & live mode
 

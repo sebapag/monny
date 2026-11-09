@@ -152,6 +152,44 @@ class RunStore:
         items.sort(key=lambda r: r.created_at, reverse=True)
         return [deepcopy(r) for r in items[:limit]]
 
+    def replan(self, run_id: str, planned_skills: list[str]) -> None:
+        """Rebuild pending timeline steps before the graph starts (LLM upgraded plan)."""
+        with self._lock:
+            run = self._runs[run_id]
+            if run.status not in {"queued", "running"}:
+                return
+            # Only rewrite while planner has not finished — worker calls this pre-invoke.
+            planner = next((s for s in run.steps if s.skill == "planner"), None)
+            if planner is not None and planner.status == "done":
+                return
+            sequence = ["planner"]
+            for skill in planned_skills or []:
+                if skill == "reporting":
+                    continue
+                if skill == "seo_audit":
+                    if "seo_crawler" not in sequence:
+                        sequence.append("seo_crawler")
+                    if "seo_audit" not in sequence:
+                        sequence.append("seo_audit")
+                    continue
+                if skill not in sequence:
+                    sequence.append(skill)
+            if "reporting" not in sequence:
+                sequence.append("reporting")
+            sequence.append("hitl")
+            run.steps = [
+                TimelineStep(
+                    id=f"{run_id}-{skill}-{idx}",
+                    skill=skill,
+                    label=SKILL_LABELS.get(skill, skill),
+                    status="pending",
+                    detail="In attesa…",
+                )
+                for idx, skill in enumerate(sequence)
+            ]
+            run.updated_at = _now()
+            self._persist(run)
+
     def set_run_status(
         self,
         run_id: str,

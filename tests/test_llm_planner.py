@@ -35,6 +35,14 @@ def test_stub_planner_without_api_key(monkeypatch):
     assert plan[-1] == "reporting"
 
 
+def test_stub_forced_when_llm_disabled(monkeypatch):
+    monkeypatch.setenv("XAI_API_KEY", "test-key-not-real")
+    monkeypatch.setenv("MONNY_LLM_ENABLED", "0")
+    get_settings.cache_clear()
+    assert not llm_configured()
+    assert infer_plan_raw_with_meta("seo audit", "").source == "stub"
+
+
 def test_parse_plan_json_fenced_and_stray_text():
     raw = 'Sure.\n```json\n{"skills":["seo_audit","reporting"]}\n```\n'
     assert parse_plan_json(raw) == ["seo_audit", "reporting"]
