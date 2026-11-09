@@ -4,16 +4,20 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import httpx
+
 from monny.config.entitlements import filter_plan
 from monny.config.loader import load_tenant
 from monny.config.models import TenantConfig
-from monny.config.settings import get_settings
+from monny.config.settings import Settings, get_settings
 from monny.graph import timeline
 from monny.graph.state import AgentState
+from monny.llm.plan import PlanInference, infer_plan_skills
 from monny.storage.runs import SKILL_LABELS
 
 
-def _infer_plan_raw(goal: str, message: str) -> list[str]:
+def _stub_infer_plan_raw(goal: str, message: str) -> list[str]:
+    """Keyword/heuristic planner — used when no LLM key or as fallback."""
     text = f"{goal} {message}".lower()
     plan: list[str] = []
 
@@ -55,12 +59,37 @@ def _infer_plan_raw(goal: str, message: str) -> list[str]:
     return ordered
 
 
-def _infer_plan(
+def _infer_plan_raw(
     goal: str,
     message: str,
-    tenant: TenantConfig | None = None,
+    *,
+    settings: Settings | None = None,
+    client: httpx.Client | None = None,
 ) -> list[str]:
-    plan = _infer_plan_raw(goal, message)
+    """Plan skill ids — Grok when XAI_API_KEY is set, else keyword stub."""
+    return infer_plan_raw_with_meta(
+        goal, message, settings=settings, client=client
+    ).skills
+
+
+def infer_plan_raw_with_meta(
+    goal: str,
+    message: str,
+    *,
+    settings: Settings | None = None,
+    client: httpx.Client | None = None,
+) -> PlanInference:
+    stub = _stub_infer_plan_raw(goal, message)
+    return infer_plan_skills(
+        goal,
+        message,
+        stub_plan=stub,
+        settings=settings,
+        client=client,
+    )
+
+
+def _apply_entitlements(plan: list[str], tenant: TenantConfig | None) -> list[str]:
     if tenant is None:
         return plan
     filtered = filter_plan(tenant, plan)
@@ -70,20 +99,87 @@ def _infer_plan(
     return filtered
 
 
+def _infer_plan(
+    goal: str,
+    message: str,
+    tenant: TenantConfig | None = None,
+    *,
+    settings: Settings | None = None,
+    client: httpx.Client | None = None,
+) -> list[str]:
+    inference = infer_plan_raw_with_meta(
+        goal, message, settings=settings, client=client
+    )
+    return _apply_entitlements(inference.skills, tenant)
+
+
+def _infer_plan_with_meta(
+    goal: str,
+    message: str,
+    tenant: TenantConfig | None = None,
+    *,
+    settings: Settings | None = None,
+    client: httpx.Client | None = None,
+) -> PlanInference:
+    inference = infer_plan_raw_with_meta(
+        goal, message, settings=settings, client=client
+    )
+    skills = _apply_entitlements(inference.skills, tenant)
+    return PlanInference(
+        skills=skills,
+        source=inference.source,
+        note_it=inference.note_it,
+        detail=inference.detail,
+    )
+
+
 def planner_node(state: AgentState) -> dict:
     run_id = state.get("run_id")
     timeline.start(run_id, "planner", "Sto scegliendo le skill per il tuo obiettivo…")
     goal = state.get("goal") or state.get("message") or "report spend ultimi 7 giorni"
     settings = get_settings()
     tenant = load_tenant(state["tenant_id"], Path(settings.monny_tenants_dir).resolve())
-    plan = _infer_plan(goal, state.get("message", ""), tenant=tenant)
+
+    # Reuse a precomputed plan (API previews once) to avoid a second LLM call.
+    precomputed = state.get("plan")
+    if precomputed:
+        plan = _apply_entitlements(list(precomputed), tenant)
+        note_it = state.get("planner_note")
+        detail = state.get("planner_detail")
+        source = state.get("planner_source") or "stub"
+    else:
+        inference = _infer_plan_with_meta(
+            goal, state.get("message", ""), tenant=tenant, settings=settings
+        )
+        plan = inference.skills
+        note_it = inference.note_it
+        detail = inference.detail
+        source = inference.source
+
     plan_labels = [SKILL_LABELS.get(s, s) for s in plan]
-    timeline.done(run_id, "planner", f"Piano: {', '.join(plan_labels)}")
-    return {
+    done_msg = f"Piano: {', '.join(plan_labels)}"
+    if note_it:
+        # Italian UX note first; technical detail stays secondary/collapsed in timeline text.
+        done_msg = note_it
+        if detail:
+            done_msg = f"{note_it} (dettaglio tecnico: {detail})"
+        else:
+            done_msg = f"{note_it} Piano: {', '.join(plan_labels)}"
+    elif source == "llm":
+        done_msg = f"Piano (assistente): {', '.join(plan_labels)}"
+
+    timeline.done(run_id, "planner", done_msg)
+    out: dict = {
         "goal": goal,
         "plan": plan,
         "findings": [],
         "pending_proposals": [],
         "approval_ids": [],
         "status": "planning",
+        "planner_source": source,
     }
+    if note_it:
+        out["planner_note"] = note_it
+    if detail:
+        out["planner_detail"] = detail
+    return out

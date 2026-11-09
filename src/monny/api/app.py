@@ -40,7 +40,8 @@ from monny.config.loader import (
 from monny.config.models import TenantConfig
 from monny.config.settings import get_settings
 from monny.graph.app import run_agent
-from monny.graph.nodes.planner import _infer_plan
+from monny.graph.nodes.planner import _infer_plan, _infer_plan_with_meta
+from monny.llm.client import llm_configured
 from monny.skills.apply_stub import apply_approved
 from monny.storage.approvals import ApprovalStore
 from monny.storage.artifacts import (
@@ -70,10 +71,17 @@ def create_app() -> FastAPI:
         return get_run_store(settings.monny_data_dir)
 
     def _health_payload() -> dict[str, Any]:
+        llm_on = llm_configured(settings)
         return {
             "ok": True,
             "dry_run": settings.dry_run,
             "default_tenant": settings.monny_default_tenant,
+            "llm": {
+                "enabled": llm_on,
+                "provider": "xai" if llm_on else None,
+                "model": settings.monny_llm_model if llm_on else None,
+                "base_url": settings.monny_llm_base_url if llm_on else None,
+            },
         }
 
     @app.get("/health")
@@ -120,7 +128,8 @@ def create_app() -> FastAPI:
         thread_id: str,
         tenant: TenantConfig,
     ) -> str:
-        plan = _infer_plan(goal, message, tenant=tenant)
+        inference = _infer_plan_with_meta(goal, message, tenant=tenant)
+        plan = inference.skills
         # Include shopify_read in planned UX steps
         planned = ["shopify_read", *plan]
         run = runs().create(
@@ -138,6 +147,10 @@ def create_app() -> FastAPI:
                     message=message,
                     thread_id=thread_id,
                     run_id=run.id,
+                    plan=plan,
+                    planner_source=inference.source,
+                    planner_note=inference.note_it,
+                    planner_detail=inference.detail,
                 )
             except Exception as exc:  # noqa: BLE001 — surface to run store
                 runs().fail(run.id, str(exc))
