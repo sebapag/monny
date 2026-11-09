@@ -16,6 +16,10 @@ export const CHANNEL_LABELS: Record<string, string> = {
   shopify: 'Shopify',
   seo: 'SEO',
   site: 'Sito',
+  operations: 'Operations',
+  design: 'Design',
+  it: 'IT',
+  controlling: 'Controlling',
 }
 
 export const SKILL_LABELS: Record<string, string> = {
@@ -28,6 +32,18 @@ export const SKILL_LABELS: Record<string, string> = {
   seo_crawler: 'Crawl pagine',
   shopify_promo: 'Promo Shopify',
   lead_warming: 'Lead warming',
+  ops_orders: 'Stato ordini',
+  ops_inventory: 'Giacenze',
+  ops_shipping: 'Spedizioni',
+  design_assets: 'Asset creativi',
+  design_ads: 'Creatività ads',
+  design_brand: 'Brand kit',
+  it_integrations: 'Integrazioni',
+  it_access: 'Accessi da completare',
+  it_monitoring: 'Monitoring runtime',
+  ctrl_budget: 'Budget vs spend',
+  ctrl_kpi: 'KPI snapshot',
+  ctrl_costs: 'Costi anomali',
   reporting: 'Report',
   hitl: 'Approvazione umana',
 }

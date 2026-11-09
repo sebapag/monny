@@ -29,6 +29,9 @@
   --tint-yellow-bold: #f9e79f;
   --tint-cream: #f8f5e8;
   --tint-gray: #f0eeec;
+  --tint-amber: #f3e6d0;
+  --tint-slate: #dce4f0;
+  --tint-sage: #e2edd8;
 
   /* Surfaces */
   --canvas: #ffffff;
@@ -862,6 +865,18 @@ a {
 .skill-step.family-lead {
   --step-tint: var(--tint-rose);
 }
+.skill-step.family-ops {
+  --step-tint: var(--tint-amber);
+}
+.skill-step.family-design {
+  --step-tint: var(--tint-lavender);
+}
+.skill-step.family-it {
+  --step-tint: var(--tint-slate);
+}
+.skill-step.family-controlling {
+  --step-tint: var(--tint-sage);
+}
 .skill-step.family-report {
   --step-tint: var(--tint-cream);
 }
@@ -1551,9 +1566,9 @@ a {
 .office-light-corridor {
   position: absolute;
   left: 48.5%;
-  top: 16%;
-  bottom: 28%;
-  width: 3%;
+  top: 14%;
+  bottom: 22%;
+  width: 2.6%;
   border-radius: 4px;
   background: linear-gradient(180deg, rgba(232, 220, 200, 0.75), rgba(220, 200, 170, 0.55));
   box-shadow: inset 0 0 0 1px rgba(154, 123, 82, 0.15);
@@ -1562,12 +1577,23 @@ a {
 
 .office-light-corridor-cross {
   position: absolute;
-  left: 18%;
-  right: 18%;
-  top: 46%;
-  height: 3.2%;
+  left: 10%;
+  right: 10%;
+  top: 38%;
+  height: 2.6%;
   border-radius: 4px;
   background: linear-gradient(90deg, rgba(232, 220, 200, 0.55), rgba(220, 200, 170, 0.7));
+  z-index: 1;
+}
+
+.office-light-corridor-wing {
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  top: 22%;
+  height: 2.4%;
+  border-radius: 4px;
+  background: linear-gradient(90deg, rgba(232, 220, 200, 0.5), rgba(220, 200, 170, 0.65));
   z-index: 1;
 }
 
@@ -1576,10 +1602,10 @@ a {
   z-index: 2;
   height: 100%;
   min-height: 0;
-  padding: 9% 5.5% 9%;
+  padding: 8% 4.5% 7%;
   gap: 3px;
   grid-template-columns: 1fr 1fr 1fr 1fr;
-  grid-template-rows: 1.05fr 1.05fr 0.95fr;
+  grid-template-rows: 0.92fr 1fr 1fr 1.05fr;
 }
 
 .office-view-toggles select:disabled {
@@ -1706,10 +1732,11 @@ a {
 .office-floorplan {
   display: grid;
   grid-template-areas:
+    'ops design it controlling'
     'shopify shopify lead lead'
     'spend spend seo seo'
     'direzione direzione direzione direzione';
-  gap: 0.55rem;
+  gap: 0.45rem;
   height: 100%;
   min-height: 0;
 }
@@ -1807,12 +1834,20 @@ a {
 .floor-room.tint-mint { background: #c8ebd4; }
 .floor-room.tint-peach { background: #ffdcc0; }
 .floor-room.tint-rose { background: #f8cfe0; }
+.floor-room.tint-amber { background: #f0dfc0; }
+.floor-room.tint-lavender { background: #ddd4f2; }
+.floor-room.tint-slate { background: #cfd9e8; }
+.floor-room.tint-sage { background: #d4e5c6; }
 
 .office-floorplan-light .floor-room.tint-yellow { background: linear-gradient(165deg, #fff8d8, #f5e39a); }
 .office-floorplan-light .floor-room.tint-sky { background: linear-gradient(165deg, #e5f3fb, #b7d8f0); }
 .office-floorplan-light .floor-room.tint-mint { background: linear-gradient(165deg, #e3f6ea, #aedfbf); }
 .office-floorplan-light .floor-room.tint-peach { background: linear-gradient(165deg, #ffe9d6, #f0bf92); }
 .office-floorplan-light .floor-room.tint-rose { background: linear-gradient(165deg, #fde8f0, #efb4cb); }
+.office-floorplan-light .floor-room.tint-amber { background: linear-gradient(165deg, #f8ecd8, #e4c896); }
+.office-floorplan-light .floor-room.tint-lavender { background: linear-gradient(165deg, #efeafb, #cfc0ec); }
+.office-floorplan-light .floor-room.tint-slate { background: linear-gradient(165deg, #e8eef6, #b8c7db); }
+.office-floorplan-light .floor-room.tint-sage { background: linear-gradient(165deg, #eaf4e3, #b9d6a6); }
 
 .floor-room.light-off {
   filter: saturate(0.62) brightness(0.97);
@@ -2022,6 +2057,18 @@ a {
 }
 .dept-shell.tint-rose {
   background: linear-gradient(180deg, var(--tint-rose) 0%, var(--canvas) 28%);
+}
+.dept-shell.tint-amber {
+  background: linear-gradient(180deg, var(--tint-amber) 0%, var(--canvas) 28%);
+}
+.dept-shell.tint-lavender {
+  background: linear-gradient(180deg, var(--tint-lavender) 0%, var(--canvas) 28%);
+}
+.dept-shell.tint-slate {
+  background: linear-gradient(180deg, var(--tint-slate) 0%, var(--canvas) 28%);
+}
+.dept-shell.tint-sage {
+  background: linear-gradient(180deg, var(--tint-sage) 0%, var(--canvas) 28%);
 }
 
 .dept-header {

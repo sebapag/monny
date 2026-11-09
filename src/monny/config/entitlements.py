@@ -15,6 +15,18 @@ SKILL_TO_ENTITLEMENT: dict[str, str] = {
     "seo_apply": "seo",
     "shopify_promo": "shopify",
     "lead_warming": "leads",
+    "ops_orders": "operations",
+    "ops_inventory": "operations",
+    "ops_shipping": "operations",
+    "design_assets": "design",
+    "design_ads": "design",
+    "design_brand": "design",
+    "it_integrations": "it",
+    "it_access": "it",
+    "it_monitoring": "it",
+    "ctrl_budget": "controlling",
+    "ctrl_kpi": "controlling",
+    "ctrl_costs": "controlling",
 }
 
 # Always available (not gated by subscription.skills).
@@ -32,6 +44,10 @@ ENTITLEMENT_LABELS_IT: dict[str, str] = {
     "seo": "SEO",
     "shopify": "Negozio Shopify",
     "leads": "Lead",
+    "operations": "Operations",
+    "design": "Graphic Designer",
+    "it": "IT",
+    "controlling": "Controlling",
 }
 
 FEATURE_LABELS_IT: dict[str, str] = {
@@ -96,6 +112,34 @@ def blocked_entitlements_for_text(tenant: TenantConfig, text: str) -> list[str]:
         wanted.append("spend")
     if any(k in lowered for k in ("seo", "title", "meta", "page", "sitemap", "crawl")):
         wanted.append("seo")
+    if any(
+        k in lowered
+        for k in ("operat", "fulfillment", "giacenz", "inventory", "stock", "spedizion", "shipping", "ordini")
+    ):
+        wanted.append("operations")
+    if any(
+        k in lowered
+        for k in ("design", "creative", "creativit", "brand kit", "asset creativ", "graphic")
+    ):
+        wanted.append("design")
+    if any(
+        k in lowered
+        for k in (
+            "integraz",
+            "integration",
+            "accessi",
+            "credenzial",
+            "uptime",
+            "monitoring",
+            "runtime",
+        )
+    ):
+        wanted.append("it")
+    if any(
+        k in lowered
+        for k in ("controlling", "budget vs", "kpi snapshot", "costi anomali", "cost alert")
+    ):
+        wanted.append("controlling")
 
     skills = tenant.subscription.skills
     blocked: list[str] = []

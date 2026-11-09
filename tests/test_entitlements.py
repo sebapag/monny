@@ -30,6 +30,10 @@ def _demo_with_skills(**flags: bool) -> TenantConfig:
         seo=flags.get("seo", True),
         shopify=flags.get("shopify", False),
         leads=flags.get("leads", False),
+        operations=flags.get("operations", False),
+        design=flags.get("design", False),
+        it=flags.get("it", False),
+        controlling=flags.get("controlling", False),
     )
     return cfg.model_copy(
         update={"subscription": SubscriptionConfig(plan="growth", skills=skills)}
@@ -43,6 +47,10 @@ def test_demo_seed_subscription_defaults():
     assert cfg.subscription.skills.seo is True
     assert cfg.subscription.skills.shopify is False
     assert cfg.subscription.skills.leads is False
+    assert cfg.subscription.skills.operations is True
+    assert cfg.subscription.skills.design is True
+    assert cfg.subscription.skills.it is True
+    assert cfg.subscription.skills.controlling is False
     assert cfg.subscription.features.office_view is True
     assert cfg.subscription.office_mode == "auto"
 
@@ -102,7 +110,16 @@ def test_api_refuses_disabled_skill_goal(tmp_path, monkeypatch):
     cfg = detail["config"]
     cfg["subscription"] = {
         "plan": "growth",
-        "skills": {"spend": True, "seo": True, "shopify": False, "leads": False},
+        "skills": {
+            "spend": True,
+            "seo": True,
+            "shopify": False,
+            "leads": False,
+            "operations": True,
+            "design": True,
+            "it": True,
+            "controlling": False,
+        },
     }
     assert client.put("/api/tenants/demo", json={"config": cfg}).status_code == 200
 

@@ -49,8 +49,8 @@ const ROOMS: RoomLayout[] = [
     id: 'direzione',
     label: 'Leadership',
     hotspot: 1,
-    position: [0, 0.04, 3.5],
-    size: [4.0, 0.1, 2.5],
+    position: [0, 0.04, 4.4],
+    size: [5.4, 0.1, 2.7],
     floor: '#fef7d6',
     floorLit: '#f9e79f',
     wall: '#f7f0e4',
@@ -61,8 +61,8 @@ const ROOMS: RoomLayout[] = [
     id: 'spend',
     label: 'Media',
     hotspot: 2,
-    position: [-3.3, 0.04, 0.35],
-    size: [3.3, 0.1, 3.1],
+    position: [-4.8, 0.04, 1.15],
+    size: [3.8, 0.1, 3.0],
     floor: '#dcecfa',
     floorLit: '#b8daf5',
     wall: '#eaf3fb',
@@ -73,8 +73,8 @@ const ROOMS: RoomLayout[] = [
     id: 'seo',
     label: 'SEO',
     hotspot: 3,
-    position: [3.3, 0.04, 0.35],
-    size: [3.3, 0.1, 3.1],
+    position: [4.8, 0.04, 1.15],
+    size: [3.8, 0.1, 3.0],
     floor: '#d9f3e1',
     floorLit: '#b6e6c6',
     wall: '#e8f6ed',
@@ -85,8 +85,8 @@ const ROOMS: RoomLayout[] = [
     id: 'shopify',
     label: 'Commerce',
     hotspot: 4,
-    position: [-3.3, 0.04, -3.1],
-    size: [3.3, 0.1, 2.9],
+    position: [-4.8, 0.04, -2.15],
+    size: [3.8, 0.1, 2.8],
     floor: '#ffe8d4',
     floorLit: '#ffd4b0',
     wall: '#fff2e8',
@@ -97,12 +97,60 @@ const ROOMS: RoomLayout[] = [
     id: 'lead',
     label: 'Leads',
     hotspot: 5,
-    position: [3.3, 0.04, -3.1],
-    size: [3.3, 0.1, 2.9],
+    position: [4.8, 0.04, -2.15],
+    size: [3.8, 0.1, 2.8],
     floor: '#fde0ec',
     floorLit: '#f7c5d9',
     wall: '#fef1f6',
     accent: '#e890b8',
+    people: 2,
+  },
+  {
+    id: 'ops',
+    label: 'Operations',
+    hotspot: 6,
+    position: [-5.7, 0.04, -5.55],
+    size: [3.4, 0.1, 2.6],
+    floor: '#f3e6d0',
+    floorLit: '#e8d4ae',
+    wall: '#f7efe3',
+    accent: '#d4a86a',
+    people: 2,
+  },
+  {
+    id: 'design',
+    label: 'Design',
+    hotspot: 7,
+    position: [-1.9, 0.04, -5.55],
+    size: [3.4, 0.1, 2.6],
+    floor: '#e8e0f5',
+    floorLit: '#d2c6ef',
+    wall: '#f1ecfa',
+    accent: '#a78bcf',
+    people: 2,
+  },
+  {
+    id: 'it',
+    label: 'IT',
+    hotspot: 8,
+    position: [1.9, 0.04, -5.55],
+    size: [3.4, 0.1, 2.6],
+    floor: '#dce4f0',
+    floorLit: '#c2cedf',
+    wall: '#e8eef6',
+    accent: '#7a92b0',
+    people: 2,
+  },
+  {
+    id: 'controlling',
+    label: 'Controlling',
+    hotspot: 9,
+    position: [5.7, 0.04, -5.55],
+    size: [3.4, 0.1, 2.6],
+    floor: '#e2edd8',
+    floorLit: '#c9dfb8',
+    wall: '#eef5e8',
+    accent: '#7fad6e',
     people: 2,
   },
 ]
@@ -157,7 +205,7 @@ function makeWoodFloorTexture(): Texture {
   tex.colorSpace = SRGBColorSpace
   tex.wrapS = RepeatWrapping
   tex.wrapT = RepeatWrapping
-  tex.repeat.set(4.5, 4)
+  tex.repeat.set(6.2, 5.4)
   tex.anisotropy = 4
   return tex
 }
@@ -195,8 +243,9 @@ function FlatMat({
 function FixedCamera() {
   const { camera } = useThree()
   useEffect(() => {
-    camera.position.set(9.1, 10.2, 11.0)
-    camera.lookAt(0, 0.45, 0.15)
+    // Pulled back to frame the expanded back wing (Ops / Design / IT / Controlling).
+    camera.position.set(12.4, 13.2, 14.2)
+    camera.lookAt(0, 0.35, -0.6)
     camera.updateProjectionMatrix()
   }, [camera])
   return null
@@ -819,7 +868,6 @@ function RoomZone({
   const [hx, , hz] = room.position
   const level = useRef(lightLevel(light))
   const floorMat = useRef<MeshStandardMaterial>(null)
-  const ceilMat = useRef<MeshStandardMaterial>(null)
   const hotMat = useRef<MeshStandardMaterial>(null)
   const lamp = useRef<PointLightType>(null)
   const needsAttention = attentionCount > 0
@@ -830,12 +878,8 @@ function RoomZone({
   const white = useMemo(() => new Color('#ffffff'), [])
   const lockedFloor = useMemo(() => new Color('#c8c4be'), [])
   const lockedHot = useMemo(() => new Color('#9a9690'), [])
-  const ceilIdle = useMemo(() => new Color('#f7f2ea'), [])
-  const ceilWarm = useMemo(() => new Color('#fff8ec'), [])
-  const black = useMemo(() => new Color('#000000'), [])
   const lampWarm = useMemo(() => new Color('#fff8f0'), [])
   const tmp = useMemo(() => new Color(), [])
-  const tmp2 = useMemo(() => new Color(), [])
 
   const halfW = room.size[0] / 2
   const halfD = room.size[2] / 2
@@ -869,13 +913,6 @@ function RoomZone({
       floorMat.current.emissive.copy(accent)
       floorMat.current.emissiveIntensity = locked ? 0 : (needsAttention ? 0.42 : 0.28) * L
     }
-    if (ceilMat.current) {
-      tmp.copy(ceilIdle).lerp(ceilWarm, Math.min(1, L * 1.4))
-      ceilMat.current.color.copy(tmp)
-      tmp2.copy(black).lerp(accent, L)
-      ceilMat.current.emissive.copy(tmp2)
-      ceilMat.current.emissiveIntensity = locked ? 0 : (needsAttention ? 0.62 : 0.45) * L
-    }
     if (hotMat.current) {
       if (locked) {
         hotMat.current.color.copy(lockedHot)
@@ -903,7 +940,15 @@ function RoomZone({
           ? '#c6e8d2'
           : room.id === 'shopify'
             ? '#ffd9c0'
-            : '#f5c9db'
+            : room.id === 'lead'
+              ? '#f5c9db'
+              : room.id === 'ops'
+                ? '#e8d5b5'
+                : room.id === 'design'
+                  ? '#d8cef0'
+                  : room.id === 'it'
+                    ? '#c8d4e4'
+                    : '#cfe0c0'
 
   return (
     <group>
@@ -992,15 +1037,7 @@ function RoomZone({
         />
       ))}
 
-      {/* Soft ceiling panels only — no hanging/pendant fixtures */}
-      <mesh position={[hx - 0.55, 2.15, hz]}>
-        <boxGeometry args={[0.95, 0.04, 0.4]} />
-        <meshStandardMaterial ref={ceilMat} color="#f7f2ea" {...SOFT} />
-      </mesh>
-      <mesh position={[hx + 0.55, 2.15, hz]}>
-        <boxGeometry args={[0.95, 0.04, 0.4]} />
-        <meshStandardMaterial color="#f7f2ea" {...SOFT} />
-      </mesh>
+      {/* Invisible warm fill only — no floating ceiling slabs / pendant fixtures */}
       <pointLight ref={lamp} position={[hx, 2.0, hz]} intensity={0.08} distance={5.5} color="#fff8f0" />
 
       <mesh
@@ -1052,84 +1089,94 @@ function OfficeBuilding({
   return (
     <group>
       {/* Soft exterior apron so the building sits in daylight, not a void */}
-      <mesh position={[0, -0.12, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <planeGeometry args={[28, 24]} />
+      <mesh position={[0, -0.12, -0.4]} rotation={[-Math.PI / 2, 0, 0]}>
+        <planeGeometry args={[34, 30]} />
         <meshStandardMaterial color="#d9e6f0" roughness={1} metalness={0} />
       </mesh>
-      <mesh position={[0, -0.1, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <circleGeometry args={[9.5, 48]} />
+      <mesh position={[0, -0.1, -0.4]} rotation={[-Math.PI / 2, 0, 0]}>
+        <circleGeometry args={[12.5, 48]} />
         <meshStandardMaterial color="#cfe0ec" roughness={1} metalness={0} transparent opacity={0.55} />
       </mesh>
-      {/* Warm oak plank building floor (not grey) */}
-      <mesh position={[0, -0.02, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <planeGeometry args={[12.2, 10.6]} />
+      {/* Warm oak plank building floor (not grey) — expanded for back wing */}
+      <mesh position={[0, -0.02, -0.35]} rotation={[-Math.PI / 2, 0, 0]}>
+        <planeGeometry args={[16.6, 14.4]} />
         <meshStandardMaterial map={woodTex} {...SOFT} />
       </mesh>
-      <mesh position={[0, -0.06, 0]}>
-        <boxGeometry args={[12.2, 0.08, 10.6]} />
+      <mesh position={[0, -0.06, -0.35]}>
+        <boxGeometry args={[16.6, 0.08, 14.4]} />
         <meshStandardMaterial color={WOOD} {...SOFT} />
       </mesh>
-      {/* Soft corridor runner */}
-      <mesh position={[0, 0.03, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <planeGeometry args={[1.25, 9.2]} />
+      {/* Soft corridor runner + cross aisle to the new back wing */}
+      <mesh position={[0, 0.03, -0.2]} rotation={[-Math.PI / 2, 0, 0]}>
+        <planeGeometry args={[1.35, 12.8]} />
         <meshStandardMaterial color="#e8dcc8" {...MATTE} />
       </mesh>
-      <mesh position={[0, 0.035, 1.7]} rotation={[-Math.PI / 2, 0, 0]}>
-        <planeGeometry args={[6.8, 1.05]} />
+      <mesh position={[0, 0.035, 2.2]} rotation={[-Math.PI / 2, 0, 0]}>
+        <planeGeometry args={[7.4, 1.05]} />
+        <meshStandardMaterial color="#e8dcc8" {...MATTE} />
+      </mesh>
+      <mesh position={[0, 0.035, -3.85]} rotation={[-Math.PI / 2, 0, 0]}>
+        <planeGeometry args={[14.2, 1.0]} />
         <meshStandardMaterial color="#e8dcc8" {...MATTE} />
       </mesh>
 
       {/* Exterior walls */}
-      <mesh position={[0, 1.05, -5.2]}>
-        <boxGeometry args={[12.2, 2.1, 0.1]} />
+      <mesh position={[0, 1.05, -7.4]}>
+        <boxGeometry args={[16.6, 2.1, 0.1]} />
         <meshStandardMaterial color={CREAM} {...SOFT} />
       </mesh>
-      <mesh position={[-6.05, 1.05, 0]}>
-        <boxGeometry args={[0.1, 2.1, 10.6]} />
+      <mesh position={[-8.25, 1.05, -0.35]}>
+        <boxGeometry args={[0.1, 2.1, 14.4]} />
         <meshStandardMaterial color={SAND} {...SOFT} />
       </mesh>
-      <mesh position={[6.05, 1.05, 0]}>
-        <boxGeometry args={[0.1, 2.1, 10.6]} />
+      <mesh position={[8.25, 1.05, -0.35]}>
+        <boxGeometry args={[0.1, 2.1, 14.4]} />
         <meshStandardMaterial color={SAND} {...SOFT} />
       </mesh>
-      <mesh position={[0, 1.05, 5.2]}>
-        <boxGeometry args={[12.2, 2.1, 0.08]} />
+      <mesh position={[0, 1.05, 6.7]}>
+        <boxGeometry args={[16.6, 2.1, 0.08]} />
         <meshStandardMaterial color={BLUSH_WALL} {...SOFT} />
       </mesh>
 
       {/* Exterior windows — soft daylight (camera sees +X/+Z corner) */}
-      {/* Back wall (−Z) */}
-      <ExteriorWindow position={[-3.6, 1.15, -5.12]} width={1.5} height={1.1} />
-      <ExteriorWindow position={[-1.2, 1.15, -5.12]} width={1.5} height={1.1} />
-      <ExteriorWindow position={[1.2, 1.15, -5.12]} width={1.5} height={1.1} />
-      <ExteriorWindow position={[3.6, 1.15, -5.12]} width={1.5} height={1.1} />
-      {/* Left wall (−X) facing Media / Commerce */}
-      <ExteriorWindow position={[-5.97, 1.15, -3.0]} rotY={Math.PI / 2} width={1.45} height={1.1} />
-      <ExteriorWindow position={[-5.97, 1.15, -0.2]} rotY={Math.PI / 2} width={1.45} height={1.1} />
-      <ExteriorWindow position={[-5.97, 1.15, 2.6]} rotY={Math.PI / 2} width={1.45} height={1.1} />
-      {/* Right wall (+X) facing SEO / Leads — most visible from fixed cam */}
-      <ExteriorWindow position={[5.97, 1.15, -3.0]} rotY={-Math.PI / 2} width={1.45} height={1.1} />
-      <ExteriorWindow position={[5.97, 1.15, -0.2]} rotY={-Math.PI / 2} width={1.45} height={1.1} />
-      <ExteriorWindow position={[5.97, 1.15, 2.6]} rotY={-Math.PI / 2} width={1.45} height={1.1} />
+      {/* Back wall (−Z) — Ops / Design / IT / Controlling wing */}
+      <ExteriorWindow position={[-5.7, 1.15, -7.32]} width={1.45} height={1.1} />
+      <ExteriorWindow position={[-1.9, 1.15, -7.32]} width={1.45} height={1.1} />
+      <ExteriorWindow position={[1.9, 1.15, -7.32]} width={1.45} height={1.1} />
+      <ExteriorWindow position={[5.7, 1.15, -7.32]} width={1.45} height={1.1} />
+      {/* Left wall (−X) */}
+      <ExteriorWindow position={[-8.17, 1.15, -5.4]} rotY={Math.PI / 2} width={1.4} height={1.1} />
+      <ExteriorWindow position={[-8.17, 1.15, -2.1]} rotY={Math.PI / 2} width={1.4} height={1.1} />
+      <ExteriorWindow position={[-8.17, 1.15, 1.1]} rotY={Math.PI / 2} width={1.4} height={1.1} />
+      <ExteriorWindow position={[-8.17, 1.15, 4.0]} rotY={Math.PI / 2} width={1.4} height={1.1} />
+      {/* Right wall (+X) — most visible from fixed cam */}
+      <ExteriorWindow position={[8.17, 1.15, -5.4]} rotY={-Math.PI / 2} width={1.4} height={1.1} />
+      <ExteriorWindow position={[8.17, 1.15, -2.1]} rotY={-Math.PI / 2} width={1.4} height={1.1} />
+      <ExteriorWindow position={[8.17, 1.15, 1.1]} rotY={-Math.PI / 2} width={1.4} height={1.1} />
+      <ExteriorWindow position={[8.17, 1.15, 4.0]} rotY={-Math.PI / 2} width={1.4} height={1.1} />
       {/* Front wall (+Z) near Leadership */}
-      <ExteriorWindow position={[-2.4, 1.15, 5.12]} rotY={Math.PI} width={1.55} height={1.05} />
-      <ExteriorWindow position={[2.4, 1.15, 5.12]} rotY={Math.PI} width={1.55} height={1.05} />
+      <ExteriorWindow position={[-2.6, 1.15, 6.62]} rotY={Math.PI} width={1.55} height={1.05} />
+      <ExteriorWindow position={[2.6, 1.15, 6.62]} rotY={Math.PI} width={1.55} height={1.05} />
 
       {/* Soft interior glass toward corridor (reads between rooms) */}
-      <InteriorGlass position={[-1.55, 1.0, 0.35]} rotY={Math.PI / 2} width={1.4} height={1.25} />
-      <InteriorGlass position={[1.55, 1.0, 0.35]} rotY={Math.PI / 2} width={1.4} height={1.25} />
-      <InteriorGlass position={[-1.55, 1.0, -2.6]} rotY={Math.PI / 2} width={1.2} height={1.2} />
-      <InteriorGlass position={[1.55, 1.0, -2.6]} rotY={Math.PI / 2} width={1.2} height={1.2} />
+      <InteriorGlass position={[-2.65, 1.0, 1.15]} rotY={Math.PI / 2} width={1.5} height={1.25} />
+      <InteriorGlass position={[2.65, 1.0, 1.15]} rotY={Math.PI / 2} width={1.5} height={1.25} />
+      <InteriorGlass position={[-2.65, 1.0, -2.15]} rotY={Math.PI / 2} width={1.3} height={1.2} />
+      <InteriorGlass position={[2.65, 1.0, -2.15]} rotY={Math.PI / 2} width={1.3} height={1.2} />
+      <InteriorGlass position={[-3.7, 1.0, -3.85]} width={1.2} height={1.15} />
+      <InteriorGlass position={[3.7, 1.0, -3.85]} width={1.2} height={1.15} />
 
       {/* Corridor props */}
-      <Plant position={[0, 0, 1.7]} scale={1.05} />
-      <Plant position={[-0.85, 0, -1.4]} scale={0.8} />
-      <Plant position={[0.85, 0, -1.4]} scale={0.8} />
-      <Cabinet position={[0, 0, -4.55]} wide={1.1} />
-      <RoundedBox args={[0.72, 0.05, 0.48]} radius={0.03} position={[0, 0.4, 0.25]}>
+      <Plant position={[0, 0, 2.2]} scale={1.05} />
+      <Plant position={[-0.95, 0, -0.8]} scale={0.8} />
+      <Plant position={[0.95, 0, -0.8]} scale={0.8} />
+      <Plant position={[-0.9, 0, -3.85]} scale={0.85} />
+      <Plant position={[0.9, 0, -3.85]} scale={0.85} />
+      <Cabinet position={[0, 0, -0.4]} wide={1.05} />
+      <RoundedBox args={[0.72, 0.05, 0.48]} radius={0.03} position={[0, 0.4, 0.55]}>
         <meshStandardMaterial color={DESK_TOP} {...SOFT} />
       </RoundedBox>
-      <mesh position={[0, 0.18, 0.25]}>
+      <mesh position={[0, 0.18, 0.55]}>
         <cylinderGeometry args={[0.04, 0.06, 0.36, 10]} />
         <FlatMat color={WOOD} />
       </mesh>
@@ -1188,6 +1235,7 @@ function OfficeLightTwin({
         </div>
         <div className="office-light-corridor" />
         <div className="office-light-corridor-cross" />
+        <div className="office-light-corridor-wing" />
       </div>
       <div className="office-floorplan office-floorplan-light">
         {ROOMS.map((room) => {
@@ -1318,7 +1366,7 @@ function HardenedOfficeCanvas({
 }) {
   return (
     <Canvas
-      camera={{ position: [9.1, 10.2, 11.0], fov: 38, near: 0.1, far: 80 }}
+      camera={{ position: [12.4, 13.2, 14.2], fov: 38, near: 0.1, far: 100 }}
       dpr={[1, 1.25]}
       gl={{
         antialias: true,
@@ -1334,7 +1382,7 @@ function HardenedOfficeCanvas({
         gl.setClearColor('#d9e8f2')
         gl.shadowMap.enabled = false
         scene.fog = null
-        camera.lookAt(0, 0.45, 0.15)
+        camera.lookAt(0, 0.35, -0.6)
         const canvas = gl.domElement
         const onLost = (e: Event) => {
           e.preventDefault()

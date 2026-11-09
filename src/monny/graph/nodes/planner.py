@@ -27,16 +27,87 @@ def _stub_infer_plan_raw(goal: str, message: str) -> list[str]:
     wants_leads = any(
         k in text for k in ("lead", "warming", "nurture", "crm", "sequence")
     )
+    wants_ops = any(
+        k in text
+        for k in (
+            "operat",
+            "fulfillment",
+            "giacenz",
+            "inventory",
+            "stock alert",
+            "spedizion",
+            "shipping",
+            "ordini",
+            "stato ordini",
+        )
+    )
+    wants_design = any(
+        k in text
+        for k in ("design", "creative", "creativit", "brand kit", "asset creativ", "graphic")
+    )
+    wants_it = any(
+        k in text
+        for k in (
+            "integraz",
+            "integration",
+            "accessi",
+            "credenzial",
+            "uptime",
+            "monitoring",
+            "runtime",
+        )
+    )
+    wants_ctrl = any(
+        k in text
+        for k in ("controlling", "budget vs", "kpi snapshot", "costi anomali", "cost alert")
+    )
     wants_spend = any(k in text for k in ("spend", "ads", "budget", "roas", "cpa", "meta", "google"))
     wants_seo = any(k in text for k in ("seo", "title", "meta", "page", "sitemap", "crawl"))
     wants_report = any(k in text for k in ("report", "summary", "overview", "daily"))
 
+    stub_only = False
     if wants_promo:
         plan.append("shopify_promo")
+        stub_only = True
     if wants_leads:
         plan.append("lead_warming")
+        stub_only = True
+    if wants_ops:
+        if "giacenz" in text or "inventory" in text or "stock" in text:
+            plan.append("ops_inventory")
+        elif "spedizion" in text or "shipping" in text or "ritard" in text:
+            plan.append("ops_shipping")
+        else:
+            plan.append("ops_orders")
+        stub_only = True
+    if wants_design:
+        if "brand" in text:
+            plan.append("design_brand")
+        elif "asset" in text:
+            plan.append("design_assets")
+        elif "ads" in text or "creativ" in text:
+            plan.append("design_ads")
+        else:
+            plan.append("design_assets")
+        stub_only = True
+    if wants_it:
+        if "accessi" in text or "credenzial" in text:
+            plan.append("it_access")
+        elif "uptime" in text or "monitor" in text or "runtime" in text or "errori" in text:
+            plan.append("it_monitoring")
+        else:
+            plan.append("it_integrations")
+        stub_only = True
+    if wants_ctrl:
+        if "kpi" in text:
+            plan.append("ctrl_kpi")
+        elif "cost" in text or "anomali" in text:
+            plan.append("ctrl_costs")
+        else:
+            plan.append("ctrl_budget")
+        stub_only = True
 
-    if wants_promo or wants_leads:
+    if stub_only:
         if wants_spend:
             plan.extend(["spend_google", "spend_meta"])
         if wants_seo:

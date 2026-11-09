@@ -23,6 +23,10 @@ describe('office room lights', () => {
     expect(skillToDept('spend_google')).toBe('spend')
     expect(skillToDept('seo_audit')).toBe('seo')
     expect(skillToDept('knowledge')).toBe('spend')
+    expect(skillToDept('ops_orders')).toBe('ops')
+    expect(skillToDept('design_ads')).toBe('design')
+    expect(skillToDept('it_access')).toBe('it')
+    expect(skillToDept('ctrl_budget')).toBe('controlling')
     expect(skillToDept('planner')).toBeNull()
   })
 

@@ -52,6 +52,10 @@ subscription:
     seo: false
     shopify: false
     leads: false
+    operations: false
+    design: false
+    it: false
+    controlling: false
   features:
     office_view: false
   office_mode: auto

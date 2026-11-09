@@ -11,17 +11,25 @@ export const DEFAULT_SKILLS: SubscriptionSkills = {
   seo: true,
   shopify: false,
   leads: false,
+  operations: false,
+  design: false,
+  it: false,
+  controlling: false,
 }
 
 export const DEFAULT_FEATURES: SubscriptionFeatures = {
   office_view: false,
 }
 
+/** Merge known defaults so Admin / PUT never drop new entitlement keys. */
+export function mergeSkills(
+  partial?: Partial<SubscriptionSkills> | null,
+): SubscriptionSkills {
+  return { ...DEFAULT_SKILLS, ...(partial ?? {}) }
+}
+
 export function skillsFromConfig(cfg?: TenantConfig | null): SubscriptionSkills {
-  return {
-    ...DEFAULT_SKILLS,
-    ...(cfg?.subscription?.skills ?? {}),
-  }
+  return mergeSkills(cfg?.subscription?.skills)
 }
 
 export function featuresFromConfig(cfg?: TenantConfig | null): SubscriptionFeatures {
@@ -50,7 +58,8 @@ export function officeModePreference(cfg?: TenantConfig | null): OfficeMode {
 export function deptEntitlementKey(dept: DeptId): keyof SubscriptionSkills | null {
   if (dept === 'direzione') return null
   if (dept === 'lead') return 'leads'
-  return dept
+  if (dept === 'ops') return 'operations'
+  return dept as keyof SubscriptionSkills
 }
 
 export function isDeptEnabled(dept: DeptId, skills: SubscriptionSkills): boolean {
@@ -65,6 +74,10 @@ export function lockedHintIt(dept: DeptId): string {
     seo: 'SEO',
     shopify: 'Negozio Shopify',
     lead: 'Lead',
+    ops: 'Operations',
+    design: 'Graphic Designer',
+    it: 'IT',
+    controlling: 'Controlling',
   }
   const name = names[dept] ?? 'Questo reparto'
   return `${name} non è nel piano attivo. Attivalo in Admin → Attivazione piano / reparti.`
@@ -75,6 +88,16 @@ export function goalEntitlement(goal: string): keyof SubscriptionSkills | null {
   const text = goal.toLowerCase()
   if (/(promo|promotion|discount|price rule|shopify promo)/.test(text)) return 'shopify'
   if (/(lead|warming|nurture|crm|sequence)/.test(text)) return 'leads'
+  if (/(operat|fulfillment|giacenz|inventory|stock|spedizion|shipping|ordini)/.test(text)) {
+    return 'operations'
+  }
+  if (/(design|creative|creativit|brand kit|asset creativ|graphic)/.test(text)) return 'design'
+  if (/(integraz|integration|accessi|credenzial|uptime|monitoring|runtime)/.test(text)) {
+    return 'it'
+  }
+  if (/(controlling|budget vs|kpi snapshot|costi anomali|cost alert)/.test(text)) {
+    return 'controlling'
+  }
   if (/(spend|ads|budget|roas|cpa|meta|google)/.test(text)) return 'spend'
   if (/(seo|title|meta|page|sitemap|crawl)/.test(text)) return 'seo'
   return null
@@ -92,6 +115,10 @@ export function assertGoalAllowed(
     seo: 'SEO',
     shopify: 'Negozio Shopify',
     leads: 'Lead',
+    operations: 'Operations',
+    design: 'Graphic Designer',
+    it: 'IT',
+    controlling: 'Controlling',
   }
   return `Reparto non attivo nel piano: ${labels[key]}. Attivalo in Admin → Attivazione piano / reparti.`
 }
