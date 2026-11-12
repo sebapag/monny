@@ -1,5 +1,5 @@
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
-import { Billboard, RoundedBox, Text } from '@react-three/drei'
+import { Billboard, RoundedBox } from '@react-three/drei'
 import {
   Component,
   Suspense,
@@ -14,6 +14,8 @@ import {
   Color,
   RepeatWrapping,
   SRGBColorSpace,
+  Vector3,
+  type Camera,
   type Group,
   type MeshStandardMaterial,
   type PointLight as PointLightType,
@@ -251,49 +253,125 @@ function FixedCamera() {
   return null
 }
 
-/** Soft room label chip — readable against warm oak / pastels. */
-function RoomLabelChip({
-  label,
-  hotspot,
-  locked,
-  lit,
-}: {
-  label: string
+/** World → CSS pixel (rounded) for the Completa label overlay. */
+const _proj = new Vector3()
+function projectToCssPx(
+  x: number,
+  y: number,
+  z: number,
+  camera: Camera,
+  width: number,
+  height: number,
+): { x: number; y: number } {
+  _proj.set(x, y, z).project(camera)
+  return {
+    x: Math.round(_proj.x * (width / 2) + width / 2),
+    y: Math.round(-_proj.y * (height / 2) + height / 2),
+  }
+}
+
+type OverlayLabel = {
+  id: DeptId
   hotspot: number
+  label: string
   locked: boolean
   lit: boolean
+  x: number
+  y: number
+}
+
+type OverlayBadge = { x: number; y: number; count: number }
+
+/**
+ * Publishes fixed-camera label anchors to a DOM overlay sibling of the Canvas.
+ * Avoids drei Html (fractional translate3d + React 19 portal unmount races).
+ */
+function LabelAnchorPublisher({
+  lights,
+  enabled,
+  pendingTotal,
+  onChange,
+}: {
+  lights: Record<DeptId, RoomLightState>
+  enabled: SubscriptionSkills
+  pendingTotal: number
+  onChange: (labels: OverlayLabel[], badge: OverlayBadge | null) => void
 }) {
-  const bg = locked ? '#e8e4de' : lit ? '#fff4c8' : '#ffffff'
-  const ink = locked ? '#787671' : '#1a1a1a'
+  const lastKey = useRef('')
+  useFrame(({ camera, size }) => {
+    if (size.width < 8 || size.height < 8) return
+    const labels: OverlayLabel[] = []
+    let badge: OverlayBadge | null = null
+    for (const room of ROOMS) {
+      const [hx, , hz] = room.position
+      const halfD = room.size[2] / 2
+      const locked = !isDeptEnabled(room.id, enabled)
+      const active = !locked && (lights[room.id] === 'on' || lights[room.id] === 'soft')
+      const pt = projectToCssPx(hx, 1.72, hz + halfD * 0.18, camera, size.width, size.height)
+      labels.push({
+        id: room.id,
+        hotspot: room.hotspot,
+        label: room.label,
+        locked,
+        lit: active,
+        x: pt.x,
+        y: pt.y,
+      })
+      if (!locked && room.id === 'direzione' && pendingTotal > 0) {
+        const b = projectToCssPx(
+          hx + 1.05,
+          1.85,
+          hz + halfD * 0.15,
+          camera,
+          size.width,
+          size.height,
+        )
+        badge = { x: b.x, y: b.y, count: pendingTotal }
+      }
+    }
+    const key = JSON.stringify({ labels, badge })
+    if (key === lastKey.current) return
+    lastKey.current = key
+    onChange(labels, badge)
+  })
+  return null
+}
+
+/** Crisp DOM chips over the WebGL stage (not Troika / canvas textures). */
+function OfficeLabelOverlay({
+  labels,
+  badge,
+}: {
+  labels: OverlayLabel[]
+  badge: OverlayBadge | null
+}) {
   return (
-    <Billboard follow>
-      <RoundedBox args={[locked ? 2.55 : 2.15, 0.42, 0.06]} radius={0.08} position={[0, 0, 0]}>
-        <meshStandardMaterial color={bg} roughness={0.85} metalness={0} />
-      </RoundedBox>
-      <mesh position={[-0.82, 0, 0.04]}>
-        <circleGeometry args={[0.14, 20]} />
-        <meshStandardMaterial color="#0a1530" roughness={1} metalness={0} />
-      </mesh>
-      <Text
-        position={[-0.82, 0, 0.06]}
-        fontSize={0.15}
-        color="#ffffff"
-        anchorX="center"
-        anchorY="middle"
-      >
-        {String(hotspot)}
-      </Text>
-      <Text
-        position={[0.12, 0, 0.06]}
-        fontSize={0.18}
-        color={ink}
-        anchorX="center"
-        anchorY="middle"
-        maxWidth={1.7}
-      >
-        {locked ? `${label} · chiuso` : label}
-      </Text>
-    </Billboard>
+    <div className="office-label-layer" data-testid="office-label-layer">
+      {labels.map((item) => (
+        <div
+          key={item.id}
+          className={`office-label-chip${item.locked ? ' is-locked' : ''}${
+            item.lit ? ' is-lit' : ''
+          }`}
+          style={{ left: item.x, top: item.y }}
+          data-testid="office-room-label"
+        >
+          <span className="office-label-chip-num">{item.hotspot}</span>
+          <span className="office-label-chip-text">
+            {item.locked ? `${item.label} · chiuso` : item.label}
+          </span>
+        </div>
+      ))}
+      {badge && (
+        <span
+          className="office-decision-count"
+          style={{ left: badge.x, top: badge.y }}
+          aria-hidden
+        >
+          {badge.count}
+        </span>
+      )}
+    </div>
   )
 }
 
@@ -791,11 +869,11 @@ function InteriorGlass({
 /** Count badge + soft pulse ring when Direzione has pending decisions. */
 function DecisionHotspotBadge({
   position,
-  count,
   reduceMotion,
 }: {
   position: [number, number, number]
-  count: number
+  /** Count numeral is rendered by OfficeLabelOverlay. */
+  count?: number
   reduceMotion: boolean
 }) {
   const disc = useRef<MeshStandardMaterial>(null)
@@ -836,16 +914,8 @@ function DecisionHotspotBadge({
             {...MATTE}
           />
         </mesh>
-        <Text
-          position={[0, 0, 0.03]}
-          fontSize={0.28}
-          color="#ffffff"
-          anchorX="center"
-          anchorY="middle"
-        >
-          {String(count)}
-        </Text>
       </Billboard>
+      {/* Count numeral is drawn by OfficeLabelOverlay (DOM), not Troika Text */}
     </group>
   )
 }
@@ -1052,14 +1122,7 @@ function RoomZone({
         />
         <meshStandardMaterial ref={hotMat} color="#ffffff" {...MATTE} />
       </mesh>
-      <group position={[hx, 1.72, hz + halfD * 0.18]}>
-        <RoomLabelChip
-          label={room.label}
-          hotspot={room.hotspot}
-          locked={locked}
-          lit={active}
-        />
-      </group>
+      {/* Room name chips live in OfficeLabelOverlay (DOM over canvas). */}
       {needsAttention && (
         <DecisionHotspotBadge
           position={[hx + 1.05, 1.85, hz + halfD * 0.15]}
@@ -1364,58 +1427,73 @@ function HardenedOfficeCanvas({
   reduceMotion: boolean
   onContextLost: () => void
 }) {
+  const [overlayLabels, setOverlayLabels] = useState<OverlayLabel[]>([])
+  const [overlayBadge, setOverlayBadge] = useState<OverlayBadge | null>(null)
+
   return (
-    <Canvas
-      camera={{ position: [12.4, 13.2, 14.2], fov: 38, near: 0.1, far: 100 }}
-      dpr={[1, 1.25]}
-      gl={{
-        antialias: true,
-        alpha: false,
-        powerPreference: 'default',
-        failIfMajorPerformanceCaveat: false,
-        stencil: false,
-        depth: true,
-      }}
-      frameloop="always"
-      style={{ touchAction: 'manipulation', width: '100%', height: '100%' }}
-      onCreated={({ gl, camera, scene }) => {
-        gl.setClearColor('#d9e8f2')
-        gl.shadowMap.enabled = false
-        scene.fog = null
-        camera.lookAt(0, 0.35, -0.6)
-        const canvas = gl.domElement
-        const onLost = (e: Event) => {
-          e.preventDefault()
-          onContextLost()
-        }
-        const onRestored = () => {
-          // Stay on light after a loss — safer than re-entering a flaky GPU path.
-        }
-        canvas.addEventListener('webglcontextlost', onLost, false)
-        canvas.addEventListener('webglcontextrestored', onRestored, false)
-        // Collapsed CSS stage (0×0) → fall back to Leggera instead of a blank WebGL plane.
-        requestAnimationFrame(() => {
-          if (canvas.clientWidth < 8 || canvas.clientHeight < 8) onContextLost()
-        })
-      }}
-    >
-      <Suspense fallback={null}>
-        <FixedCamera />
-        <ambientLight intensity={0.78} />
-        <hemisphereLight args={['#f5fbff', '#d8c9b2', 0.62]} />
-        <directionalLight position={[7, 12, 4]} intensity={0.55} color="#fff6ea" />
-        <directionalLight position={[-6, 6, -2]} intensity={0.22} color="#cfe6f5" />
-        <pointLight position={[5.4, 1.4, 2.4]} intensity={0.35} distance={8} color="#dff2ff" />
-        <pointLight position={[-5.4, 1.4, -2.2]} intensity={0.28} distance={8} color="#fff1df" />
-        <OfficeBuilding
-          lights={lights}
-          enabled={enabled}
-          pendingCount={pendingTotal}
-          onSelect={onSelect}
-          reduceMotion={reduceMotion}
-        />
-      </Suspense>
-    </Canvas>
+    <div className="office-canvas-stack">
+      <Canvas
+        camera={{ position: [12.4, 13.2, 14.2], fov: 38, near: 0.1, far: 100 }}
+        dpr={[1, 1.25]}
+        gl={{
+          antialias: true,
+          alpha: false,
+          powerPreference: 'default',
+          failIfMajorPerformanceCaveat: false,
+          stencil: false,
+          depth: true,
+        }}
+        frameloop="always"
+        style={{ touchAction: 'manipulation', width: '100%', height: '100%' }}
+        onCreated={({ gl, camera, scene }) => {
+          gl.setClearColor('#d9e8f2')
+          gl.shadowMap.enabled = false
+          scene.fog = null
+          camera.lookAt(0, 0.35, -0.6)
+          const canvas = gl.domElement
+          const onLost = (e: Event) => {
+            e.preventDefault()
+            onContextLost()
+          }
+          const onRestored = () => {
+            // Stay on light after a loss — safer than re-entering a flaky GPU path.
+          }
+          canvas.addEventListener('webglcontextlost', onLost, false)
+          canvas.addEventListener('webglcontextrestored', onRestored, false)
+          // Collapsed CSS stage (0×0) → fall back to Leggera instead of a blank WebGL plane.
+          requestAnimationFrame(() => {
+            if (canvas.clientWidth < 8 || canvas.clientHeight < 8) onContextLost()
+          })
+        }}
+      >
+        <Suspense fallback={null}>
+          <FixedCamera />
+          <ambientLight intensity={0.78} />
+          <hemisphereLight args={['#f5fbff', '#d8c9b2', 0.62]} />
+          <directionalLight position={[7, 12, 4]} intensity={0.55} color="#fff6ea" />
+          <directionalLight position={[-6, 6, -2]} intensity={0.22} color="#cfe6f5" />
+          <pointLight position={[5.4, 1.4, 2.4]} intensity={0.35} distance={8} color="#dff2ff" />
+          <pointLight position={[-5.4, 1.4, -2.2]} intensity={0.28} distance={8} color="#fff1df" />
+          <OfficeBuilding
+            lights={lights}
+            enabled={enabled}
+            pendingCount={pendingTotal}
+            onSelect={onSelect}
+            reduceMotion={reduceMotion}
+          />
+          <LabelAnchorPublisher
+            lights={lights}
+            enabled={enabled}
+            pendingTotal={pendingTotal}
+            onChange={(labels, badge) => {
+              setOverlayLabels(labels)
+              setOverlayBadge(badge)
+            }}
+          />
+        </Suspense>
+      </Canvas>
+      <OfficeLabelOverlay labels={overlayLabels} badge={overlayBadge} />
+    </div>
   )
 }
 
