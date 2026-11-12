@@ -163,6 +163,15 @@ function stripRawIds(summary: string): string {
     .trim()
 }
 
+function bestCampaignName(report: Report | null | undefined): string | null {
+  const top = report?.top_campaigns?.[0]
+  if (top?.name) return top.name
+  const camps = (report?.spend_channels ?? []).flatMap((ch) => ch.campaigns ?? [])
+  if (!camps.length) return null
+  const sorted = [...camps].sort((a, b) => (b.roas ?? 0) - (a.roas ?? 0))
+  return sorted[0]?.name ?? null
+}
+
 /** Short Italian agent bubble — never dump markdown / skill ids. */
 export function friendlyAgentReply(
   reply: string | null | undefined,
@@ -172,11 +181,14 @@ export function friendlyAgentReply(
   const proposals = report?.proposals?.length ?? report?.proposal_count ?? 0
   const spend = report?.spend_channels ?? []
   const seoChanges = report?.seo_change_set?.changes?.length ?? 0
+  const best = bestCampaignName(report)
 
   if (status === 'awaiting_approval' || proposals > 0) {
     const n = proposals || 'alcune'
     if (spend.length) {
-      return `Ho controllato le ads: ci sono ${n} proposte da decidere. Guarda il pannello a destra e Approva o Rifiuta.`
+      return best
+        ? `Report pronto: “${best}” è tra le ads che hanno funzionato meglio. Ci sono ${n} proposte da decidere — Approva o Rifiuta a destra.`
+        : `Ho controllato le ads e preparato il report: ci sono ${n} proposte da decidere. Guarda il pannello a destra e Approva o Rifiuta.`
     }
     if (seoChanges) {
       return `Ho trovato ${seoChanges} pagine da migliorare. Ci sono ${n} proposte SEO in attesa della tua decisione.`
@@ -186,6 +198,11 @@ export function friendlyAgentReply(
 
   if (spend.length) {
     const waste = spend.reduce((s, ch) => s + (ch.totals?.waste_spend ?? 0), 0)
+    if (best) {
+      return waste > 0
+        ? `Report ads pronto. Meglio: “${best}”. Ho anche segnalato circa €${waste} di spesa poco efficace — nessuna azione da approvare ora.`
+        : `Report ads pronto. Tra le migliori c’è “${best}”. Le campagne sembrano in linea con le tue soglie.`
+    }
     return waste > 0
       ? `Analisi ads completata. Ho segnalato circa €${waste} di spesa poco efficace, ma non ci sono azioni da approvare ora.`
       : 'Analisi ads completata. Le campagne sembrano in linea con le tue soglie.'

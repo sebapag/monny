@@ -5,6 +5,7 @@ import {
   type KnowledgeSource,
   type Report,
   type SeoChange,
+  type SpendCampaign,
   type SpendDiagnosis,
   type TenantConfig,
   type TenantDetail,
@@ -219,21 +220,72 @@ function ApprovalsList({
   )
 }
 
-function SpendPanel({ channels }: { channels: SpendDiagnosis[] }) {
-  if (!channels.length) return null
+function channelLabel(channel: string | undefined): string {
+  if (channel === 'google') return 'Google Ads'
+  if (channel === 'meta') return 'Meta Ads'
+  return channel || 'Canale'
+}
+
+function rankedCampaigns(
+  channels: SpendDiagnosis[],
+  top?: SpendCampaign[] | null,
+): SpendCampaign[] {
+  if (top && top.length) return top
+  const rows = channels.flatMap((ch) =>
+    (ch.campaigns ?? []).map((c) => ({ ...c, channel: c.channel || ch.channel })),
+  )
+  return [...rows].sort((a, b) => (b.roas ?? 0) - (a.roas ?? 0))
+}
+
+function SpendPanel({
+  channels,
+  topCampaigns,
+  markdown,
+}: {
+  channels: SpendDiagnosis[]
+  topCampaigns?: SpendCampaign[] | null
+  markdown?: string | null
+}) {
+  if (!channels.length && !markdown) return null
+  const ranked = rankedCampaigns(channels, topCampaigns)
+  const best = ranked.filter((c) => c.healthy !== false).slice(0, 5)
+  const showcase = best.length ? best : ranked.slice(0, 5)
   return (
     <div className="report-block">
-      <h3>Riepilogo ads</h3>
+      <h3>Report ads</h3>
+      {showcase.length > 0 && (
+        <>
+          <p className="status-line" style={{ marginBottom: '0.5rem' }}>
+            Campagne che hanno funzionato meglio (per ROAS)
+          </p>
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Campagna</th>
+                <th>Canale</th>
+                <th>ROAS</th>
+                <th>CPA</th>
+                <th>Spesa</th>
+              </tr>
+            </thead>
+            <tbody>
+              {showcase.map((c) => (
+                <tr key={`${c.channel}-${c.id || c.name}`}>
+                  <td>{c.name || '—'}</td>
+                  <td>{channelLabel(c.channel)}</td>
+                  <td>{c.roas ?? '—'}</td>
+                  <td>{c.cpa ?? '—'}</td>
+                  <td>€{c.spend ?? '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
       {channels.map((ch) => (
         <div key={ch.channel} className="channel-block">
           <div className="channel-head">
-            <strong>
-              {ch.channel === 'google'
-                ? 'Google Ads'
-                : ch.channel === 'meta'
-                  ? 'Meta Ads'
-                  : ch.channel}
-            </strong>
+            <strong>{channelLabel(ch.channel)}</strong>
             <span>
               Spesa €{ch.totals.spend} · poco efficace €{ch.totals.waste_spend} (
               {ch.totals.waste_spend_pct}%)
@@ -241,6 +293,42 @@ function SpendPanel({ channels }: { channels: SpendDiagnosis[] }) {
           </div>
         </div>
       ))}
+      {markdown && (
+        <details className="report-md">
+          <summary>Report completo</summary>
+          <pre className="report-md-body">{markdown}</pre>
+        </details>
+      )}
+    </div>
+  )
+}
+
+function InlineAdsReport({ report }: { report: Report }) {
+  const channels = report.spend_channels ?? []
+  if (!channels.length && !report.markdown) return null
+  const ranked = rankedCampaigns(channels, report.top_campaigns)
+  const best = ranked.filter((c) => c.healthy !== false).slice(0, 3)
+  const showcase = best.length ? best : ranked.slice(0, 3)
+  if (!showcase.length && !report.markdown) return null
+  return (
+    <div className="inline-report">
+      <div className="inline-report-title">Report · ads migliori</div>
+      {showcase.length > 0 && (
+        <ul className="inline-report-list">
+          {showcase.map((c, i) => (
+            <li key={`${c.channel}-${c.id || c.name || i}`}>
+              <strong>{c.name}</strong> · {channelLabel(c.channel)} · ROAS {c.roas} · €
+              {c.spend}
+            </li>
+          ))}
+        </ul>
+      )}
+      {report.markdown && (
+        <details className="report-md">
+          <summary>Apri report completo</summary>
+          <pre className="report-md-body">{report.markdown}</pre>
+        </details>
+      )}
     </div>
   )
 }
@@ -1068,6 +1156,26 @@ function App() {
       await refreshApprovals(tenantId)
       await loadArtifacts(tenantId)
       await refreshTenants()
+      // Ads report lives in Spend dept — open it so the composed report is visible.
+      const hasSpendReport = (current.report?.spend_channels?.length ?? 0) > 0
+      if (hasSpendReport) {
+        const spendDept = 'spend' as DeptId
+        setMessagesByDept((prev) => ({
+          ...prev,
+          [spendDept]: [
+            ...(prev[spendDept] || []),
+            { role: 'user', text: goal },
+            {
+              role: 'agent',
+              text: friendlyAgentReply(current.reply, current.report, current.status),
+              report: current.report,
+              timeline: filterSteps(current.steps, spendDept),
+              runStatus: current.status,
+            },
+          ],
+        }))
+        navigate({ mode: 'dept', dept: spendDept })
+      }
       // Hold run so linger (execution + 1s ON) + existing ease-off can finish
       setTimeout(() => {
         if (current.status !== 'awaiting_approval') {
@@ -1330,6 +1438,9 @@ function App() {
                         {deptMessages.map((m, i) => (
                           <div key={`${m.role}-${i}`} className={`bubble ${m.role}`}>
                             {m.text}
+                            {m.role === 'agent' && m.report?.spend_channels?.length ? (
+                              <InlineAdsReport report={m.report} />
+                            ) : null}
                             {m.timeline && m.timeline.length > 0 && (
                               <div className="thread-timeline">
                                 <SkillRail
@@ -1391,7 +1502,11 @@ function App() {
                 spendFromArtifact.length > 0 && (
                 <section className="panel report-panel">
                   <h2>Ultimi risultati ads</h2>
-                  <SpendPanel channels={spendFromArtifact} />
+                  <SpendPanel
+                    channels={spendFromArtifact}
+                    topCampaigns={latestReport?.top_campaigns}
+                    markdown={latestReport?.markdown}
+                  />
                 </section>
               )}
               {isDeptEnabled(activeDept.id, entitlementSkills) &&

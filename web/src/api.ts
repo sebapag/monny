@@ -56,6 +56,7 @@ export type Report = {
   proposal_count?: number
   proposals?: Record<string, unknown>[]
   spend_channels?: SpendDiagnosis[]
+  top_campaigns?: SpendCampaign[]
   seo_change_set?: { status?: string; changes?: SeoChange[] } | null
   seo_findings?: Record<string, unknown>[]
   shopify?: Record<string, unknown> | null
