@@ -978,6 +978,57 @@ a {
   color: var(--brand-navy);
 }
 
+.inline-report {
+  margin-top: 0.65rem;
+  padding: 0.55rem 0.65rem;
+  background: var(--surface-soft);
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  font-size: 0.86rem;
+}
+
+.inline-report-title {
+  font-weight: 600;
+  color: var(--brand-navy);
+  margin-bottom: 0.35rem;
+}
+
+.inline-report-list {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+
+.inline-report-list li {
+  margin: 0.2rem 0;
+}
+
+.report-md {
+  margin-top: 0.65rem;
+  font-size: 0.84rem;
+}
+
+.report-md summary {
+  cursor: pointer;
+  color: var(--link-blue);
+  font-weight: 500;
+}
+
+.report-md-body {
+  margin: 0.5rem 0 0;
+  padding: 0.65rem 0.75rem;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: var(--charcoal);
+  max-height: 22rem;
+  overflow: auto;
+}
+
 .channel-head {
   display: flex;
   justify-content: space-between;

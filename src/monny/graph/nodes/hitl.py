@@ -48,16 +48,43 @@ def hitl_node(state: AgentState) -> dict:
 
     report = state.get("report") or {}
     n = len(approval_ids)
+    top = report.get("top_campaigns") or []
+    spend = report.get("spend_channels") or []
+    best_name = None
+    if top:
+        best_name = top[0].get("name")
+    elif spend:
+        camps = []
+        for ch in spend:
+            camps.extend(ch.get("campaigns") or [])
+        camps.sort(key=lambda c: float(c.get("roas") or 0), reverse=True)
+        if camps:
+            best_name = camps[0].get("name")
+
     if approval_ids:
         status = "awaiting_approval"
         label = "proposta" if n == 1 else "proposte"
-        reply = (
-            f"Ho preparato {n} {label} da revisionare. "
-            "Apri il pannello Approvazioni e scegli Approva o Rifiuta."
-        )
+        if best_name:
+            reply = (
+                f"Report pronto: tra le ads, “{best_name}” è tra le migliori. "
+                f"Ho anche {n} {label} da revisionare — Approva o Rifiuta nel pannello."
+            )
+        else:
+            reply = (
+                f"Ho preparato il report e {n} {label} da revisionare. "
+                "Apri il pannello Approvazioni e scegli Approva o Rifiuta."
+            )
     else:
         status = "completed"
-        reply = "Analisi completata. Non ci sono azioni da approvare al momento."
+        if best_name:
+            reply = (
+                f"Report pronto. Tra le ads che hanno funzionato meglio c’è “{best_name}”. "
+                "Nessuna azione da approvare al momento."
+            )
+        elif spend:
+            reply = "Report ads pronto. Nessuna azione da approvare al momento."
+        else:
+            reply = "Analisi completata. Non ci sono azioni da approvare al momento."
 
     if run_id:
         runs = get_run_store(settings.monny_data_dir)

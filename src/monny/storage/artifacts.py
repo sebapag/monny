@@ -38,7 +38,11 @@ def read_json_artifact(
 def list_artifacts(data_dir: Path | str, tenant_id: str) -> list[dict[str, Any]]:
     root = artifact_dir(data_dir, tenant_id)
     items: list[dict[str, Any]] = []
-    for path in sorted(root.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True):
+    for path in sorted(
+        list(root.glob("*.json")) + list(root.glob("*.md")),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    ):
         stat = path.stat()
         items.append(
             {

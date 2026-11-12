@@ -61,9 +61,35 @@ def _stub_infer_plan_raw(goal: str, message: str) -> list[str]:
         k in text
         for k in ("controlling", "budget vs", "kpi snapshot", "costi anomali", "cost alert")
     )
-    wants_spend = any(k in text for k in ("spend", "ads", "budget", "roas", "cpa", "meta", "google"))
+    wants_spend = any(
+        k in text
+        for k in (
+            "spend",
+            "ads",
+            "campagne",
+            "campagna",
+            "budget",
+            "roas",
+            "cpa",
+            "meta",
+            "google",
+            "pubblicit",
+        )
+    )
     wants_seo = any(k in text for k in ("seo", "title", "meta", "page", "sitemap", "crawl"))
-    wants_report = any(k in text for k in ("report", "summary", "overview", "daily"))
+    wants_report = any(
+        k in text
+        for k in (
+            "report",
+            "summary",
+            "overview",
+            "daily",
+            "generami",
+            "funzionat",
+            "miglior",
+            "riepilogo",
+        )
+    )
 
     stub_only = False
     if wants_promo:

@@ -20,7 +20,7 @@ from monny.skills import (
     spend_google,
     spend_meta,
 )
-from monny.storage.artifacts import write_json_artifact
+from monny.storage.artifacts import artifact_dir, write_json_artifact
 from monny.storage.audit import append_audit
 
 
@@ -139,6 +139,11 @@ def skills_runner_node(state: AgentState) -> dict:
     )
 
     write_json_artifact(settings.monny_data_dir, tenant.tenant_id, "last_report.json", report)
+    # Markdown twin for Agent UI / download — same payload, human-readable.
+    md = (report.get("markdown") or "").strip()
+    if md:
+        md_path = artifact_dir(settings.monny_data_dir, tenant.tenant_id) / "last_report.md"
+        md_path.write_text(md + "\n", encoding="utf-8")
 
     spend_channels = report.get("spend_channels") or []
     if spend_channels:
@@ -149,7 +154,9 @@ def skills_runner_node(state: AgentState) -> dict:
             {
                 "goal": state.get("goal"),
                 "spend_channels": spend_channels,
+                "top_campaigns": report.get("top_campaigns") or [],
                 "proposal_count": report.get("proposal_count", 0),
+                "markdown": report.get("markdown"),
             },
         )
 
