@@ -341,26 +341,35 @@ function LabelAnchorPublisher({
 function OfficeLabelOverlay({
   labels,
   badge,
+  onSelect,
 }: {
   labels: OverlayLabel[]
   badge: OverlayBadge | null
+  onSelect: (id: DeptId) => void
 }) {
   return (
     <div className="office-label-layer" data-testid="office-label-layer">
       {labels.map((item) => (
-        <div
+        <button
           key={item.id}
+          type="button"
           className={`office-label-chip${item.locked ? ' is-locked' : ''}${
             item.lit ? ' is-lit' : ''
           }`}
           style={{ left: item.x, top: item.y }}
           data-testid="office-room-label"
+          title={item.locked ? lockedHintIt(item.id) : `Entra in ${item.label}`}
+          aria-label={item.locked ? lockedHintIt(item.id) : `Entra in ${item.label}`}
+          onClick={(e) => {
+            e.stopPropagation()
+            onSelect(item.id)
+          }}
         >
           <span className="office-label-chip-num">{item.hotspot}</span>
           <span className="office-label-chip-text">
             {item.locked ? `${item.label} · chiuso` : item.label}
           </span>
-        </div>
+        </button>
       ))}
       {badge && (
         <span
@@ -1097,14 +1106,27 @@ function RoomZone({
       )}
 
       {peopleOffsets.map((pos, i) => (
-        <Ometto
+        <group
           key={`${room.id}-p${i}`}
-          position={pos}
-          accent={room.accent}
-          active={active}
-          phase={phaseBase + i * 2.35 + i * 0.41}
-          reduceMotion={reduceMotion}
-        />
+          onClick={(e) => {
+            e.stopPropagation()
+            onSelect(room.id)
+          }}
+          onPointerOver={() => {
+            document.body.style.cursor = locked ? 'not-allowed' : 'pointer'
+          }}
+          onPointerOut={() => {
+            document.body.style.cursor = 'default'
+          }}
+        >
+          <Ometto
+            position={pos}
+            accent={room.accent}
+            active={active}
+            phase={phaseBase + i * 2.35 + i * 0.41}
+            reduceMotion={reduceMotion}
+          />
+        </group>
       ))}
 
       {/* Invisible warm fill only — no floating ceiling slabs / pendant fixtures */}
@@ -1492,7 +1514,11 @@ function HardenedOfficeCanvas({
           />
         </Suspense>
       </Canvas>
-      <OfficeLabelOverlay labels={overlayLabels} badge={overlayBadge} />
+      <OfficeLabelOverlay
+        labels={overlayLabels}
+        badge={overlayBadge}
+        onSelect={onSelect}
+      />
     </div>
   )
 }
