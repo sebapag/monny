@@ -1814,6 +1814,14 @@ a {
   text-rendering: geometricPrecision;
   transform: translate(-50%, -50%);
   will-change: left, top;
+  /* Layer is pointer-events: none so canvas stays hittable; chips re-enable clicks. */
+  pointer-events: auto;
+  cursor: pointer;
+  margin: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  color: inherit;
+  line-height: 1.2;
 }
 
 .office-label-chip.is-lit {
@@ -1824,6 +1832,7 @@ a {
 .office-label-chip.is-locked {
   background: #e8e4de;
   border-color: rgba(180, 174, 164, 0.7);
+  cursor: not-allowed;
 }
 
 .office-label-chip.is-locked .office-label-chip-text {
