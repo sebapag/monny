@@ -32,23 +32,32 @@ monny/
 
 No live credentials required. Dry-run is the default (`MONNY_DRY_RUN=1`, `MONNY_LIVE=0`).
 
+**Two processes, two toolchains — do not mix them:**
+
+| Surface | Directory | Runtime | Start |
+|---------|-----------|---------|-------|
+| API / agent | repo root (`pyproject.toml`) | **Python ≥3.11** (CI + Docker use **3.12**) | `pip install -e ".[dev]"` then `uvicorn …` |
+| Web UI | `web/` | **Node 22 + npm** (Vite/React) — **no Python** | `cd web && npm install && npm run dev` |
+
+`web/` has no `pyproject.toml`. Running `pip install`, `python -m venv`, or `python package.json` inside `web/` will fail — that is expected. Python 3.12 is supported for the API; it is never used by the frontend.
+
 ### Docker Compose (recommended local)
 
 ```bash
-# API only (production-like image)
+# API only (production-like image — python:3.12-slim)
 docker compose up --build
 
-# API + Vite web (profile)
+# API + Vite web (profile; web service is node:22-alpine)
 docker compose --profile web up --build
 ```
 
 - API health: http://127.0.0.1:8000/health (also `/api/health`)
 - Web (profile): http://127.0.0.1:5173 — set `VITE_API_BASE_URL` if the UI should call a remote API
 
-### 1. Python agent + API (venv)
+### 1. Python agent + API (venv) — repo root only
 
 ```bash
-cd monny
+cd monny   # repository root (where pyproject.toml lives) — not web/
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
@@ -70,11 +79,15 @@ python -m monny --tenant acme --goal "report spend ultimi 7 giorni"
 uvicorn monny.api.app:app --reload --host 127.0.0.1 --port 8000
 ```
 
-### 2. Web UI
+On Debian/Ubuntu, if `python3 -m venv` fails with `ensurepip is not available`, install `python3.12-venv` (or `python3-venv`) and recreate the venv.
+
+### 2. Web UI — Node only (`web/`)
 
 ```bash
 cd web && npm install && npm run dev
 ```
+
+Do **not** run `pip` / `python` here. Keep the API from step 1 (or Docker) running on `:8000` so the SPA can proxy/call it.
 
 Optional: point the SPA at a remote API (Cloud Run):
 
