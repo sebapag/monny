@@ -58,8 +58,9 @@
   --radius-pill: 999px;
 
   --shadow-soft: 0 1px 2px rgba(15, 15, 15, 0.04), 0 4px 16px rgba(15, 15, 15, 0.04);
-  --font: 'DM Sans', 'Notion Sans', ui-sans-serif, system-ui, sans-serif;
-  --font-display: 'Syne', 'DM Sans', ui-sans-serif, system-ui, sans-serif;
+  /* Business lockup: Source Serif 4 (wordmark) + Source Sans 3 (UI) */
+  --font: 'Source Sans 3', 'Source Sans Pro', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Source Serif 4', 'Source Serif Pro', 'Times New Roman', serif;
   --input-h: 44px;
   --office-sky: #d9ebf7;
   --office-oak: #d8c3a3;
@@ -136,33 +137,41 @@ a {
 .brand {
   display: flex;
   align-items: center;
-  gap: 0.55rem;
-  min-width: 140px;
+  gap: 0.65rem;
+  min-width: 168px;
+}
+
+.brand-lockup {
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
+  line-height: 1.05;
 }
 
 .brand-mark {
   font-family: var(--font-display);
-  font-weight: 800;
-  font-size: 1.2rem;
-  letter-spacing: -0.03em;
+  font-weight: 700;
+  font-size: 1.3rem;
+  letter-spacing: -0.015em;
   color: var(--brand-navy);
 }
 
 .brand-tag {
-  font-size: 0.72rem;
+  font-family: var(--font);
+  font-size: 0.68rem;
   font-weight: 600;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--steel);
-  padding: 0.2rem 0.45rem;
-  border-radius: var(--radius-md);
-  background: var(--tint-gray);
+  color: var(--slate);
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
 .brand-strip {
-  width: 4px;
-  height: 22px;
-  border-radius: 2px;
+  width: 3px;
+  height: 28px;
+  border-radius: 1px;
   background: var(--brand-navy);
 }
 
@@ -1288,22 +1297,38 @@ a {
   gap: 1rem;
 }
 
+.office-brand-lockup {
+  display: flex;
+  flex-direction: column;
+  gap: 0.12rem;
+}
+
 .office-brand-mark {
   margin: 0;
   font-family: var(--font-display);
-  font-weight: 800;
-  font-size: clamp(1.7rem, 3.6vw, 2.45rem);
-  letter-spacing: -0.045em;
+  font-weight: 700;
+  font-size: clamp(1.9rem, 3.8vw, 2.6rem);
+  letter-spacing: -0.018em;
   line-height: 1;
   color: var(--brand-navy);
 }
 
-.office-hero-head h1 {
-  margin: 0.2rem 0 0;
-  font-family: var(--font-display);
-  font-size: clamp(1rem, 1.8vw, 1.2rem);
+.office-brand-sub {
+  margin: 0;
+  font-family: var(--font);
+  font-size: 0.72rem;
   font-weight: 600;
-  letter-spacing: -0.02em;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--slate);
+}
+
+.office-hero-head h1 {
+  margin: 0.35rem 0 0;
+  font-family: var(--font);
+  font-size: clamp(1.02rem, 1.7vw, 1.18rem);
+  font-weight: 600;
+  letter-spacing: -0.015em;
   color: var(--charcoal);
 }
 
@@ -1553,10 +1578,10 @@ a {
 .office-mode-badge {
   flex-shrink: 0;
   align-self: flex-start;
-  font-family: var(--font-display);
+  font-family: var(--font);
   font-size: 0.72rem;
   font-weight: 700;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   padding: 0.4rem 0.75rem;
   border-radius: var(--radius-md);
@@ -1616,7 +1641,7 @@ a {
   background: linear-gradient(180deg, #cfe6f5 0%, rgba(207, 230, 245, 0) 100%);
 }
 
-/* Soft cityscape silhouette around the Leggera floor plate */
+/* Commercial cityscape around the Leggera floor plate (windowed buildings) */
 .office-light-cityscape {
   position: absolute;
   inset: 0;
@@ -1628,80 +1653,134 @@ a {
   position: absolute;
   display: flex;
   align-items: flex-end;
-  gap: 4px;
+  gap: 5px;
   opacity: 1;
 }
 
-.office-city-ring span {
+.office-city-ring .city-bldg {
   display: block;
-  border-radius: 3px 3px 1px 1px;
-  background: linear-gradient(180deg, #d2c3b0 0%, #9f8f7c 100%);
+  position: relative;
+  border-radius: 2px 2px 1px 1px;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.35),
-    0 1px 0 rgba(90, 70, 50, 0.12);
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    0 1px 0 rgba(70, 55, 40, 0.1);
+  /* Bold window panes — must read as façades at thumbnail size */
+  background-image:
+    linear-gradient(
+      to right,
+      transparent 0 22%,
+      rgba(40, 55, 72, 0.42) 22% 38%,
+      transparent 38% 62%,
+      rgba(40, 55, 72, 0.42) 62% 78%,
+      transparent 78% 100%
+    ),
+    linear-gradient(
+      to bottom,
+      transparent 0 14%,
+      rgba(40, 55, 72, 0.38) 14% 28%,
+      transparent 28% 42%,
+      rgba(40, 55, 72, 0.38) 42% 56%,
+      transparent 56% 70%,
+      rgba(40, 55, 72, 0.38) 70% 84%,
+      transparent 84% 100%
+    ),
+    linear-gradient(180deg, var(--city-tone-top, #d2c3b0) 0%, var(--city-tone-bot, #9f8f7c) 100%);
+  background-blend-mode: multiply, multiply, normal;
+}
+
+.office-city-ring .city-bldg::after {
+  content: '';
+  position: absolute;
+  left: 12%;
+  right: 12%;
+  top: 0;
+  height: 3px;
+  border-radius: 1px;
+  background: rgba(232, 223, 210, 0.85);
+}
+
+.office-city-ring .city-bldg.mid::before,
+.office-city-ring .city-bldg.tall::before {
+  content: '';
+  position: absolute;
+  left: 18%;
+  right: 18%;
+  top: -14%;
+  height: 18%;
+  border-radius: 1px 1px 0 0;
+  background: inherit;
+  background-image:
+    linear-gradient(rgba(45, 58, 74, 0.22) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(45, 58, 74, 0.22) 1px, transparent 1px),
+    linear-gradient(180deg, var(--city-tone-top, #d2c3b0), var(--city-tone-bot, #9f8f7c));
+  background-size: 4px 5px, 4px 5px, 100% 100%;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+.office-city-ring .city-bldg.tall::before {
+  top: -22%;
+  height: 24%;
+  left: 24%;
+  right: 24%;
+}
+
+.city-bldg.tone-a {
+  --city-tone-top: #d5c6b4;
+  --city-tone-bot: #a89480;
+}
+.city-bldg.tone-b {
+  --city-tone-top: #c2ced8;
+  --city-tone-bot: #8e9eac;
+}
+.city-bldg.tone-c {
+  --city-tone-top: #cfc3b4;
+  --city-tone-bot: #9a8b78;
+}
+.city-bldg.tone-d {
+  --city-tone-top: #b7c2cc;
+  --city-tone-bot: #8794a0;
 }
 
 .office-city-ring.city-n {
-  top: 0.4%;
-  left: 4%;
-  right: 4%;
-  height: 11.5%;
-  /* Continuous skyline under the discrete bars — readable even if spans are subtle */
-  background:
-    linear-gradient(#0000 35%, #0000 35%) 0 100% / 7% 55%,
-    linear-gradient(#9f8f7c 0 0) 0 100% / 7% 55%,
-    linear-gradient(#0000 20%, #0000 20%) 8% 100% / 6% 78%,
-    linear-gradient(#b7a28c 0 0) 8% 100% / 6% 78%,
-    linear-gradient(#0000 42%, #0000 42%) 15% 100% / 8% 48%,
-    linear-gradient(#a89a88 0 0) 15% 100% / 8% 48%,
-    linear-gradient(#0000 12%, #0000 12%) 24% 100% / 5% 88%,
-    linear-gradient(#c2b09a 0 0) 24% 100% / 5% 88%,
-    linear-gradient(#0000 30%, #0000 30%) 31% 100% / 7% 62%,
-    linear-gradient(#9eabb6 0 0) 31% 100% / 7% 62%,
-    linear-gradient(#0000 18%, #0000 18%) 40% 100% / 6% 80%,
-    linear-gradient(#b4a697 0 0) 40% 100% / 6% 80%,
-    linear-gradient(#0000 38%, #0000 38%) 48% 100% / 8% 52%,
-    linear-gradient(#a9b6c2 0 0) 48% 100% / 8% 52%,
-    linear-gradient(#0000 10%, #0000 10%) 58% 100% / 5% 92%,
-    linear-gradient(#cfc3b4 0 0) 58% 100% / 5% 92%,
-    linear-gradient(#0000 28%, #0000 28%) 65% 100% / 7% 64%,
-    linear-gradient(#9f8f7c 0 0) 65% 100% / 7% 64%,
-    linear-gradient(#0000 40%, #0000 40%) 74% 100% / 6% 50%,
-    linear-gradient(#b7c2cc 0 0) 74% 100% / 6% 50%,
-    linear-gradient(#0000 22%, #0000 22%) 82% 100% / 7% 72%,
-    linear-gradient(#c5b5a2 0 0) 82% 100% / 7% 72%,
-    linear-gradient(#0000 34%, #0000 34%) 91% 100% / 8% 58%,
-    linear-gradient(#aeb8c2 0 0) 91% 100% / 8% 58%;
-  background-repeat: no-repeat;
+  top: 0.2%;
+  left: 3.5%;
+  right: 3.5%;
+  height: 12.5%;
 }
 
-.office-city-ring.city-n span {
+.office-city-ring.city-n .city-bldg {
   flex: 1;
   min-width: 0;
-  position: relative;
-  z-index: 1;
 }
 
 .office-city-ring.city-s {
-  bottom: 0.4%;
-  left: 8%;
-  right: 8%;
-  height: 7%;
+  bottom: 0.3%;
+  left: 7%;
+  right: 7%;
+  height: 7.5%;
   align-items: flex-start;
 }
 
-.office-city-ring.city-s span {
+.office-city-ring.city-s .city-bldg {
   flex: 1;
   min-width: 0;
-  border-radius: 1px 1px 3px 3px;
-  background: linear-gradient(0deg, #aebcc8 0%, #8e9aa6 100%);
+  border-radius: 1px 1px 2px 2px;
+}
+
+.office-city-ring.city-s .city-bldg::after {
+  top: auto;
+  bottom: 0;
+}
+
+.office-city-ring.city-s .city-bldg::before {
+  display: none;
 }
 
 .office-city-ring.city-w,
 .office-city-ring.city-e {
   top: 11%;
   bottom: 7%;
-  width: 4.4%;
+  width: 4.8%;
   flex-direction: column;
   justify-content: space-evenly;
   align-items: stretch;
@@ -1709,20 +1788,25 @@ a {
 }
 
 .office-city-ring.city-w {
-  left: 0.35%;
+  left: 0.25%;
 }
 
 .office-city-ring.city-e {
-  right: 0.35%;
+  right: 0.25%;
   align-items: flex-end;
 }
 
-.office-city-ring.city-w span,
-.office-city-ring.city-e span {
+.office-city-ring.city-w .city-bldg,
+.office-city-ring.city-e .city-bldg {
   height: 13%;
-  min-height: 14px;
+  min-height: 16px;
   border-radius: 2px;
-  background: linear-gradient(90deg, #a9b6c2, #c7baa8);
+  background-size: 4px 5px, 4px 5px, 100% 100%;
+}
+
+.office-city-ring.city-w .city-bldg::before,
+.office-city-ring.city-e .city-bldg::before {
+  display: none;
 }
 
 .office-city-blocks {
@@ -1730,11 +1814,11 @@ a {
   inset: 8.2% 2.8% 4.2%;
   border-radius: 12px;
   background:
-    linear-gradient(90deg, rgba(174, 184, 194, 0.45), transparent 7%, transparent 93%, rgba(174, 184, 194, 0.45)),
-    linear-gradient(180deg, rgba(174, 184, 194, 0.28), transparent 10%, transparent 90%, rgba(174, 184, 194, 0.28));
+    linear-gradient(90deg, rgba(174, 184, 194, 0.4), transparent 6%, transparent 94%, rgba(174, 184, 194, 0.4)),
+    linear-gradient(180deg, rgba(174, 184, 194, 0.22), transparent 9%, transparent 91%, rgba(174, 184, 194, 0.22));
   box-shadow:
-    0 0 0 4px rgba(174, 184, 194, 0.4),
-    0 0 0 8px rgba(207, 224, 236, 0.5);
+    0 0 0 4px rgba(174, 184, 194, 0.35),
+    0 0 0 8px rgba(207, 224, 236, 0.45);
   pointer-events: none;
 }
 

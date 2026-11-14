@@ -1318,8 +1318,10 @@ function App() {
         <header className="topbar">
           <div className="brand">
             <span className="brand-strip" aria-hidden />
-            <span className="brand-mark">Monny</span>
-            <span className="brand-tag">workspace</span>
+            <div className="brand-lockup">
+              <span className="brand-mark">Monny</span>
+              <span className="brand-tag">Workspace marketing</span>
+            </div>
           </div>
           <div className="tenant-switch">
             <label htmlFor="global-tenant">Negozio</label>
