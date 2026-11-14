@@ -1914,7 +1914,7 @@ export function OfficeTwin({
         <header className="office-hero-head">
           <div>
             <div className="office-brand-lockup">
-              <p className="office-brand-mark">Monny</p>
+              <p className="office-brand-mark">Atrium</p>
               <p className="office-brand-sub">Workspace marketing</p>
             </div>
             <h1>Ufficio digitale</h1>
@@ -1946,14 +1946,14 @@ export function OfficeTwin({
               }}
             >
               <label className="sr-only" htmlFor="office-goal">
-                Richiesta per Monny
+                Richiesta per Atrium
               </label>
               <textarea
                 id="office-goal"
                 rows={2}
                 value={goalDraft}
                 disabled={busy}
-                placeholder="Scrivi cosa vuoi che Monny faccia…"
+                placeholder="Scrivi cosa vuoi che Atrium faccia…"
                 onChange={(e) => setGoalDraft(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {

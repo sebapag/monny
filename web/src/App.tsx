@@ -520,7 +520,7 @@ function KnowledgeAdminPanel({
   return (
     <div className="form-grid" data-testid="knowledge-admin">
       <FieldHelp>
-        Documenti aziendali che Monny consulta prima di spend e SEO. Per ora sono file
+        Documenti aziendali che Atrium consulta prima di spend e SEO. Per ora sono file
         markdown nel tenant; puoi attivare o spegnere ogni fonte.
       </FieldHelp>
       {loading ? (
@@ -589,7 +589,7 @@ function AdminForm({
           value={cfg.display_name}
           onChange={(e) => set('display_name', e.target.value)}
         />
-        <FieldHelp>Come compare Monny nell’header e nei report.</FieldHelp>
+        <FieldHelp>Come compare Atrium nell’header e nei report.</FieldHelp>
       </div>
 
       <div className="section-title">Negozio Shopify</div>
@@ -779,7 +779,7 @@ function AdminForm({
       <div className="section-title">Vista ufficio</div>
       <FieldHelp>
         Opzione a pagamento: scegli se l’home Agent mostra la vista completa 3D, la
-        vista leggera (2D), o lascia che Monny scelga in automatico in base al browser.
+        vista leggera (2D), o lascia che Atrium scelga in automatico in base al browser.
         Senza questa opzione resta sempre la modalità automatica.
       </FieldHelp>
       {(() => {
@@ -1319,7 +1319,7 @@ function App() {
           <div className="brand">
             <span className="brand-strip" aria-hidden />
             <div className="brand-lockup">
-              <span className="brand-mark">Monny</span>
+              <span className="brand-mark">Atrium</span>
               <span className="brand-tag">Workspace marketing</span>
             </div>
           </div>

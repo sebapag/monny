@@ -59,7 +59,7 @@ from monny.storage.runs import get_run_store
 
 def create_app() -> FastAPI:
     settings = get_settings()
-    app = FastAPI(title="Monny API", version="0.1.0")
+    app = FastAPI(title="Atrium API", version="0.1.0")
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origin_list,
