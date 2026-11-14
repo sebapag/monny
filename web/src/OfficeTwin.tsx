@@ -4,6 +4,7 @@ import {
   Component,
   Suspense,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -12,11 +13,13 @@ import {
 import {
   CanvasTexture,
   Color,
+  Object3D,
   RepeatWrapping,
   SRGBColorSpace,
   Vector3,
   type Camera,
   type Group,
+  type InstancedMesh,
   type MeshStandardMaterial,
   type PointLight as PointLightType,
   type Texture,
@@ -245,8 +248,9 @@ function FlatMat({
 function FixedCamera() {
   const { camera } = useThree()
   useEffect(() => {
-    // Pulled back to frame the expanded back wing (Ops / Design / IT / Controlling).
-    camera.position.set(12.4, 13.2, 14.2)
+    // Pulled slightly farther so the stylized city reads around the twin;
+    // office (back wing included) stays the clear focal point.
+    camera.position.set(13.6, 14.4, 15.4)
     camera.lookAt(0, 0.35, -0.6)
     camera.updateProjectionMatrix()
   }, [camera])
@@ -1156,6 +1160,182 @@ function RoomZone({
   )
 }
 
+/** Warm matte city façade tones — atmosphere only, never neon/cyber. */
+const CITY_TONES = [
+  '#c9b7a2',
+  '#b7c2cc',
+  '#d5c6b4',
+  '#a9b6c2',
+  '#cfc3b4',
+  '#9eaea8',
+  '#d8cfc2',
+  '#b4a697',
+  '#c2ced8',
+] as const
+
+type CityBuildingSpec = {
+  x: number
+  z: number
+  w: number
+  d: number
+  h: number
+  color: string
+}
+
+/** Deterministic low-poly city blocks outside the office apron. */
+function buildCityLayout(): CityBuildingSpec[] {
+  const out: CityBuildingSpec[] = []
+  const officePad = 10.4
+  // Street-aligned rings around the twin (simple blocks, readable silhouette).
+  const sites: Array<[number, number, number, number, number]> = [
+    // Back row (−Z) — strongest silhouette from fixed cam
+    [-18, -16, 3.2, 2.6, 5.6],
+    [-13.5, -17.2, 2.8, 2.4, 7.4],
+    [-9.2, -18.4, 3.4, 2.8, 4.4],
+    [-4.5, -17.6, 2.6, 2.5, 8.6],
+    [0.2, -18.8, 3.8, 2.6, 6.2],
+    [4.8, -17.4, 2.9, 2.4, 9.4],
+    [9.4, -18.2, 3.2, 2.7, 5.2],
+    [14.2, -16.8, 3.6, 2.8, 7.8],
+    [18.6, -15.6, 2.8, 2.5, 4.6],
+    // Second back band (depth)
+    [-16.2, -13.6, 2.4, 2.2, 3.8],
+    [-7.0, -14.2, 2.5, 2.1, 4.8],
+    [2.8, -14.0, 2.6, 2.2, 3.4],
+    [11.6, -13.8, 2.5, 2.3, 5.4],
+    // Left (−X)
+    [-17.8, -11.2, 2.6, 3.0, 6.4],
+    [-18.6, -6.4, 2.8, 2.8, 8.2],
+    [-17.4, -1.6, 2.5, 3.2, 5.0],
+    [-18.2, 3.2, 2.9, 2.6, 7.2],
+    [-17.0, 7.8, 2.7, 2.9, 4.2],
+    [-18.8, 12.2, 3.0, 2.5, 6.6],
+    // Right (+X) — visible from camera corner
+    [17.6, -11.0, 2.7, 2.9, 7.0],
+    [18.4, -6.2, 2.9, 2.7, 5.4],
+    [17.2, -1.4, 2.6, 3.1, 9.0],
+    [18.8, 3.4, 3.1, 2.6, 6.0],
+    [17.4, 8.0, 2.8, 2.8, 4.4],
+    [19.0, 12.4, 2.9, 2.5, 7.4],
+    // Front (+Z) — lower so Leadership stays focal
+    [-16.5, 14.8, 3.0, 2.4, 3.6],
+    [-11.2, 15.6, 2.8, 2.3, 4.6],
+    [-5.8, 14.6, 3.2, 2.5, 3.2],
+    [0.4, 16.0, 2.6, 2.2, 4.0],
+    [5.6, 15.2, 3.0, 2.4, 3.0],
+    [11.0, 15.8, 2.9, 2.3, 4.8],
+    [16.2, 14.4, 3.1, 2.5, 3.4],
+    // Mid-depth filler blocks (street depth)
+    [-14.6, -13.0, 2.4, 2.2, 3.4],
+    [13.8, -13.2, 2.5, 2.3, 4.0],
+    [-15.2, 10.4, 2.3, 2.2, 3.2],
+    [15.0, 10.6, 2.4, 2.1, 3.6],
+  ]
+  let i = 0
+  for (const [x, z, w, d, h] of sites) {
+    if (Math.abs(x) < officePad && Math.abs(z) < officePad) continue
+    out.push({
+      x,
+      z,
+      w,
+      d,
+      h,
+      color: CITY_TONES[i % CITY_TONES.length],
+    })
+    i += 1
+  }
+  return out
+}
+
+const _cityDummy = new Object3D()
+const _cityColor = new Color()
+
+/**
+ * Stylized city around the office twin — atmosphere only (no clicks).
+ * Instanced boxes keep cost low next to furnished rooms / ometti.
+ */
+function CityAroundOffice() {
+  const meshRef = useRef<InstancedMesh>(null)
+  const buildings = useMemo(() => buildCityLayout(), [])
+
+  useLayoutEffect(() => {
+    const mesh = meshRef.current
+    if (!mesh) return
+    buildings.forEach((b, i) => {
+      _cityDummy.position.set(b.x, b.h / 2 - 0.08, b.z)
+      _cityDummy.scale.set(b.w, b.h, b.d)
+      _cityDummy.updateMatrix()
+      mesh.setMatrixAt(i, _cityDummy.matrix)
+      _cityColor.set(b.color)
+      mesh.setColorAt(i, _cityColor)
+    })
+    mesh.instanceMatrix.needsUpdate = true
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
+  }, [buildings])
+
+  return (
+    <group raycast={() => null}>
+      {/* Soft urban ground + plaza so the twin sits in a city block, not a void */}
+      <mesh position={[0, -0.14, -0.4]} rotation={[-Math.PI / 2, 0, 0]} raycast={() => null}>
+        <planeGeometry args={[52, 48]} />
+        <meshStandardMaterial color="#d5e2ec" roughness={1} metalness={0} />
+      </mesh>
+      {/* Street grid (matte asphalt ribbons) */}
+      <mesh position={[0, -0.11, -0.4]} rotation={[-Math.PI / 2, 0, 0]} raycast={() => null}>
+        <planeGeometry args={[48, 2.2]} />
+        <meshStandardMaterial color="#b6c0ca" roughness={1} metalness={0} />
+      </mesh>
+      <mesh position={[0, -0.105, -0.4]} rotation={[-Math.PI / 2, 0, Math.PI / 2]} raycast={() => null}>
+        <planeGeometry args={[44, 2.0]} />
+        <meshStandardMaterial color="#b6c0ca" roughness={1} metalness={0} />
+      </mesh>
+      <mesh position={[0, -0.108, -14.2]} rotation={[-Math.PI / 2, 0, 0]} raycast={() => null}>
+        <planeGeometry args={[42, 1.6]} />
+        <meshStandardMaterial color="#aeb8c2" roughness={1} metalness={0} />
+      </mesh>
+      <mesh position={[0, -0.108, 13.6]} rotation={[-Math.PI / 2, 0, 0]} raycast={() => null}>
+        <planeGeometry args={[40, 1.5]} />
+        <meshStandardMaterial color="#aeb8c2" roughness={1} metalness={0} />
+      </mesh>
+      <mesh position={[-14.6, -0.108, -0.4]} rotation={[-Math.PI / 2, 0, Math.PI / 2]} raycast={() => null}>
+        <planeGeometry args={[38, 1.5]} />
+        <meshStandardMaterial color="#aeb8c2" roughness={1} metalness={0} />
+      </mesh>
+      <mesh position={[14.6, -0.108, -0.4]} rotation={[-Math.PI / 2, 0, Math.PI / 2]} raycast={() => null}>
+        <planeGeometry args={[38, 1.5]} />
+        <meshStandardMaterial color="#aeb8c2" roughness={1} metalness={0} />
+      </mesh>
+      {/* Soft plaza ring around the office pad */}
+      <mesh position={[0, -0.1, -0.4]} rotation={[-Math.PI / 2, 0, 0]} raycast={() => null}>
+        <circleGeometry args={[13.2, 48]} />
+        <meshStandardMaterial color="#cfe0ec" roughness={1} metalness={0} transparent opacity={0.7} />
+      </mesh>
+      <instancedMesh
+        ref={meshRef}
+        args={[undefined, undefined, buildings.length]}
+        raycast={() => null}
+        frustumCulled={false}
+      >
+        <boxGeometry args={[1, 1, 1]} />
+        <meshStandardMaterial roughness={0.92} metalness={0.04} />
+      </instancedMesh>
+      {/* Soft rooftop accents (sparse, low) for silhouette readable against sky */}
+      {buildings
+        .filter((_, i) => i % 4 === 0)
+        .map((b, i) => (
+          <mesh
+            key={`cap-${i}`}
+            position={[b.x, b.h + 0.12, b.z]}
+            raycast={() => null}
+          >
+            <boxGeometry args={[b.w * 0.55, 0.28, b.d * 0.55]} />
+            <meshStandardMaterial color="#e8dfd2" roughness={1} metalness={0} />
+          </mesh>
+        ))}
+    </group>
+  )
+}
+
 function OfficeBuilding({
   lights,
   enabled,
@@ -1173,14 +1353,15 @@ function OfficeBuilding({
 
   return (
     <group>
+      <CityAroundOffice />
       {/* Soft exterior apron so the building sits in daylight, not a void */}
-      <mesh position={[0, -0.12, -0.4]} rotation={[-Math.PI / 2, 0, 0]}>
-        <planeGeometry args={[34, 30]} />
+      <mesh position={[0, -0.09, -0.4]} rotation={[-Math.PI / 2, 0, 0]}>
+        <planeGeometry args={[18.4, 16.2]} />
         <meshStandardMaterial color="#d9e6f0" roughness={1} metalness={0} />
       </mesh>
-      <mesh position={[0, -0.1, -0.4]} rotation={[-Math.PI / 2, 0, 0]}>
-        <circleGeometry args={[12.5, 48]} />
-        <meshStandardMaterial color="#cfe0ec" roughness={1} metalness={0} transparent opacity={0.55} />
+      <mesh position={[0, -0.085, -0.4]} rotation={[-Math.PI / 2, 0, 0]}>
+        <circleGeometry args={[11.2, 48]} />
+        <meshStandardMaterial color="#cfe0ec" roughness={1} metalness={0} transparent opacity={0.45} />
       </mesh>
       {/* Warm oak plank building floor (not grey) — expanded for back wing */}
       <mesh position={[0, -0.02, -0.35]} rotation={[-Math.PI / 2, 0, 0]}>
@@ -1303,6 +1484,46 @@ function OfficeLightTwin({
     >
       <div className="office-light-blueprint" aria-hidden>
         <div className="office-light-sky" />
+        {/* Stylized cityscape around the floor plate (Leggera atmosphere) */}
+        <div className="office-light-cityscape" data-testid="office-cityscape-2d">
+          <div className="office-city-ring city-n">
+            <span style={{ height: '62%' }} />
+            <span style={{ height: '88%' }} />
+            <span style={{ height: '48%' }} />
+            <span style={{ height: '76%' }} />
+            <span style={{ height: '56%' }} />
+            <span style={{ height: '94%' }} />
+            <span style={{ height: '44%' }} />
+            <span style={{ height: '70%' }} />
+            <span style={{ height: '58%' }} />
+          </div>
+          <div className="office-city-ring city-s">
+            <span style={{ height: '42%' }} />
+            <span style={{ height: '58%' }} />
+            <span style={{ height: '36%' }} />
+            <span style={{ height: '52%' }} />
+            <span style={{ height: '40%' }} />
+            <span style={{ height: '64%' }} />
+            <span style={{ height: '38%' }} />
+          </div>
+          <div className="office-city-ring city-w">
+            <span style={{ width: '55%' }} />
+            <span style={{ width: '78%' }} />
+            <span style={{ width: '46%' }} />
+            <span style={{ width: '88%' }} />
+            <span style={{ width: '60%' }} />
+            <span style={{ width: '72%' }} />
+          </div>
+          <div className="office-city-ring city-e">
+            <span style={{ width: '62%' }} />
+            <span style={{ width: '48%' }} />
+            <span style={{ width: '84%' }} />
+            <span style={{ width: '56%' }} />
+            <span style={{ width: '74%' }} />
+            <span style={{ width: '50%' }} />
+          </div>
+          <div className="office-city-blocks" />
+        </div>
         <div className="office-light-floor-grain" />
         <div className="office-light-wall wall-n" />
         <div className="office-light-wall wall-s" />
@@ -1455,7 +1676,7 @@ function HardenedOfficeCanvas({
   return (
     <div className="office-canvas-stack">
       <Canvas
-        camera={{ position: [12.4, 13.2, 14.2], fov: 38, near: 0.1, far: 100 }}
+        camera={{ position: [13.6, 14.4, 15.4], fov: 38, near: 0.1, far: 120 }}
         dpr={[1, 1.25]}
         gl={{
           antialias: true,
