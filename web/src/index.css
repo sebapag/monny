@@ -1029,6 +1029,89 @@ a {
   overflow: auto;
 }
 
+/* —— Report popup (after run / skill that emits a user-facing report) —— */
+.report-popup-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 1.25rem;
+  background: rgba(10, 21, 48, 0.42);
+  animation: report-popup-fade 220ms ease;
+}
+
+.report-popup {
+  width: min(560px, 100%);
+  max-height: min(82vh, 720px);
+  overflow: auto;
+  background: var(--canvas);
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  box-shadow: 0 18px 48px rgba(10, 21, 48, 0.22);
+  padding: 1.15rem 1.2rem 1.05rem;
+  animation: report-popup-rise 260ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.report-popup-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.55rem;
+}
+
+.report-popup-head h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.2rem;
+  color: var(--brand-navy);
+  letter-spacing: -0.01em;
+}
+
+.report-popup-summary {
+  margin: 0 0 0.85rem;
+  color: var(--charcoal);
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+.report-popup-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--hairline);
+}
+
+.report-popup-actions .btn {
+  min-height: 40px;
+}
+
+@keyframes report-popup-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes report-popup-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .report-popup-backdrop,
+  .report-popup {
+    animation: none;
+  }
+}
+
 .channel-head {
   display: flex;
   justify-content: space-between;
@@ -1514,8 +1597,8 @@ a {
   overflow: hidden;
   isolation: isolate;
   background:
-    linear-gradient(180deg, #b9d8ec 0%, rgba(185, 216, 236, 0.35) 18%, transparent 32%),
-    radial-gradient(ellipse 80% 70% at 50% 60%, #e2ceb0 0%, #c9ae86 100%);
+    linear-gradient(180deg, #b9d8ec 0%, rgba(185, 216, 236, 0.45) 16%, transparent 30%),
+    radial-gradient(ellipse 90% 80% at 50% 58%, #dce6ee 0%, #c5b49a 72%, #b8a486 100%);
   box-shadow: inset 0 0 0 1px rgba(120, 95, 65, 0.22);
 }
 
@@ -1531,6 +1614,128 @@ a {
   inset: 0 0 auto;
   height: 18%;
   background: linear-gradient(180deg, #cfe6f5 0%, rgba(207, 230, 245, 0) 100%);
+}
+
+/* Soft cityscape silhouette around the Leggera floor plate */
+.office-light-cityscape {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.office-city-ring {
+  position: absolute;
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  opacity: 1;
+}
+
+.office-city-ring span {
+  display: block;
+  border-radius: 3px 3px 1px 1px;
+  background: linear-gradient(180deg, #d2c3b0 0%, #9f8f7c 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    0 1px 0 rgba(90, 70, 50, 0.12);
+}
+
+.office-city-ring.city-n {
+  top: 0.4%;
+  left: 4%;
+  right: 4%;
+  height: 11.5%;
+  /* Continuous skyline under the discrete bars — readable even if spans are subtle */
+  background:
+    linear-gradient(#0000 35%, #0000 35%) 0 100% / 7% 55%,
+    linear-gradient(#9f8f7c 0 0) 0 100% / 7% 55%,
+    linear-gradient(#0000 20%, #0000 20%) 8% 100% / 6% 78%,
+    linear-gradient(#b7a28c 0 0) 8% 100% / 6% 78%,
+    linear-gradient(#0000 42%, #0000 42%) 15% 100% / 8% 48%,
+    linear-gradient(#a89a88 0 0) 15% 100% / 8% 48%,
+    linear-gradient(#0000 12%, #0000 12%) 24% 100% / 5% 88%,
+    linear-gradient(#c2b09a 0 0) 24% 100% / 5% 88%,
+    linear-gradient(#0000 30%, #0000 30%) 31% 100% / 7% 62%,
+    linear-gradient(#9eabb6 0 0) 31% 100% / 7% 62%,
+    linear-gradient(#0000 18%, #0000 18%) 40% 100% / 6% 80%,
+    linear-gradient(#b4a697 0 0) 40% 100% / 6% 80%,
+    linear-gradient(#0000 38%, #0000 38%) 48% 100% / 8% 52%,
+    linear-gradient(#a9b6c2 0 0) 48% 100% / 8% 52%,
+    linear-gradient(#0000 10%, #0000 10%) 58% 100% / 5% 92%,
+    linear-gradient(#cfc3b4 0 0) 58% 100% / 5% 92%,
+    linear-gradient(#0000 28%, #0000 28%) 65% 100% / 7% 64%,
+    linear-gradient(#9f8f7c 0 0) 65% 100% / 7% 64%,
+    linear-gradient(#0000 40%, #0000 40%) 74% 100% / 6% 50%,
+    linear-gradient(#b7c2cc 0 0) 74% 100% / 6% 50%,
+    linear-gradient(#0000 22%, #0000 22%) 82% 100% / 7% 72%,
+    linear-gradient(#c5b5a2 0 0) 82% 100% / 7% 72%,
+    linear-gradient(#0000 34%, #0000 34%) 91% 100% / 8% 58%,
+    linear-gradient(#aeb8c2 0 0) 91% 100% / 8% 58%;
+  background-repeat: no-repeat;
+}
+
+.office-city-ring.city-n span {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+  z-index: 1;
+}
+
+.office-city-ring.city-s {
+  bottom: 0.4%;
+  left: 8%;
+  right: 8%;
+  height: 7%;
+  align-items: flex-start;
+}
+
+.office-city-ring.city-s span {
+  flex: 1;
+  min-width: 0;
+  border-radius: 1px 1px 3px 3px;
+  background: linear-gradient(0deg, #aebcc8 0%, #8e9aa6 100%);
+}
+
+.office-city-ring.city-w,
+.office-city-ring.city-e {
+  top: 11%;
+  bottom: 7%;
+  width: 4.4%;
+  flex-direction: column;
+  justify-content: space-evenly;
+  align-items: stretch;
+  gap: 5px;
+}
+
+.office-city-ring.city-w {
+  left: 0.35%;
+}
+
+.office-city-ring.city-e {
+  right: 0.35%;
+  align-items: flex-end;
+}
+
+.office-city-ring.city-w span,
+.office-city-ring.city-e span {
+  height: 13%;
+  min-height: 14px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #a9b6c2, #c7baa8);
+}
+
+.office-city-blocks {
+  position: absolute;
+  inset: 8.2% 2.8% 4.2%;
+  border-radius: 12px;
+  background:
+    linear-gradient(90deg, rgba(174, 184, 194, 0.45), transparent 7%, transparent 93%, rgba(174, 184, 194, 0.45)),
+    linear-gradient(180deg, rgba(174, 184, 194, 0.28), transparent 10%, transparent 90%, rgba(174, 184, 194, 0.28));
+  box-shadow:
+    0 0 0 4px rgba(174, 184, 194, 0.4),
+    0 0 0 8px rgba(207, 224, 236, 0.5);
+  pointer-events: none;
 }
 
 .office-light-floor-grain {
@@ -1550,12 +1755,14 @@ a {
     ),
     linear-gradient(165deg, #e4d0b2 0%, #d8c3a3 55%, #cdb38a 100%);
   box-shadow: inset 0 0 0 1px rgba(120, 95, 65, 0.2);
+  z-index: 1;
 }
 
 .office-light-wall {
   position: absolute;
   background: #efe6da;
   box-shadow: inset 0 0 0 1px rgba(154, 123, 82, 0.28);
+  z-index: 1;
 }
 
 .office-light-wall.wall-n {
