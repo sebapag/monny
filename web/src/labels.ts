@@ -172,6 +172,68 @@ function bestCampaignName(report: Report | null | undefined): string | null {
   return sorted[0]?.name ?? null
 }
 
+/** True when a run produced a user-facing report worth showing in a popup. */
+export function reportIsUserFacing(report: Report | null | undefined): boolean {
+  if (!report) return false
+  if (report.markdown && report.markdown.trim()) return true
+  if ((report.spend_channels?.length ?? 0) > 0) return true
+  if ((report.top_campaigns?.length ?? 0) > 0) return true
+  if ((report.seo_change_set?.changes?.length ?? 0) > 0) return true
+  if ((report.seo_findings?.length ?? 0) > 0) return true
+  return false
+}
+
+export function reportPopupTitle(report: Report | null | undefined): string {
+  if (!report) return 'Report pronto'
+  if ((report.spend_channels?.length ?? 0) > 0 || (report.top_campaigns?.length ?? 0) > 0) {
+    return 'Report ads pronto'
+  }
+  if ((report.seo_change_set?.changes?.length ?? 0) > 0 || (report.seo_findings?.length ?? 0) > 0) {
+    return 'Report SEO pronto'
+  }
+  return 'Report pronto'
+}
+
+/** One-line Italian summary for the report popup (before expandable detail). */
+export function reportPopupSummary(report: Report | null | undefined): string {
+  if (!report) return 'Il report è pronto.'
+  const proposals = report.proposals?.length ?? report.proposal_count ?? 0
+  const spend = report.spend_channels ?? []
+  const seoChanges = report.seo_change_set?.changes?.length ?? 0
+  const best = bestCampaignName(report)
+
+  if (spend.length) {
+    const waste = spend.reduce((s, ch) => s + (ch.totals?.waste_spend ?? 0), 0)
+    if (best) {
+      return proposals > 0
+        ? `Meglio: “${best}”. Ci sono ${proposals} proposte da decidere.`
+        : waste > 0
+          ? `Meglio: “${best}”. Segnalati circa €${waste} di spesa poco efficace.`
+          : `Meglio: “${best}”. Le campagne sembrano in linea con le soglie.`
+    }
+    return proposals > 0
+      ? `Ho preparato il report ads con ${proposals} proposte da decidere.`
+      : 'Ho preparato il report ads. Nessuna azione da approvare ora.'
+  }
+
+  if (seoChanges) {
+    return proposals > 0
+      ? `Audit SEO: ${seoChanges} pagine con suggerimenti e ${proposals} proposte in attesa.`
+      : `Audit SEO completato: ${seoChanges} pagine con suggerimenti.`
+  }
+
+  if (report.markdown?.trim()) {
+    const first = report.markdown
+      .replace(/^#+\s+/gm, '')
+      .split('\n')
+      .map((l) => l.trim())
+      .find(Boolean)
+    if (first) return first.length > 160 ? `${first.slice(0, 157)}…` : first
+  }
+
+  return 'Il report è pronto. Puoi leggerlo qui sotto.'
+}
+
 /** Short Italian agent bubble — never dump markdown / skill ids. */
 export function friendlyAgentReply(
   reply: string | null | undefined,

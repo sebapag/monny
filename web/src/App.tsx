@@ -38,6 +38,9 @@ import {
   friendlyDecideNote,
   friendlySkillDetail,
   plainApproval,
+  reportIsUserFacing,
+  reportPopupSummary,
+  reportPopupTitle,
   skillLabel,
 } from './labels'
 import type { OfficeMode } from './api'
@@ -333,6 +336,110 @@ function InlineAdsReport({ report }: { report: Report }) {
   )
 }
 
+/** Dedicated popup when a run finishes with a user-facing report. */
+function ReportPopup({
+  report,
+  onClose,
+  onOpenSpend,
+}: {
+  report: Report
+  onClose: () => void
+  onOpenSpend?: () => void
+}) {
+  const channels = report.spend_channels ?? []
+  const seoChanges = (report.seo_change_set?.changes ?? []) as SeoChange[]
+  const isAds = channels.length > 0 || (report.top_campaigns?.length ?? 0) > 0
+  const ranked = rankedCampaigns(channels, report.top_campaigns)
+  const best = ranked.filter((c) => c.healthy !== false).slice(0, 5)
+  const showcase = best.length ? best : ranked.slice(0, 5)
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  return (
+    <div
+      className="report-popup-backdrop"
+      role="presentation"
+      onClick={onClose}
+      data-testid="report-popup"
+    >
+      <div
+        className="report-popup"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="report-popup-title"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="report-popup-head">
+          <h2 id="report-popup-title">{reportPopupTitle(report)}</h2>
+          <button type="button" className="btn btn-ghost" onClick={onClose} aria-label="Chiudi">
+            Chiudi
+          </button>
+        </div>
+        <p className="report-popup-summary">{reportPopupSummary(report)}</p>
+
+        {isAds && showcase.length > 0 && (
+          <div className="report-block" style={{ marginTop: 0 }}>
+            <h3>Campagne in evidenza</h3>
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Campagna</th>
+                  <th>Canale</th>
+                  <th>ROAS</th>
+                  <th>Spesa</th>
+                </tr>
+              </thead>
+              <tbody>
+                {showcase.map((c) => (
+                  <tr key={`${c.channel}-${c.id || c.name}`}>
+                    <td>{c.name || '—'}</td>
+                    <td>{channelLabel(c.channel)}</td>
+                    <td>{c.roas ?? '—'}</td>
+                    <td>€{c.spend ?? '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {!isAds && seoChanges.length > 0 && <SeoPanel changes={seoChanges} />}
+
+        {report.markdown && (
+          <details className="report-md" open={!isAds && seoChanges.length === 0}>
+            <summary>Report completo</summary>
+            <pre className="report-md-body">{report.markdown}</pre>
+          </details>
+        )}
+
+        <div className="report-popup-actions">
+          <button type="button" className="btn btn-primary" onClick={onClose}>
+            Ho letto
+          </button>
+          {isAds && onOpenSpend && (
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={() => {
+                onOpenSpend()
+                onClose()
+              }}
+            >
+              Apri Spend
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function SeoPanel({ changes }: { changes: SeoChange[] }) {
   if (!changes.length) return null
   return (
@@ -413,7 +520,7 @@ function KnowledgeAdminPanel({
   return (
     <div className="form-grid" data-testid="knowledge-admin">
       <FieldHelp>
-        Documenti aziendali che Monny consulta prima di spend e SEO. Per ora sono file
+        Documenti aziendali che Atrium consulta prima di spend e SEO. Per ora sono file
         markdown nel tenant; puoi attivare o spegnere ogni fonte.
       </FieldHelp>
       {loading ? (
@@ -482,7 +589,7 @@ function AdminForm({
           value={cfg.display_name}
           onChange={(e) => set('display_name', e.target.value)}
         />
-        <FieldHelp>Come compare Monny nell’header e nei report.</FieldHelp>
+        <FieldHelp>Come compare Atrium nell’header e nei report.</FieldHelp>
       </div>
 
       <div className="section-title">Negozio Shopify</div>
@@ -672,7 +779,7 @@ function AdminForm({
       <div className="section-title">Vista ufficio</div>
       <FieldHelp>
         Opzione a pagamento: scegli se l’home Agent mostra la vista completa 3D, la
-        vista leggera (2D), o lascia che Monny scelga in automatico in base al browser.
+        vista leggera (2D), o lascia che Atrium scelga in automatico in base al browser.
         Senza questa opzione resta sempre la modalità automatica.
       </FieldHelp>
       {(() => {
@@ -898,6 +1005,8 @@ function App() {
   const [tenantDetail, setTenantDetail] = useState<TenantDetail | null>(null)
   const [saveNote, setSaveNote] = useState<string | null>(null)
   const [latestReport, setLatestReport] = useState<Report | null>(null)
+  /** Report shown in the dedicated popup after a run (not on artifact load). */
+  const [reportPopup, setReportPopup] = useState<Report | null>(null)
   const [artifactNames, setArtifactNames] = useState<string[]>([])
   const [liveRun, setLiveRun] = useState<AgentRun | null>(null)
   const [liveDept, setLiveDept] = useState<DeptId | null>(null)
@@ -1047,6 +1156,9 @@ function App() {
       }
 
       setLatestReport(current.report ?? null)
+      if (reportIsUserFacing(current.report)) {
+        setReportPopup(current.report ?? null)
+      }
       const scopedSteps = filterSteps(current.steps, dept)
       setMessagesByDept((prev) => ({
         ...prev,
@@ -1153,10 +1265,14 @@ function App() {
         setLiveRun({ ...current })
       }
       setLatestReport(current.report ?? null)
+      // Show dedicated popup first — do not force-navigate to Spend to read the report.
+      if (reportIsUserFacing(current.report)) {
+        setReportPopup(current.report ?? null)
+      }
       await refreshApprovals(tenantId)
       await loadArtifacts(tenantId)
       await refreshTenants()
-      // Ads report lives in Spend dept — open it so the composed report is visible.
+      // Still seed Spend chat so «Apri Spend» has context later.
       const hasSpendReport = (current.report?.spend_channels?.length ?? 0) > 0
       if (hasSpendReport) {
         const spendDept = 'spend' as DeptId
@@ -1174,7 +1290,6 @@ function App() {
             },
           ],
         }))
-        navigate({ mode: 'dept', dept: spendDept })
       }
       // Hold run so linger (execution + 1s ON) + existing ease-off can finish
       setTimeout(() => {
@@ -1203,8 +1318,10 @@ function App() {
         <header className="topbar">
           <div className="brand">
             <span className="brand-strip" aria-hidden />
-            <span className="brand-mark">Monny</span>
-            <span className="brand-tag">workspace</span>
+            <div className="brand-lockup">
+              <span className="brand-mark">Atrium</span>
+              <span className="brand-tag">Workspace marketing</span>
+            </div>
           </div>
           <div className="tenant-switch">
             <label htmlFor="global-tenant">Negozio</label>
@@ -1528,6 +1645,18 @@ function App() {
           </>
         ) : null}
       </main>
+      {reportPopup && (
+        <ReportPopup
+          report={reportPopup}
+          onClose={() => setReportPopup(null)}
+          onOpenSpend={
+            (reportPopup.spend_channels?.length ?? 0) > 0 ||
+            (reportPopup.top_campaigns?.length ?? 0) > 0
+              ? () => navigate({ mode: 'dept', dept: 'spend' })
+              : undefined
+          }
+        />
+      )}
     </div>
   )
 }

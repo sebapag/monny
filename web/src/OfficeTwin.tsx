@@ -245,8 +245,9 @@ function FlatMat({
 function FixedCamera() {
   const { camera } = useThree()
   useEffect(() => {
-    // Pulled back to frame the expanded back wing (Ops / Design / IT / Controlling).
-    camera.position.set(12.4, 13.2, 14.2)
+    // Pulled slightly farther so the stylized city reads around the twin;
+    // office (back wing included) stays the clear focal point.
+    camera.position.set(13.6, 14.4, 15.4)
     camera.lookAt(0, 0.35, -0.6)
     camera.updateProjectionMatrix()
   }, [camera])
@@ -1156,6 +1157,291 @@ function RoomZone({
   )
 }
 
+/** Warm matte city façade tones — commercial / office, never neon. */
+const CITY_TONES = [
+  '#c9b7a2',
+  '#b7c2cc',
+  '#d5c6b4',
+  '#a9b6c2',
+  '#cfc3b4',
+  '#9eaea8',
+  '#d8cfc2',
+  '#b4a697',
+  '#c2ced8',
+] as const
+
+type CityBuildingSpec = {
+  id: string
+  x: number
+  z: number
+  w: number
+  d: number
+  h: number
+  color: string
+  /** 0 = simple mass; 1 = mid setback; 2 = tall tower setbacks */
+  tier: 0 | 1 | 2
+  hasAwning: boolean
+}
+
+/** Shared window-grid map tinted by mesh color — reads as office façades. */
+function makeCityFacadeTexture(): Texture {
+  const size = 256
+  const canvas = document.createElement('canvas')
+  canvas.width = size
+  canvas.height = size
+  const ctx = canvas.getContext('2d')!
+  ctx.fillStyle = '#ffffff'
+  ctx.fillRect(0, 0, size, size)
+  // Soft floor band
+  ctx.fillStyle = 'rgba(40, 48, 58, 0.1)'
+  ctx.fillRect(0, size * 0.82, size, size * 0.18)
+  const cols = 5
+  const rows = 7
+  const marginX = 18
+  const marginY = 22
+  const gapX = 10
+  const gapY = 12
+  const cellW = (size - marginX * 2 - gapX * (cols - 1)) / cols
+  const cellH = (size * 0.78 - marginY * 2 - gapY * (rows - 1)) / rows
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const x = marginX + c * (cellW + gapX)
+      const y = marginY + r * (cellH + gapY)
+      const lit = (r + c) % 5 !== 0
+      ctx.fillStyle = lit ? 'rgba(55, 72, 92, 0.38)' : 'rgba(120, 150, 175, 0.22)'
+      ctx.fillRect(x, y, cellW, cellH)
+      ctx.fillStyle = 'rgba(230, 242, 250, 0.18)'
+      ctx.fillRect(x + 1, y + 1, cellW * 0.45, cellH * 0.35)
+    }
+  }
+  // Vertical mullion rhythm
+  ctx.strokeStyle = 'rgba(70, 60, 50, 0.08)'
+  ctx.lineWidth = 2
+  for (let i = 1; i < 4; i++) {
+    const x = (size / 4) * i
+    ctx.beginPath()
+    ctx.moveTo(x, 8)
+    ctx.lineTo(x, size - 8)
+    ctx.stroke()
+  }
+  const tex = new CanvasTexture(canvas)
+  tex.colorSpace = SRGBColorSpace
+  tex.wrapS = RepeatWrapping
+  tex.wrapT = RepeatWrapping
+  tex.anisotropy = 2
+  return tex
+}
+
+/** Deterministic commercial blocks outside the office apron. */
+function buildCityLayout(): CityBuildingSpec[] {
+  const out: CityBuildingSpec[] = []
+  const officePad = 10.4
+  // [x, z, w, d, h, tier, awning]
+  const sites: Array<[number, number, number, number, number, 0 | 1 | 2, boolean]> = [
+    // Back row (−Z) — strongest silhouette from fixed cam
+    [-18, -16, 3.4, 2.8, 5.8, 1, true],
+    [-13.5, -17.2, 3.0, 2.6, 7.6, 2, false],
+    [-9.2, -18.4, 3.6, 3.0, 4.6, 0, true],
+    [-4.5, -17.6, 2.8, 2.7, 8.8, 2, false],
+    [0.2, -18.8, 4.0, 2.8, 6.4, 1, true],
+    [4.8, -17.4, 3.1, 2.6, 9.6, 2, false],
+    [9.4, -18.2, 3.4, 2.9, 5.4, 1, true],
+    [14.2, -16.8, 3.8, 3.0, 8.0, 2, false],
+    [18.6, -15.6, 3.0, 2.7, 4.8, 0, true],
+    // Second back band
+    [-16.2, -13.6, 2.6, 2.4, 4.0, 0, false],
+    [-7.0, -14.2, 2.7, 2.3, 5.0, 1, true],
+    [2.8, -14.0, 2.8, 2.4, 3.6, 0, false],
+    [11.6, -13.8, 2.7, 2.5, 5.6, 1, true],
+    // Left (−X)
+    [-17.8, -11.2, 2.8, 3.2, 6.6, 1, true],
+    [-18.6, -6.4, 3.0, 3.0, 8.4, 2, false],
+    [-17.4, -1.6, 2.7, 3.4, 5.2, 1, true],
+    [-18.2, 3.2, 3.1, 2.8, 7.4, 2, false],
+    [-17.0, 7.8, 2.9, 3.1, 4.4, 0, true],
+    [-18.8, 12.2, 3.2, 2.7, 6.8, 1, false],
+    // Right (+X)
+    [17.6, -11.0, 2.9, 3.1, 7.2, 2, true],
+    [18.4, -6.2, 3.1, 2.9, 5.6, 1, false],
+    [17.2, -1.4, 2.8, 3.3, 9.2, 2, true],
+    [18.8, 3.4, 3.3, 2.8, 6.2, 1, false],
+    [17.4, 8.0, 3.0, 3.0, 4.6, 0, true],
+    [19.0, 12.4, 3.1, 2.7, 7.6, 2, false],
+    // Front (+Z) — lower so Leadership stays focal
+    [-16.5, 14.8, 3.2, 2.6, 3.8, 0, true],
+    [-11.2, 15.6, 3.0, 2.5, 4.8, 1, true],
+    [-5.8, 14.6, 3.4, 2.7, 3.4, 0, false],
+    [0.4, 16.0, 2.8, 2.4, 4.2, 0, true],
+    [5.6, 15.2, 3.2, 2.6, 3.2, 0, false],
+    [11.0, 15.8, 3.1, 2.5, 5.0, 1, true],
+    [16.2, 14.4, 3.3, 2.7, 3.6, 0, true],
+    // Mid-depth fillers
+    [-14.6, -13.0, 2.6, 2.4, 3.6, 0, false],
+    [13.8, -13.2, 2.7, 2.5, 4.2, 0, true],
+    [-15.2, 10.4, 2.5, 2.4, 3.4, 0, false],
+    [15.0, 10.6, 2.6, 2.3, 3.8, 0, true],
+  ]
+  let i = 0
+  for (const [x, z, w, d, h, tier, hasAwning] of sites) {
+    if (Math.abs(x) < officePad && Math.abs(z) < officePad) continue
+    out.push({
+      id: `city-${i}`,
+      x,
+      z,
+      w,
+      d,
+      h,
+      color: CITY_TONES[i % CITY_TONES.length],
+      tier,
+      hasAwning,
+    })
+    i += 1
+  }
+  return out
+}
+
+/** One commercial building: windowed mass, optional setbacks, roof, awning. */
+function CityBuildingMesh({
+  building,
+  facadeMap,
+}: {
+  building: CityBuildingSpec
+  facadeMap: Texture
+}) {
+  const { x, z, w, d, h, color, tier, hasAwning } = building
+  const baseH = tier === 0 ? h : tier === 1 ? h * 0.62 : h * 0.48
+  const midH = tier === 0 ? 0 : tier === 1 ? h * 0.38 : h * 0.32
+  const topH = tier === 2 ? h * 0.2 : 0
+  const midScale = tier === 0 ? 1 : 0.82
+  const topScale = 0.64
+  const y0 = -0.08
+
+  return (
+    <group position={[x, y0, z]} raycast={() => null}>
+      {/* Ground mass */}
+      <mesh position={[0, baseH / 2, 0]} raycast={() => null}>
+        <boxGeometry args={[w, baseH, d]} />
+        <meshStandardMaterial
+          color={color}
+          map={facadeMap}
+          roughness={0.9}
+          metalness={0.04}
+        />
+      </mesh>
+      {/* Mid setback */}
+      {midH > 0 && (
+        <mesh position={[0, baseH + midH / 2, 0]} raycast={() => null}>
+          <boxGeometry args={[w * midScale, midH, d * midScale]} />
+          <meshStandardMaterial
+            color={color}
+            map={facadeMap}
+            roughness={0.9}
+            metalness={0.04}
+          />
+        </mesh>
+      )}
+      {/* Tower crown */}
+      {topH > 0 && (
+        <mesh position={[0, baseH + midH + topH / 2, 0]} raycast={() => null}>
+          <boxGeometry args={[w * topScale, topH, d * topScale]} />
+          <meshStandardMaterial
+            color={color}
+            map={facadeMap}
+            roughness={0.88}
+            metalness={0.05}
+          />
+        </mesh>
+      )}
+      {/* Parapet / roof slab */}
+      <mesh position={[0, h + 0.08, 0]} raycast={() => null}>
+        <boxGeometry
+          args={[
+            w * (tier === 2 ? topScale * 1.05 : tier === 1 ? midScale * 1.05 : 0.92),
+            0.16,
+            d * (tier === 2 ? topScale * 1.05 : tier === 1 ? midScale * 1.05 : 0.92),
+          ]}
+        />
+        <meshStandardMaterial color="#e6ddd0" roughness={1} metalness={0} />
+      </mesh>
+      {/* Mechanical penthouse on taller buildings */}
+      {tier >= 1 && (
+        <mesh position={[w * 0.12, h + 0.32, -d * 0.08]} raycast={() => null}>
+          <boxGeometry args={[w * 0.28, 0.42, d * 0.28]} />
+          <meshStandardMaterial color="#d2c6b6" roughness={1} metalness={0} />
+        </mesh>
+      )}
+      {/* Soft ground-floor awning / storefront ledge */}
+      {hasAwning && (
+        <mesh position={[0, 0.95, d / 2 + 0.12]} raycast={() => null}>
+          <boxGeometry args={[w * 0.88, 0.1, 0.32]} />
+          <meshStandardMaterial color="#c4b09a" roughness={0.95} metalness={0} />
+        </mesh>
+      )}
+      {/* Darker podium band so mass reads as a building base */}
+      <mesh position={[0, 0.28, 0]} raycast={() => null}>
+        <boxGeometry args={[w * 1.01, 0.56, d * 1.01]} />
+        <meshStandardMaterial color="#8f8478" roughness={1} metalness={0} />
+      </mesh>
+    </group>
+  )
+}
+
+/**
+ * Stylized city around the office twin — atmosphere only (no clicks).
+ * Windowed commercial masses with setbacks so they read as other buildings.
+ */
+function CityAroundOffice() {
+  const buildings = useMemo(() => buildCityLayout(), [])
+  const facadeMap = useMemo(() => {
+    const tex = makeCityFacadeTexture()
+    tex.repeat.set(1, 1)
+    return tex
+  }, [])
+
+  return (
+    <group raycast={() => null}>
+      {/* Soft urban ground + plaza so the twin sits in a city block, not a void */}
+      <mesh position={[0, -0.14, -0.4]} rotation={[-Math.PI / 2, 0, 0]} raycast={() => null}>
+        <planeGeometry args={[52, 48]} />
+        <meshStandardMaterial color="#d5e2ec" roughness={1} metalness={0} />
+      </mesh>
+      {/* Street grid (matte asphalt ribbons) */}
+      <mesh position={[0, -0.11, -0.4]} rotation={[-Math.PI / 2, 0, 0]} raycast={() => null}>
+        <planeGeometry args={[48, 2.2]} />
+        <meshStandardMaterial color="#b6c0ca" roughness={1} metalness={0} />
+      </mesh>
+      <mesh position={[0, -0.105, -0.4]} rotation={[-Math.PI / 2, 0, Math.PI / 2]} raycast={() => null}>
+        <planeGeometry args={[44, 2.0]} />
+        <meshStandardMaterial color="#b6c0ca" roughness={1} metalness={0} />
+      </mesh>
+      <mesh position={[0, -0.108, -14.2]} rotation={[-Math.PI / 2, 0, 0]} raycast={() => null}>
+        <planeGeometry args={[42, 1.6]} />
+        <meshStandardMaterial color="#aeb8c2" roughness={1} metalness={0} />
+      </mesh>
+      <mesh position={[0, -0.108, 13.6]} rotation={[-Math.PI / 2, 0, 0]} raycast={() => null}>
+        <planeGeometry args={[40, 1.5]} />
+        <meshStandardMaterial color="#aeb8c2" roughness={1} metalness={0} />
+      </mesh>
+      <mesh position={[-14.6, -0.108, -0.4]} rotation={[-Math.PI / 2, 0, Math.PI / 2]} raycast={() => null}>
+        <planeGeometry args={[38, 1.5]} />
+        <meshStandardMaterial color="#aeb8c2" roughness={1} metalness={0} />
+      </mesh>
+      <mesh position={[14.6, -0.108, -0.4]} rotation={[-Math.PI / 2, 0, Math.PI / 2]} raycast={() => null}>
+        <planeGeometry args={[38, 1.5]} />
+        <meshStandardMaterial color="#aeb8c2" roughness={1} metalness={0} />
+      </mesh>
+      {/* Soft plaza ring around the office pad */}
+      <mesh position={[0, -0.1, -0.4]} rotation={[-Math.PI / 2, 0, 0]} raycast={() => null}>
+        <circleGeometry args={[13.2, 48]} />
+        <meshStandardMaterial color="#cfe0ec" roughness={1} metalness={0} transparent opacity={0.7} />
+      </mesh>
+      {buildings.map((b) => (
+        <CityBuildingMesh key={b.id} building={b} facadeMap={facadeMap} />
+      ))}
+    </group>
+  )
+}
+
 function OfficeBuilding({
   lights,
   enabled,
@@ -1173,14 +1459,15 @@ function OfficeBuilding({
 
   return (
     <group>
+      <CityAroundOffice />
       {/* Soft exterior apron so the building sits in daylight, not a void */}
-      <mesh position={[0, -0.12, -0.4]} rotation={[-Math.PI / 2, 0, 0]}>
-        <planeGeometry args={[34, 30]} />
+      <mesh position={[0, -0.09, -0.4]} rotation={[-Math.PI / 2, 0, 0]}>
+        <planeGeometry args={[18.4, 16.2]} />
         <meshStandardMaterial color="#d9e6f0" roughness={1} metalness={0} />
       </mesh>
-      <mesh position={[0, -0.1, -0.4]} rotation={[-Math.PI / 2, 0, 0]}>
-        <circleGeometry args={[12.5, 48]} />
-        <meshStandardMaterial color="#cfe0ec" roughness={1} metalness={0} transparent opacity={0.55} />
+      <mesh position={[0, -0.085, -0.4]} rotation={[-Math.PI / 2, 0, 0]}>
+        <circleGeometry args={[11.2, 48]} />
+        <meshStandardMaterial color="#cfe0ec" roughness={1} metalness={0} transparent opacity={0.45} />
       </mesh>
       {/* Warm oak plank building floor (not grey) — expanded for back wing */}
       <mesh position={[0, -0.02, -0.35]} rotation={[-Math.PI / 2, 0, 0]}>
@@ -1303,6 +1590,46 @@ function OfficeLightTwin({
     >
       <div className="office-light-blueprint" aria-hidden>
         <div className="office-light-sky" />
+        {/* Stylized commercial cityscape around the floor plate (Leggera) */}
+        <div className="office-light-cityscape" data-testid="office-cityscape-2d">
+          <div className="office-city-ring city-n">
+            <span className="city-bldg tone-a" style={{ height: '64%' }} />
+            <span className="city-bldg tone-b tall" style={{ height: '92%' }} />
+            <span className="city-bldg tone-c" style={{ height: '52%' }} />
+            <span className="city-bldg tone-a mid" style={{ height: '78%' }} />
+            <span className="city-bldg tone-d" style={{ height: '58%' }} />
+            <span className="city-bldg tone-b tall" style={{ height: '96%' }} />
+            <span className="city-bldg tone-c" style={{ height: '46%' }} />
+            <span className="city-bldg tone-a mid" style={{ height: '74%' }} />
+            <span className="city-bldg tone-d" style={{ height: '60%' }} />
+          </div>
+          <div className="office-city-ring city-s">
+            <span className="city-bldg tone-d" style={{ height: '48%' }} />
+            <span className="city-bldg tone-a mid" style={{ height: '62%' }} />
+            <span className="city-bldg tone-c" style={{ height: '40%' }} />
+            <span className="city-bldg tone-b" style={{ height: '56%' }} />
+            <span className="city-bldg tone-a" style={{ height: '44%' }} />
+            <span className="city-bldg tone-d mid" style={{ height: '68%' }} />
+            <span className="city-bldg tone-c" style={{ height: '42%' }} />
+          </div>
+          <div className="office-city-ring city-w">
+            <span className="city-bldg tone-b" style={{ width: '58%' }} />
+            <span className="city-bldg tone-a mid" style={{ width: '82%' }} />
+            <span className="city-bldg tone-c" style={{ width: '50%' }} />
+            <span className="city-bldg tone-d tall" style={{ width: '92%' }} />
+            <span className="city-bldg tone-a" style={{ width: '64%' }} />
+            <span className="city-bldg tone-b mid" style={{ width: '76%' }} />
+          </div>
+          <div className="office-city-ring city-e">
+            <span className="city-bldg tone-a mid" style={{ width: '68%' }} />
+            <span className="city-bldg tone-c" style={{ width: '52%' }} />
+            <span className="city-bldg tone-b tall" style={{ width: '88%' }} />
+            <span className="city-bldg tone-d" style={{ width: '60%' }} />
+            <span className="city-bldg tone-a mid" style={{ width: '78%' }} />
+            <span className="city-bldg tone-c" style={{ width: '54%' }} />
+          </div>
+          <div className="office-city-blocks" />
+        </div>
         <div className="office-light-floor-grain" />
         <div className="office-light-wall wall-n" />
         <div className="office-light-wall wall-s" />
@@ -1455,7 +1782,7 @@ function HardenedOfficeCanvas({
   return (
     <div className="office-canvas-stack">
       <Canvas
-        camera={{ position: [12.4, 13.2, 14.2], fov: 38, near: 0.1, far: 100 }}
+        camera={{ position: [13.6, 14.4, 15.4], fov: 38, near: 0.1, far: 120 }}
         dpr={[1, 1.25]}
         gl={{
           antialias: true,
@@ -1586,7 +1913,10 @@ export function OfficeTwin({
       <div className="office-hero">
         <header className="office-hero-head">
           <div>
-            <p className="office-brand-mark">Monny</p>
+            <div className="office-brand-lockup">
+              <p className="office-brand-mark">Atrium</p>
+              <p className="office-brand-sub">Workspace marketing</p>
+            </div>
             <h1>Ufficio digitale</h1>
             <p className="office-lede">
               Scrivi cosa vuoi fare: luci e ometti si accendono mentre i reparti lavorano.
@@ -1616,14 +1946,14 @@ export function OfficeTwin({
               }}
             >
               <label className="sr-only" htmlFor="office-goal">
-                Richiesta per Monny
+                Richiesta per Atrium
               </label>
               <textarea
                 id="office-goal"
                 rows={2}
                 value={goalDraft}
                 disabled={busy}
-                placeholder="Scrivi cosa vuoi che Monny faccia…"
+                placeholder="Scrivi cosa vuoi che Atrium faccia…"
                 onChange={(e) => setGoalDraft(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {

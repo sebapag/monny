@@ -1,4 +1,6 @@
-# Monny
+# Atrium
+
+Product brand **Atrium** (workspace marketing). Repo / Python package remain `monny`.
 
 LangGraph marketing deep agent for **spend** (Google Ads + Meta) and **SEO**.  
 Propose-then-approve HITL by default. Shopify / ads accounts are portable config — never hard-coded.  
@@ -103,7 +105,7 @@ export MONNY_LLM_MODEL=grok-4.20-0309-non-reasoning   # default: light non-reaso
 export MONNY_LLM_BASE_URL=https://api.x.ai/v1         # OpenAI-compatible
 ```
 
-If the key is missing, `MONNY_LLM_ENABLED=0`, or the call fails, Monny falls back to the stub planner (CI/local dry-run stay green). HITL and skills are unchanged. `POST /api/runs` never blocks on xAI — planning upgrades in the background worker.
+If the key is missing, `MONNY_LLM_ENABLED=0`, or the call fails, Atrium falls back to the stub planner (CI/local dry-run stay green). HITL and skills are unchanged. `POST /api/runs` never blocks on xAI — planning upgrades in the background worker.
 
 ## Secret refs & live mode
 

@@ -13,7 +13,7 @@ from monny.storage.audit import append_audit
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Monny deep agent CLI (dry-run by default)")
+    parser = argparse.ArgumentParser(description="Atrium deep agent CLI (dry-run by default)")
     parser.add_argument("--tenant", default=None, help="Tenant id (default from env)")
     parser.add_argument(
         "--goal",
