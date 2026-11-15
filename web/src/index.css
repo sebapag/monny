@@ -58,9 +58,9 @@
   --radius-pill: 999px;
 
   --shadow-soft: 0 1px 2px rgba(15, 15, 15, 0.04), 0 4px 16px rgba(15, 15, 15, 0.04);
-  /* Business lockup: Source Serif 4 (wordmark) + Source Sans 3 (UI) */
-  --font: 'Source Sans 3', 'Source Sans Pro', ui-sans-serif, system-ui, sans-serif;
-  --font-display: 'Source Serif 4', 'Source Serif Pro', 'Times New Roman', serif;
+  /* Graphik-like geometric neo-grotesque: Satoshi (wordmark + UI), Plus Jakarta Sans fallback */
+  --font: 'Satoshi', 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Satoshi', 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
   --input-h: 44px;
   --office-sky: #d9ebf7;
   --office-oak: #d8c3a3;
@@ -151,8 +151,8 @@ a {
 .brand-mark {
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: 1.3rem;
-  letter-spacing: -0.015em;
+  font-size: 1.28rem;
+  letter-spacing: -0.03em;
   color: var(--brand-navy);
 }
 
@@ -1307,8 +1307,8 @@ a {
   margin: 0;
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: clamp(1.9rem, 3.8vw, 2.6rem);
-  letter-spacing: -0.018em;
+  font-size: clamp(1.9rem, 3.8vw, 2.55rem);
+  letter-spacing: -0.035em;
   line-height: 1;
   color: var(--brand-navy);
 }
