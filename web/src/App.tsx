@@ -1449,9 +1449,10 @@ function App() {
                 <button
                   type="button"
                   className="btn btn-ghost back-btn"
+                  data-testid="dept-back-overview"
                   onClick={() => navigate({ mode: 'piano' })}
                 >
-                  ← Piano reparti
+                  ← Indietro · Vista ufficio
                 </button>
                 <div>
                   <h1>{activeDept.name}</h1>

@@ -173,6 +173,46 @@ const SOFT = { roughness: 0.72, metalness: 0.08 } as const
 /** Seconds-ish easing: higher = snappier. ~3.2 ≈ soft 0.6–0.8s feel. */
 const EASE = 3.2
 
+/** Overview framing — city + full floor (no free orbit). */
+const OVERVIEW_POS: [number, number, number] = [13.6, 14.4, 15.4]
+const OVERVIEW_LOOK: [number, number, number] = [0, 0.35, -0.6]
+/** Calm dolly into a single department (seconds). */
+const FOCUS_DURATION = 1.15
+function smoothstep(t: number) {
+  const x = Math.min(1, Math.max(0, t))
+  return x * x * (3 - 2 * x)
+}
+
+/** Scripted close-up for one room — same isometric bias, shorter distance. */
+function focusFraming(room: RoomLayout): { pos: Vector3; look: Vector3 } {
+  const [hx, , hz] = room.position
+  const look = new Vector3(hx, 0.42, hz)
+  const overviewPos = new Vector3(...OVERVIEW_POS)
+  const overviewLook = new Vector3(...OVERVIEW_LOOK)
+  const dir = overviewPos.clone().sub(overviewLook).normalize()
+  const span = Math.max(room.size[0], room.size[2])
+  const dist = 5.35 + span * 0.52
+  const pos = look.clone().add(dir.multiplyScalar(dist))
+  pos.y = Math.min(Math.max(pos.y * 0.78, 5.1), 9.0)
+  return { pos, look }
+}
+
+/**
+ * Leggera (2D) focus offsets — scale + translate so the selected room
+ * fills the stage (percent of floorplan size).
+ */
+const LIGHT_FOCUS: Record<DeptId, { x: number; y: number; scale: number }> = {
+  direzione: { x: 0, y: 32, scale: 1.72 },
+  spend: { x: 26, y: 10, scale: 1.95 },
+  seo: { x: -26, y: 10, scale: 1.95 },
+  shopify: { x: 26, y: -6, scale: 1.95 },
+  lead: { x: -26, y: -6, scale: 1.95 },
+  ops: { x: 34, y: -28, scale: 2.05 },
+  design: { x: 12, y: -28, scale: 2.05 },
+  it: { x: -12, y: -28, scale: 2.05 },
+  controlling: { x: -34, y: -28, scale: 2.05 },
+}
+
 /** Light oak plank floor — procedural canvas texture. */
 function makeWoodFloorTexture(): Texture {
   const size = 512
@@ -241,16 +281,86 @@ function FlatMat({
   )
 }
 
-/** Fixed isometric camera — no orbit / pan / zoom. */
-function FixedCamera() {
+/**
+ * Scripted camera — overview by default; calm dolly into a room on focus.
+ * No user orbit / pan / zoom (locked view).
+ */
+function ScriptedCamera({
+  focusId,
+  reduceMotion,
+  onArrived,
+}: {
+  focusId: DeptId | null
+  reduceMotion: boolean
+  onArrived: (id: DeptId) => void
+}) {
   const { camera } = useThree()
+  const posCurrent = useRef(new Vector3(...OVERVIEW_POS))
+  const lookCurrent = useRef(new Vector3(...OVERVIEW_LOOK))
+  const anim = useRef<{
+    fromPos: Vector3
+    toPos: Vector3
+    fromLook: Vector3
+    toLook: Vector3
+    t: number
+    id: DeptId | null
+    notified: boolean
+  } | null>(null)
+  const arrivedRef = useRef(onArrived)
+  const lastNotified = useRef<DeptId | null>(null)
   useEffect(() => {
-    // Pulled slightly farther so the stylized city reads around the twin;
-    // office (back wing included) stays the clear focal point.
-    camera.position.set(13.6, 14.4, 15.4)
-    camera.lookAt(0, 0.35, -0.6)
-    camera.updateProjectionMatrix()
-  }, [camera])
+    arrivedRef.current = onArrived
+  }, [onArrived])
+
+  useEffect(() => {
+    const room = focusId ? ROOMS.find((r) => r.id === focusId) : null
+    const target = room
+      ? focusFraming(room)
+      : { pos: new Vector3(...OVERVIEW_POS), look: new Vector3(...OVERVIEW_LOOK) }
+
+    if (reduceMotion) {
+      posCurrent.current.copy(target.pos)
+      lookCurrent.current.copy(target.look)
+      camera.position.copy(target.pos)
+      camera.lookAt(lookCurrent.current)
+      camera.updateProjectionMatrix()
+      anim.current = null
+      if (focusId && lastNotified.current !== focusId) {
+        lastNotified.current = focusId
+        arrivedRef.current(focusId)
+      }
+      if (!focusId) lastNotified.current = null
+      return
+    }
+
+    anim.current = {
+      fromPos: posCurrent.current.clone(),
+      toPos: target.pos.clone(),
+      fromLook: lookCurrent.current.clone(),
+      toLook: target.look.clone(),
+      t: 0,
+      id: focusId,
+      notified: false,
+    }
+    if (!focusId) lastNotified.current = null
+  }, [focusId, reduceMotion, camera])
+
+  useFrame((_, dt) => {
+    const a = anim.current
+    if (!a) return
+    a.t = Math.min(1, a.t + dt / FOCUS_DURATION)
+    const e = smoothstep(a.t)
+    posCurrent.current.lerpVectors(a.fromPos, a.toPos, e)
+    lookCurrent.current.lerpVectors(a.fromLook, a.toLook, e)
+    camera.position.copy(posCurrent.current)
+    camera.lookAt(lookCurrent.current)
+    if (a.t >= 1 && a.id && !a.notified) {
+      a.notified = true
+      lastNotified.current = a.id
+      arrivedRef.current(a.id)
+    }
+  })
+
   return null
 }
 
@@ -937,6 +1047,7 @@ function RoomZone({
   attentionCount = 0,
   onSelect,
   reduceMotion,
+  focusId,
 }: {
   room: RoomLayout
   light: RoomLightState
@@ -944,13 +1055,19 @@ function RoomZone({
   attentionCount?: number
   onSelect: (id: DeptId) => void
   reduceMotion: boolean
+  /** When set, other rooms dim so the focused department reads clearly. */
+  focusId: DeptId | null
 }) {
   const [hx, , hz] = room.position
   const level = useRef(lightLevel(light))
+  const dimAmt = useRef(0)
   const floorMat = useRef<MeshStandardMaterial>(null)
   const hotMat = useRef<MeshStandardMaterial>(null)
   const lamp = useRef<PointLightType>(null)
+  const groupRef = useRef<Group>(null)
   const needsAttention = attentionCount > 0
+  const isDimmed = Boolean(focusId && focusId !== room.id)
+  const isFocus = focusId === room.id
 
   const floorIdle = useMemo(() => new Color(room.floor), [room.floor])
   const floorLit = useMemo(() => new Color(room.floorLit), [room.floorLit])
@@ -959,6 +1076,7 @@ function RoomZone({
   const lockedFloor = useMemo(() => new Color('#c8c4be'), [])
   const lockedHot = useMemo(() => new Color('#9a9690'), [])
   const lampWarm = useMemo(() => new Color('#fff8f0'), [])
+  const dimTone = useMemo(() => new Color('#b8b2a8'), [])
   const tmp = useMemo(() => new Color(), [])
 
   const halfW = room.size[0] / 2
@@ -978,6 +1096,7 @@ function RoomZone({
     const target = locked ? 0 : lightLevel(light)
     const k = reduceMotion ? 1 : 1 - Math.exp(-EASE * dt)
     level.current = lerp(level.current, target, k)
+    dimAmt.current = lerp(dimAmt.current, isDimmed ? 1 : 0, reduceMotion ? 1 : k)
     let L = level.current
     if (needsAttention) {
       const pulse = reduceMotion
@@ -985,13 +1104,21 @@ function RoomZone({
         : 0.72 + 0.28 * (0.5 + 0.5 * Math.sin(clock.elapsedTime * 2.4))
       L = Math.max(L, pulse)
     }
+    if (isFocus) L = Math.max(L, 0.55)
+
+    if (groupRef.current) {
+      // Soft visual dim for non-focused rooms (opacity via material paths below).
+      groupRef.current.visible = true
+    }
 
     if (floorMat.current) {
       tmp.copy(floorIdle).lerp(floorLit, L)
       if (locked) tmp.copy(floorIdle).lerp(lockedFloor, 0.45)
+      if (dimAmt.current > 0.01) tmp.lerp(dimTone, dimAmt.current * 0.55)
       floorMat.current.color.copy(tmp)
       floorMat.current.emissive.copy(accent)
-      floorMat.current.emissiveIntensity = locked ? 0 : (needsAttention ? 0.42 : 0.28) * L
+      floorMat.current.emissiveIntensity =
+        (locked ? 0 : (needsAttention || isFocus ? 0.42 : 0.28) * L) * (1 - dimAmt.current * 0.85)
     }
     if (hotMat.current) {
       if (locked) {
@@ -1002,10 +1129,14 @@ function RoomZone({
         hotMat.current.color.copy(tmp)
         hotMat.current.emissive.copy(tmp)
       }
-      hotMat.current.emissiveIntensity = locked ? 0.02 : lerp(0.05, needsAttention ? 0.55 : 0.35, L)
+      hotMat.current.emissiveIntensity =
+        (locked ? 0.02 : lerp(0.05, needsAttention || isFocus ? 0.55 : 0.35, L)) *
+        (1 - dimAmt.current * 0.9)
     }
     if (lamp.current) {
-      lamp.current.intensity = locked ? 0.02 : lerp(0.08, needsAttention ? 1.45 : 1.1, L)
+      lamp.current.intensity =
+        (locked ? 0.02 : lerp(0.08, needsAttention || isFocus ? 1.45 : 1.1, L)) *
+        (1 - dimAmt.current * 0.92)
       lamp.current.color.copy(lampWarm).lerp(accent, L)
     }
   })
@@ -1031,7 +1162,7 @@ function RoomZone({
                     : '#cfe0c0'
 
   return (
-    <group>
+    <group ref={groupRef}>
       <mesh
         position={room.position}
         onClick={(e) => {
@@ -1448,12 +1579,14 @@ function OfficeBuilding({
   pendingCount,
   onSelect,
   reduceMotion,
+  focusId,
 }: {
   lights: Record<DeptId, RoomLightState>
   enabled: SubscriptionSkills
   pendingCount: number
   onSelect: (id: DeptId) => void
   reduceMotion: boolean
+  focusId: DeptId | null
 }) {
   const woodTex = useMemo(() => makeWoodFloorTexture(), [])
 
@@ -1562,6 +1695,7 @@ function OfficeBuilding({
           attentionCount={room.id === 'direzione' ? pendingCount : 0}
           onSelect={onSelect}
           reduceMotion={reduceMotion}
+          focusId={focusId}
         />
       ))}
     </group>
@@ -1575,18 +1709,24 @@ function OfficeLightTwin({
   enabled,
   onSelect,
   reduceMotion,
+  focusId,
 }: {
   lights: Record<DeptId, RoomLightState>
   pending: Record<DeptId, number>
   enabled: SubscriptionSkills
   onSelect: (id: DeptId) => void
   reduceMotion: boolean
+  focusId: DeptId | null
 }) {
   const direzionePending = pending.direzione || 0
+  const focusXf = focusId ? LIGHT_FOCUS[focusId] : null
   return (
     <div
-      className={`office-light-twin${reduceMotion ? ' reduce-motion' : ''}`}
+      className={`office-light-twin${reduceMotion ? ' reduce-motion' : ''}${
+        focusId ? ' is-focusing' : ''
+      }`}
       data-testid="office-floorplan-2d"
+      data-focus-dept={focusId ?? undefined}
     >
       <div className="office-light-blueprint" aria-hidden>
         <div className="office-light-sky" />
@@ -1649,19 +1789,41 @@ function OfficeLightTwin({
         <div className="office-light-corridor-cross" />
         <div className="office-light-corridor-wing" />
       </div>
-      <div className="office-floorplan office-floorplan-light">
+      <div
+        className="office-floorplan office-floorplan-light"
+        data-testid="office-floorplan-focus"
+        style={
+          focusXf
+            ? {
+                transform: `translate(${focusXf.x}%, ${focusXf.y}%) scale(${focusXf.scale})`,
+                transition: reduceMotion
+                  ? 'none'
+                  : `transform ${FOCUS_DURATION}s cubic-bezier(0.22, 1, 0.36, 1)`,
+              }
+            : {
+                transform: 'translate(0%, 0%) scale(1)',
+                transition: reduceMotion
+                  ? 'none'
+                  : `transform ${FOCUS_DURATION}s cubic-bezier(0.22, 1, 0.36, 1)`,
+              }
+        }
+      >
         {ROOMS.map((room) => {
           const light = lights[room.id]
           const dept = DEPARTMENTS.find((d) => d.id === room.id)
           const locked = !isDeptEnabled(room.id, enabled)
           const needsDecision = !locked && room.id === 'direzione' && direzionePending > 0
+          const isFocus = focusId === room.id
+          const isDimmed = Boolean(focusId && !isFocus)
           return (
             <button
               key={room.id}
               type="button"
               className={`floor-room light-${locked ? 'off' : light} tint-${dept?.tint ?? 'gray'}${
                 locked ? ' is-locked' : ''
-              }${needsDecision ? ' needs-decision' : ''}`}
+              }${needsDecision ? ' needs-decision' : ''}${isFocus ? ' is-focus' : ''}${
+                isDimmed ? ' is-dimmed' : ''
+              }`}
               style={{ gridArea: room.id }}
               onClick={() => onSelect(room.id)}
               title={locked ? lockedHintIt(room.id) : `Entra in ${room.label}`}
@@ -1768,6 +1930,8 @@ function HardenedOfficeCanvas({
   onSelect,
   reduceMotion,
   onContextLost,
+  focusId,
+  onFocusArrived,
 }: {
   lights: Record<DeptId, RoomLightState>
   pendingTotal: number
@@ -1775,6 +1939,8 @@ function HardenedOfficeCanvas({
   onSelect: (id: DeptId) => void
   reduceMotion: boolean
   onContextLost: () => void
+  focusId: DeptId | null
+  onFocusArrived: (id: DeptId) => void
 }) {
   const [overlayLabels, setOverlayLabels] = useState<OverlayLabel[]>([])
   const [overlayBadge, setOverlayBadge] = useState<OverlayBadge | null>(null)
@@ -1782,7 +1948,7 @@ function HardenedOfficeCanvas({
   return (
     <div className="office-canvas-stack">
       <Canvas
-        camera={{ position: [13.6, 14.4, 15.4], fov: 38, near: 0.1, far: 120 }}
+        camera={{ position: [...OVERVIEW_POS], fov: 38, near: 0.1, far: 120 }}
         dpr={[1, 1.25]}
         gl={{
           antialias: true,
@@ -1798,7 +1964,7 @@ function HardenedOfficeCanvas({
           gl.setClearColor('#d9e8f2')
           gl.shadowMap.enabled = false
           scene.fog = null
-          camera.lookAt(0, 0.35, -0.6)
+          camera.lookAt(...OVERVIEW_LOOK)
           const canvas = gl.domElement
           const onLost = (e: Event) => {
             e.preventDefault()
@@ -1816,7 +1982,11 @@ function HardenedOfficeCanvas({
         }}
       >
         <Suspense fallback={null}>
-          <FixedCamera />
+          <ScriptedCamera
+            focusId={focusId}
+            reduceMotion={reduceMotion}
+            onArrived={onFocusArrived}
+          />
           <ambientLight intensity={0.78} />
           <hemisphereLight args={['#f5fbff', '#d8c9b2', 0.62]} />
           <directionalLight position={[7, 12, 4]} intensity={0.55} color="#fff6ea" />
@@ -1829,6 +1999,7 @@ function HardenedOfficeCanvas({
             pendingCount={pendingTotal}
             onSelect={onSelect}
             reduceMotion={reduceMotion}
+            focusId={focusId}
           />
           <LabelAnchorPublisher
             lights={lights}
@@ -1842,8 +2013,10 @@ function HardenedOfficeCanvas({
         </Suspense>
       </Canvas>
       <OfficeLabelOverlay
-        labels={overlayLabels}
-        badge={overlayBadge}
+        labels={
+          focusId ? overlayLabels.filter((l) => l.id === focusId) : overlayLabels
+        }
+        badge={focusId && focusId !== 'direzione' ? null : overlayBadge}
         onSelect={onSelect}
       />
     </div>
@@ -1876,7 +2049,18 @@ export function OfficeTwin({
   const reduceMotion = useReduceMotion()
   const [failed, setFailed] = useState(false)
   const [goalDraft, setGoalDraft] = useState('')
+  /** Scripted department focus — null = overview framing. */
+  const [focusId, setFocusId] = useState<DeptId | null>(null)
+  const [focusBusy, setFocusBusy] = useState(false)
+  const pendingOpen = useRef<DeptId | null>(null)
+  const lightFocusTimer = useRef<number | null>(null)
   const pendingTotal = pending.direzione || 0
+
+  useEffect(() => {
+    return () => {
+      if (lightFocusTimer.current != null) window.clearTimeout(lightFocusTimer.current)
+    }
+  }, [])
 
   const desired = useMemo(() => {
     if (!capability) return null
@@ -1903,13 +2087,67 @@ export function OfficeTwin({
     setGoalDraft('')
   }
 
+  const clearLightFocusTimer = () => {
+    if (lightFocusTimer.current != null) {
+      window.clearTimeout(lightFocusTimer.current)
+      lightFocusTimer.current = null
+    }
+  }
+
+  const returnToOverview = () => {
+    clearLightFocusTimer()
+    pendingOpen.current = null
+    setFocusBusy(false)
+    setFocusId(null)
+  }
+
+  const openDeptAfterFocus = (id: DeptId) => {
+    if (pendingOpen.current !== id) return
+    clearLightFocusTimer()
+    pendingOpen.current = null
+    setFocusBusy(false)
+    onSelect(id)
+  }
+
+  const beginFocus = (id: DeptId) => {
+    if (!isDeptEnabled(id, enabled)) {
+      onSelect(id)
+      return
+    }
+    if (focusBusy && focusId === id) return
+    clearLightFocusTimer()
+    pendingOpen.current = id
+    setFocusBusy(true)
+    setFocusId(id)
+    if (useLight) {
+      // Leggera: CSS transform; open panel after the same calm duration.
+      if (reduceMotion) {
+        openDeptAfterFocus(id)
+        return
+      }
+      lightFocusTimer.current = window.setTimeout(
+        () => openDeptAfterFocus(id),
+        FOCUS_DURATION * 1000,
+      )
+    }
+    // Completa: ScriptedCamera calls onFocusArrived when the dolly finishes.
+  }
+
   const modeBadge = useLight ? 'Vista leggera' : 'Vista completa'
-  const modeHint = useLight
-    ? 'Vista leggera — stessa pianta dei reparti, pensata per ogni browser. Tocca una stanza.'
-    : 'Vista fissa 3D. Tocca hotspot, ometti o pavimento per entrare nel reparto.'
+  const focusLabel = focusId ? ROOMS.find((r) => r.id === focusId)?.label : null
+  const modeHint = focusId
+    ? `Ingrandisco ${focusLabel ?? 'il reparto'}… Tocca Indietro per la vista ufficio.`
+    : useLight
+      ? 'Vista leggera — stessa pianta dei reparti. Tocca una stanza: zoom calmo, poi il pannello.'
+      : 'Vista fissa 3D (niente orbita). Tocca un reparto: la camera si avvicina, poi si apre il pannello.'
 
   return (
-    <section className="office-twin" data-testid="office-twin" data-office-mode={useLight ? 'light' : 'full'}>
+    <section
+      className="office-twin"
+      data-testid="office-twin"
+      data-office-mode={useLight ? 'light' : 'full'}
+      data-camera={focusId ? 'focus' : 'overview'}
+    >
       <div className="office-hero">
         <header className="office-hero-head">
           <div>
@@ -1998,10 +2236,26 @@ export function OfficeTwin({
             </div>
           </div>
 
+          {focusId && (
+            <div className="office-focus-bar" data-testid="office-focus-bar">
+              <button
+                type="button"
+                className="btn btn-ghost office-back-overview"
+                data-testid="office-back-overview"
+                onClick={returnToOverview}
+              >
+                ← Indietro · Vista ufficio
+              </button>
+              <span className="office-focus-label">
+                {focusLabel ? `Focus · ${focusLabel}` : 'Focus reparto'}
+              </span>
+            </div>
+          )}
+
           <div
             className={`office-viewport flat-pastel locked-view ${useLight ? 'is-2d is-light' : 'is-3d'}${
               pendingTotal > 0 ? ' has-decisions' : ''
-            }`}
+            }${focusId ? ' is-dept-focus' : ''}`}
           >
             {desired === null ? (
               <div className="office-viewport-loading" aria-busy="true">
@@ -2012,8 +2266,9 @@ export function OfficeTwin({
                 lights={lights}
                 pending={pending}
                 enabled={enabled}
-                onSelect={onSelect}
+                onSelect={beginFocus}
                 reduceMotion={reduceMotion}
+                focusId={focusId}
               />
             ) : (
               <CanvasErrorBoundary onError={() => setFailed(true)}>
@@ -2021,9 +2276,11 @@ export function OfficeTwin({
                   lights={lights}
                   pendingTotal={pendingTotal}
                   enabled={enabled}
-                  onSelect={onSelect}
+                  onSelect={beginFocus}
                   reduceMotion={reduceMotion}
                   onContextLost={() => setFailed(true)}
+                  focusId={focusId}
+                  onFocusArrived={openDeptAfterFocus}
                 />
               </CanvasErrorBoundary>
             )}
