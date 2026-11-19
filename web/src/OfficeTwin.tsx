@@ -21,7 +21,9 @@ import {
   type PointLight as PointLightType,
   type Texture,
 } from 'three'
-import type { OfficeMode, SubscriptionSkills } from './api'
+import type { Approval, AuditEvent, OfficeMode, SubscriptionSkills, TimelineStep } from './api'
+import { DeptFocusModal } from './DeptFocusModal'
+import { bumpOfficeFocusCount } from './deptFocus'
 import { DEPARTMENTS, type DeptId } from './depts'
 import { isDeptEnabled, lockedHintIt } from './entitlements'
 import type { RoomLightState } from './lights'
@@ -2031,8 +2033,14 @@ export function OfficeTwin({
   officeViewEntitled = false,
   statusLine,
   busy,
+  tenantId = 'demo',
+  approvals = [],
+  audit = [],
+  sessionQueries = {},
+  liveSteps = [],
   onSelect,
   onQuickAction,
+  onDecideApproval,
 }: {
   lights: Record<DeptId, RoomLightState>
   pending: Record<DeptId, number>
@@ -2042,8 +2050,14 @@ export function OfficeTwin({
   officeViewEntitled?: boolean
   statusLine?: string | null
   busy?: boolean
+  tenantId?: string
+  approvals?: Approval[]
+  audit?: AuditEvent[]
+  sessionQueries?: Partial<Record<DeptId, number>>
+  liveSteps?: TimelineStep[]
   onSelect: (id: DeptId) => void
   onQuickAction: (goal: string) => void
+  onDecideApproval?: (id: string, decision: 'approved' | 'rejected') => void
 }) {
   const capability = useOfficeCapability()
   const reduceMotion = useReduceMotion()
@@ -2052,6 +2066,9 @@ export function OfficeTwin({
   /** Scripted department focus — null = overview framing. */
   const [focusId, setFocusId] = useState<DeptId | null>(null)
   const [focusBusy, setFocusBusy] = useState(false)
+  /** Closable dept modal after dolly (stays on office route). */
+  const [focusModalOpen, setFocusModalOpen] = useState(false)
+  const [officeOpens, setOfficeOpens] = useState(0)
   const pendingOpen = useRef<DeptId | null>(null)
   const lightFocusTimer = useRef<number | null>(null)
   const pendingTotal = pending.direzione || 0
@@ -2098,15 +2115,17 @@ export function OfficeTwin({
     clearLightFocusTimer()
     pendingOpen.current = null
     setFocusBusy(false)
+    setFocusModalOpen(false)
     setFocusId(null)
   }
 
-  const openDeptAfterFocus = (id: DeptId) => {
+  const openFocusModal = (id: DeptId) => {
     if (pendingOpen.current !== id) return
     clearLightFocusTimer()
     pendingOpen.current = null
     setFocusBusy(false)
-    onSelect(id)
+    setOfficeOpens(bumpOfficeFocusCount(tenantId, id))
+    setFocusModalOpen(true)
   }
 
   const beginFocus = (id: DeptId) => {
@@ -2114,32 +2133,44 @@ export function OfficeTwin({
       onSelect(id)
       return
     }
-    if (focusBusy && focusId === id) return
+    if (focusBusy && focusId === id && focusModalOpen) return
     clearLightFocusTimer()
+    setFocusModalOpen(false)
     pendingOpen.current = id
     setFocusBusy(true)
     setFocusId(id)
     if (useLight) {
-      // Leggera: CSS transform; open panel after the same calm duration.
+      // Leggera: CSS transform; open modal after the same calm duration.
       if (reduceMotion) {
-        openDeptAfterFocus(id)
+        openFocusModal(id)
         return
       }
       lightFocusTimer.current = window.setTimeout(
-        () => openDeptAfterFocus(id),
+        () => openFocusModal(id),
         FOCUS_DURATION * 1000,
       )
     }
     // Completa: ScriptedCamera calls onFocusArrived when the dolly finishes.
   }
 
+  const openFullPanel = () => {
+    if (!focusId) return
+    const id = focusId
+    setFocusModalOpen(false)
+    setFocusId(null)
+    setFocusBusy(false)
+    onSelect(id)
+  }
+
   const modeBadge = useLight ? 'Vista leggera' : 'Vista completa'
   const focusLabel = focusId ? ROOMS.find((r) => r.id === focusId)?.label : null
-  const modeHint = focusId
-    ? `Ingrandisco ${focusLabel ?? 'il reparto'}… Tocca Indietro per la vista ufficio.`
-    : useLight
-      ? 'Vista leggera — stessa pianta dei reparti. Tocca una stanza: zoom calmo, poi il pannello.'
-      : 'Vista fissa 3D (niente orbita). Tocca un reparto: la camera si avvicina, poi si apre il pannello.'
+  const modeHint = focusModalOpen
+    ? 'Chiudi il riquadro per tornare alla vista ufficio (zoom indietro).'
+    : focusId
+      ? `Ingrandisco ${focusLabel ?? 'il reparto'}… Tocca Indietro per la vista ufficio.`
+      : useLight
+        ? 'Vista leggera — tocca una stanza: zoom calmo, poi decisioni e metriche.'
+        : 'Vista fissa 3D (niente orbita). Tocca un reparto: zoom, poi il riquadro decisioni/metriche.'
 
   return (
     <section
@@ -2280,7 +2311,7 @@ export function OfficeTwin({
                   reduceMotion={reduceMotion}
                   onContextLost={() => setFailed(true)}
                   focusId={focusId}
-                  onFocusArrived={openDeptAfterFocus}
+                  onFocusArrived={openFocusModal}
                 />
               </CanvasErrorBoundary>
             )}
@@ -2289,6 +2320,21 @@ export function OfficeTwin({
 
         <p className="office-hint">{modeHint}</p>
       </div>
+
+      {focusModalOpen && focusId && (
+        <DeptFocusModal
+          dept={focusId}
+          pendingApprovals={approvals}
+          audit={audit}
+          sessionQueries={sessionQueries[focusId] || 0}
+          light={lights[focusId]}
+          liveSteps={liveSteps}
+          officeOpens={officeOpens}
+          onClose={returnToOverview}
+          onOpenFullPanel={openFullPanel}
+          onDecide={onDecideApproval}
+        />
+      )}
     </section>
   )
 }

@@ -276,6 +276,19 @@ export function putTenant(tenantId: string, config: TenantConfig) {
   })
 }
 
+export type AuditEvent = {
+  ts: string
+  tenant_id: string
+  event: string
+  payload?: Record<string, unknown>
+}
+
+export function listTenantAudit(tenantId: string, limit = 80) {
+  return request<AuditEvent[]>(
+    `/api/tenants/${tenantId}/audit?limit=${encodeURIComponent(String(limit))}`,
+  )
+}
+
 export function listTenantArtifacts(tenantId: string) {
   return request<ArtifactList>(`/api/tenants/${tenantId}/artifacts`)
 }
