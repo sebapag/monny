@@ -18,7 +18,9 @@ import {
   listApprovals,
   listKnowledge,
   listTenantArtifacts,
+  listTenantAudit,
   listTenants,
+  type AuditEvent,
   putTenant,
   startRun,
   toggleKnowledgeSource,
@@ -1010,6 +1012,7 @@ function App() {
   const [artifactNames, setArtifactNames] = useState<string[]>([])
   const [liveRun, setLiveRun] = useState<AgentRun | null>(null)
   const [liveDept, setLiveDept] = useState<DeptId | null>(null)
+  const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([])
   /** Clock tick so room lights drop from linger → soft/off after execution + 1s. */
   const [nowMs, setNowMs] = useState(() => Date.now())
 
@@ -1065,13 +1068,23 @@ function App() {
     }
   }, [])
 
+  const loadAudit = useCallback(async (id: string) => {
+    try {
+      const rows = await listTenantAudit(id, 100)
+      setAuditEvents(rows)
+    } catch {
+      setAuditEvents([])
+    }
+  }, [])
+
   useEffect(() => {
     refreshApprovals(tenantId).catch((err: Error) => setError(err.message))
     void loadArtifacts(tenantId)
+    void loadAudit(tenantId)
     getTenant(tenantId)
       .then(setTenantDetail)
       .catch((err: Error) => setError(err.message))
-  }, [tenantId, refreshApprovals, loadArtifacts])
+  }, [tenantId, refreshApprovals, loadArtifacts, loadAudit])
 
   useEffect(() => {
     if (route.mode !== 'admin') return
@@ -1175,6 +1188,7 @@ function App() {
       }))
       await refreshApprovals(tenantId)
       await loadArtifacts(tenantId)
+      await loadAudit(tenantId)
       await refreshTenants()
       if (current.status !== 'awaiting_approval') {
         setTimeout(() => {
@@ -1205,6 +1219,7 @@ function App() {
       setLiveRun(null)
       setLiveDept(null)
       await refreshApprovals(tenantId)
+      await loadAudit(tenantId)
       await refreshTenants()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -1426,6 +1441,16 @@ function App() {
               officeViewEntitled={officeFeatures.office_view}
               statusLine={liveRun?.status_line}
               busy={busy}
+              tenantId={tenantId}
+              approvals={approvals}
+              audit={auditEvents}
+              sessionQueries={Object.fromEntries(
+                Object.entries(messagesByDept).map(([k, msgs]) => [
+                  k,
+                  (msgs || []).filter((m) => m.role === 'user').length,
+                ]),
+              )}
+              liveSteps={liveRun?.steps ?? []}
               onSelect={(id) => {
                 if (!isDeptEnabled(id, entitlementSkills)) {
                   setError(lockedHintIt(id))
@@ -1435,6 +1460,7 @@ function App() {
                 navigate({ mode: 'dept', dept: id })
               }}
               onQuickAction={(goal) => void runFromOffice(goal)}
+              onDecideApproval={(id, d) => void onDecide(id, d)}
             />
             {error && <p className="error">{error}</p>}
           </>
