@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import type { Approval } from './api'
+import { ApprovalPathActions, type DecideHandler } from './ApprovalPaths'
 import {
   buildDeptFocusMetrics,
   deptFocusTitle,
@@ -36,7 +37,7 @@ export function DeptFocusModal({
   closing?: boolean
   onClose: () => void
   onOpenFullPanel: () => void
-  onDecide?: (id: string, decision: 'approved' | 'rejected') => void
+  onDecide?: DecideHandler
 }) {
   const def = getDept(dept)
   const pending = filterApprovals(pendingApprovals, dept)
@@ -107,20 +108,11 @@ export function DeptFocusModal({
                     <p className="dept-focus-why">{plain.why}</p>
                     {onDecide && (
                       <div className="dept-focus-decision-actions">
-                        <button
-                          type="button"
-                          className="btn btn-primary"
-                          onClick={() => onDecide(a.id, 'approved')}
-                        >
-                          Approva
-                        </button>
-                        <button
-                          type="button"
-                          className="btn btn-ghost"
-                          onClick={() => onDecide(a.id, 'rejected')}
-                        >
-                          Rifiuta
-                        </button>
+                        <ApprovalPathActions
+                          approval={a}
+                          onDecide={onDecide}
+                          compact
+                        />
                       </div>
                     )}
                   </li>

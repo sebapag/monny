@@ -59,8 +59,12 @@ class RunOut(BaseModel):
 
 
 class ApprovalDecision(BaseModel):
-    decision: Literal["approved", "rejected"]
+    """Three-path leadership actions + legacy reject."""
+
+    decision: Literal["approved", "rejected", "delegated", "escalated"]
     note: str | None = None
+    # Required when decision == delegated (dept id: spend, seo, …).
+    delegate_to: str | None = None
 
 
 class ApprovalOut(BaseModel):
@@ -74,6 +78,7 @@ class ApprovalOut(BaseModel):
     created_at: str
     decided_at: str | None = None
     note: str | None = None
+    delegate_to: str | None = None
     apply_result: dict[str, Any] | None = None
 
 

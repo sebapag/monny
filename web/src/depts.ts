@@ -38,7 +38,7 @@ export const DEPARTMENTS: DeptDef[] = [
   {
     id: 'direzione',
     name: 'Direzione',
-    blurb: 'Decisioni in sospeso. Approva o rifiuta le proposte dei reparti.',
+    blurb: 'Decisioni in sospeso. Risolvi, delega a un reparto o scala a umano.',
     tint: 'yellow',
     skills: ['hitl'],
     actions: [],

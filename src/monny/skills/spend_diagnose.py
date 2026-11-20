@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from monny.config.decision_rights import skill_requires_approval
 from monny.config.models import SpendPolicy, TenantConfig
 
 
@@ -15,7 +16,7 @@ def diagnose_campaigns(
 ) -> dict[str, Any]:
     policy: SpendPolicy = tenant.policy.spend
     thresholds = policy.thresholds
-    hitl = tenant.policy.hitl_default
+    hitl = skill_requires_approval(tenant, "spend")
 
     healthy: list[dict[str, Any]] = []
     waste: list[dict[str, Any]] = []

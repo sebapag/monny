@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   type AgentRun,
   type Approval,
+  type DecisionAutonomy,
+  type DecisionRights,
   type KnowledgeSource,
   type Report,
   type SeoChange,
@@ -25,6 +27,7 @@ import {
   startRun,
   toggleKnowledgeSource,
 } from './api'
+import { ApprovalPathActions, type DecideHandler } from './ApprovalPaths'
 import {
   type DeptId,
   type RouteState,
@@ -139,13 +142,14 @@ function ApprovalCard({
 }: {
   approval: Approval
   primary?: boolean
-  onDecide: (id: string, decision: 'approved' | 'rejected') => void
+  onDecide: DecideHandler
 }) {
   const plain = plainApproval(approval)
   return (
     <div
       className={`approval ${primary ? 'approval-primary' : 'approval-secondary'}`}
       id={primary ? 'first-approval' : undefined}
+      data-status={approval.status}
     >
       {primary && <div className="approval-next">Prossimo passo</div>}
       <div>
@@ -158,7 +162,7 @@ function ApprovalCard({
               <p>{plain.why}</p>
             </div>
             <div>
-              <span className="muted">Cosa succede se Approvi</span>
+              <span className="muted">Cosa succede se Risolvi</span>
               <p>{plain.ifApprove}</p>
             </div>
           </div>
@@ -174,14 +178,7 @@ function ApprovalCard({
           </details>
         )}
       </div>
-      <div className="approval-actions">
-        <button className="btn btn-ok" onClick={() => onDecide(approval.id, 'approved')}>
-          Approva
-        </button>
-        <button className="btn btn-danger" onClick={() => onDecide(approval.id, 'rejected')}>
-          Rifiuta
-        </button>
-      </div>
+      <ApprovalPathActions approval={approval} onDecide={onDecide} />
     </div>
   )
 }
@@ -194,21 +191,24 @@ function ApprovalsList({
 }: {
   items: Approval[]
   lastDecide: string | null
-  onDecide: (id: string, decision: 'approved' | 'rejected') => void
+  onDecide: DecideHandler
   emptyHint: string
 }) {
   const primary = items[0]
   const rest = items.slice(1)
   return (
     <section className="panel" id="approvals">
-      <h2>Approvazioni</h2>
+      <h2>Decisioni</h2>
+      <p className="status-line">
+        Tre percorsi: risolvi · delega a un reparto · scala a umano
+      </p>
       {lastDecide && <p className="status-line">{lastDecide}</p>}
       {items.length === 0 && <p className="status-line">{emptyHint}</p>}
       {primary && (
         <ApprovalCard
           approval={primary}
           primary
-          onDecide={(id, d) => onDecide(id, d)}
+          onDecide={onDecide}
         />
       )}
       {rest.length > 0 && (
@@ -217,7 +217,7 @@ function ApprovalsList({
             Altre {rest.length} {rest.length === 1 ? 'proposta' : 'proposte'}
           </p>
           {rest.map((a) => (
-            <ApprovalCard key={a.id} approval={a} onDecide={(id, d) => onDecide(id, d)} />
+            <ApprovalCard key={a.id} approval={a} onDecide={onDecide} />
           ))}
         </div>
       )}
@@ -856,6 +856,64 @@ function AdminForm({
         />
         Chiedi sempre conferma prima di applicare cambiamenti
       </label>
+
+      <div className="section-title">Diritti decisionali per reparto</div>
+      <FieldHelp>
+        Cosa può fare ogni skill senza passare da Leadership. «Sempre chiedi» rispetta
+        anche il flag sopra; «Entro policy» applica solo se auto_apply è attivo;
+        «L’agente risolve» salta l’HITL per quella famiglia.
+      </FieldHelp>
+      <div className="decision-rights-grid">
+        {(
+          [
+            ['spend', 'Spend pubblicitario'],
+            ['seo', 'SEO'],
+            ['shopify', 'Negozio Shopify'],
+            ['leads', 'Lead'],
+            ['operations', 'Operations'],
+            ['design', 'Graphic Designer'],
+            ['it', 'IT'],
+            ['controlling', 'Controlling'],
+          ] as const
+        ).map(([key, title]) => {
+          const rights: DecisionRights = {
+            spend: 'always_ask',
+            seo: 'always_ask',
+            shopify: 'always_ask',
+            leads: 'always_ask',
+            operations: 'always_ask',
+            design: 'always_ask',
+            it: 'always_ask',
+            controlling: 'always_ask',
+            ...(cfg.policy.decision_rights ?? {}),
+          }
+          const value = rights[key]
+          return (
+            <div className="field" key={key}>
+              <label htmlFor={`decision-right-${key}`}>{title}</label>
+              <select
+                id={`decision-right-${key}`}
+                data-testid={`decision-right-${key}`}
+                value={value}
+                onChange={(e) =>
+                  set('policy', {
+                    ...cfg.policy,
+                    decision_rights: {
+                      ...rights,
+                      [key]: e.target.value as DecisionAutonomy,
+                    },
+                  })
+                }
+              >
+                <option value="always_ask">Sempre chiedi</option>
+                <option value="within_policy">Entro policy</option>
+                <option value="agent_resolves">L’agente risolve</option>
+              </select>
+            </div>
+          )
+        })}
+      </div>
+
       <div className="field-row">
         <div className="field">
           <label>ROAS minimo accettabile</label>
@@ -1205,15 +1263,16 @@ function App() {
     }
   }
 
-  const onDecide = async (id: string, decision: 'approved' | 'rejected') => {
+  const onDecide: DecideHandler = async (id, decision, delegateTo) => {
     setError(null)
     try {
-      const result = await decideApproval(id, decision)
+      const result = await decideApproval(id, decision, undefined, delegateTo)
       setLastDecide(
         friendlyDecideNote(
           result.action_type,
           decision,
           String(result.apply_result?.status ?? ''),
+          result.delegate_to,
         ),
       )
       setLiveRun(null)

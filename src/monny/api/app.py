@@ -259,14 +259,30 @@ def create_app() -> FastAPI:
 
     @app.get("/api/approvals", response_model=list[ApprovalOut])
     def list_approvals(tenant_id: str | None = None, status: str | None = "pending"):
-        items = approvals().list(tenant_id=tenant_id, status=status)  # type: ignore[arg-type]
+        store = approvals()
+        # Default inbox: open proposals (pending) + those already escalated to a human.
+        if status == "pending":
+            open_items = store.list(tenant_id=tenant_id, status="pending")
+            escalated = store.list(tenant_id=tenant_id, status="escalated")
+            items = sorted(
+                [*open_items, *escalated],
+                key=lambda a: a.created_at,
+                reverse=True,
+            )
+        else:
+            items = store.list(tenant_id=tenant_id, status=status)  # type: ignore[arg-type]
         return [ApprovalOut(**item.__dict__) for item in items]
 
     @app.post("/api/approvals/{approval_id}/decide", response_model=ApprovalOut)
     def decide(approval_id: str, body: ApprovalDecision) -> ApprovalOut:
         store = approvals()
         try:
-            item = store.decide(approval_id, body.decision, note=body.note)
+            item = store.decide(
+                approval_id,
+                body.decision,
+                note=body.note,
+                delegate_to=body.delegate_to,
+            )
         except KeyError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         except ValueError as exc:
@@ -290,6 +306,7 @@ def create_app() -> FastAPI:
                 "approval_id": item.id,
                 "action_type": item.action_type,
                 "note": body.note,
+                "delegate_to": body.delegate_to,
                 "apply_result": apply_result,
             },
         )
@@ -306,6 +323,7 @@ def create_app() -> FastAPI:
             refs = _collect_secret_refs(cfg)
             secrets = [SecretStatus(**secret_status(r)).model_dump() for r in refs]
             pending = store.list(tenant_id=tenant_id, status="pending")
+            escalated = store.list(tenant_id=tenant_id, status="escalated")
             out.append(
                 {
                     "tenant_id": tenant_id,
@@ -313,7 +331,7 @@ def create_app() -> FastAPI:
                     "secrets": secrets,
                     "secrets_configured": sum(1 for s in secrets if s["configured"]),
                     "secrets_total": len(secrets),
-                    "pending_approvals": len(pending),
+                    "pending_approvals": len(pending) + len(escalated),
                     "subscription": entitlement_summary(cfg),
                 }
             )

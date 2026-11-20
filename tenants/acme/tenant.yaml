@@ -41,6 +41,9 @@ policy:
   seo:
     auto_apply: false
     max_urls_per_run: 20
+  decision_rights:
+    spend: always_ask
+    seo: always_ask
 integrations:
   search_console:
     site_url: https://www.acme.example/

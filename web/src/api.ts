@@ -99,6 +99,30 @@ export type AgentRun = {
   updated_at: string
 }
 
+/** Three-path escalation + legacy reject. */
+export type ApprovalDecision =
+  | 'approved'
+  | 'rejected'
+  | 'delegated'
+  | 'escalated'
+
+/** Autonomy: what a skill/dept may do without Leadership approval. */
+export type DecisionAutonomy =
+  | 'always_ask'
+  | 'within_policy'
+  | 'agent_resolves'
+
+export type DecisionRights = {
+  spend: DecisionAutonomy
+  seo: DecisionAutonomy
+  shopify: DecisionAutonomy
+  leads: DecisionAutonomy
+  operations: DecisionAutonomy
+  design: DecisionAutonomy
+  it: DecisionAutonomy
+  controlling: DecisionAutonomy
+}
+
 export type Approval = {
   id: string
   tenant_id: string
@@ -110,6 +134,7 @@ export type Approval = {
   created_at: string
   decided_at?: string | null
   note?: string | null
+  delegate_to?: string | null
   apply_result?: Record<string, unknown> | null
 }
 
@@ -189,6 +214,7 @@ export type TenantConfig = {
       thresholds: { min_roas: number; max_cpa: number; lookback_days: number }
     }
     seo: { auto_apply: boolean; max_urls_per_run: number }
+    decision_rights?: DecisionRights
   }
   integrations?: {
     search_console?: { site_url: string; secret_ref: string } | null
@@ -252,12 +278,17 @@ export function listApprovals(tenant_id?: string, status = 'pending') {
 
 export function decideApproval(
   id: string,
-  decision: 'approved' | 'rejected',
+  decision: ApprovalDecision,
   note?: string,
+  delegateTo?: string,
 ) {
   return request<Approval>(`/api/approvals/${id}/decide`, {
     method: 'POST',
-    body: JSON.stringify({ decision, note }),
+    body: JSON.stringify({
+      decision,
+      note,
+      delegate_to: delegateTo ?? null,
+    }),
   })
 }
 

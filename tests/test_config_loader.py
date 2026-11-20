@@ -14,6 +14,8 @@ def test_list_and_load_demo_tenant():
     assert cfg.shopify.auth.secret_ref == "SHOPIFY_TOKEN_DEMO"
     assert cfg.ads.google is not None
     assert cfg.policy.hitl_default is True
+    assert cfg.policy.decision_rights.spend == "always_ask"
+    assert cfg.policy.decision_rights.seo == "always_ask"
 
 
 def test_secret_status_never_leaks_value(monkeypatch):

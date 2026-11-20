@@ -371,6 +371,63 @@ a {
   background: rgba(224, 49, 49, 0.06);
 }
 
+.btn-warn {
+  background: transparent;
+  border-color: rgba(180, 120, 40, 0.4);
+  color: #8a5a12;
+}
+
+.btn-warn:hover:not(:disabled) {
+  background: rgba(245, 215, 94, 0.18);
+}
+
+.approval-paths {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  margin-top: 0.35rem;
+}
+
+.approval-paths-primary,
+.approval-paths-secondary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.approval-delegate-select {
+  min-height: 2rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 8px;
+  border: 1px solid var(--hairline);
+  background: var(--canvas);
+  color: var(--charcoal);
+  font: inherit;
+  font-size: 0.85rem;
+}
+
+.approval-escalated-badge {
+  margin: 0;
+  font-size: 0.8rem;
+  color: #8a5a12;
+  background: rgba(245, 215, 94, 0.28);
+  border: 1px solid rgba(180, 120, 40, 0.28);
+  border-radius: 8px;
+  padding: 0.35rem 0.55rem;
+}
+
+.approval-paths.is-compact .approval-paths-primary {
+  gap: 0.35rem;
+}
+
+.decision-rights-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(11.5rem, 1fr));
+  gap: 0.65rem 0.85rem;
+  margin: 0.35rem 0 1rem;
+}
+
 .quick-actions {
   display: flex;
   flex-wrap: wrap;
@@ -505,6 +562,7 @@ a {
 .approval-actions {
   display: flex;
   gap: 0.4rem;
+  flex-wrap: wrap;
 }
 
 /* Agent alert: pending HITL decisions (Italian, non-jargon). Stays with sticky chrome. */

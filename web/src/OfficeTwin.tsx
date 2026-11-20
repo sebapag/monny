@@ -2085,7 +2085,11 @@ export function OfficeTwin({
   liveSteps?: TimelineStep[]
   onSelect: (id: DeptId) => void
   onQuickAction: (goal: string) => void
-  onDecideApproval?: (id: string, decision: 'approved' | 'rejected') => void
+  onDecideApproval?: (
+    id: string,
+    decision: 'approved' | 'rejected' | 'delegated' | 'escalated',
+    delegateTo?: string,
+  ) => void
 }) {
   const capability = useOfficeCapability()
   const reduceMotion = useReduceMotion()

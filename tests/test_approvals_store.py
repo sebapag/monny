@@ -54,3 +54,38 @@ def test_atomic_persist_never_writes_empty(tmp_path):
     text = (tmp_path / "approvals.json").read_text(encoding="utf-8")
     assert text.strip()
     assert json.loads(text)
+
+
+def test_three_path_delegate_and_escalate(tmp_path):
+    store = ApprovalStore(tmp_path)
+    a = store.create(
+        tenant_id="demo",
+        thread_id="t1",
+        action_type="reduce_budget",
+        summary="taglia budget",
+        payload={"x": 1},
+    )
+    escalated = store.decide(a.id, "escalated", note="serve umano")
+    assert escalated.status == "escalated"
+    assert escalated.decided_at is None
+    # Still actionable after escalate.
+    delegated = store.decide(a.id, "delegated", delegate_to="seo")
+    assert delegated.status == "delegated"
+    assert delegated.delegate_to == "seo"
+    assert delegated.decided_at is not None
+
+
+def test_delegate_requires_target(tmp_path):
+    store = ApprovalStore(tmp_path)
+    a = store.create(
+        tenant_id="demo",
+        thread_id="t1",
+        action_type="pause_campaign",
+        summary="pausa",
+        payload={},
+    )
+    try:
+        store.decide(a.id, "delegated")
+        raise AssertionError("expected ValueError")
+    except ValueError as exc:
+        assert "delegate_to" in str(exc)

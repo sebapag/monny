@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 
-Decision = Literal["pending", "approved", "rejected"]
+Decision = Literal["pending", "approved", "rejected", "delegated", "escalated"]
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +31,8 @@ class Approval:
     )
     decided_at: str | None = None
     note: str | None = None
+    # Target department id when status is delegated (e.g. spend, seo).
+    delegate_to: str | None = None
 
 
 def _atomic_write_text(path: Path, text: str) -> None:
@@ -129,16 +131,29 @@ class ApprovalStore:
     def decide(
         self,
         approval_id: str,
-        decision: Literal["approved", "rejected"],
+        decision: Literal["approved", "rejected", "delegated", "escalated"],
         note: str | None = None,
+        delegate_to: str | None = None,
     ) -> Approval:
         approval = self._items.get(approval_id)
         if approval is None:
             raise KeyError(f"Unknown approval: {approval_id}")
-        if approval.status != "pending":
+        # Escalated items stay actionable until resolved / delegated / rejected.
+        if approval.status not in ("pending", "escalated"):
             raise ValueError(f"Approval already {approval.status}")
+        if decision == "delegated" and not delegate_to:
+            raise ValueError("delegate_to is required when decision is delegated")
         approval.status = decision
         approval.note = note
-        approval.decided_at = datetime.now(timezone.utc).isoformat()
+        approval.delegate_to = delegate_to if decision == "delegated" else None
+        if decision == "escalated":
+            # Still open for a human — do not stamp decided_at yet.
+            approval.decided_at = None
+            if note:
+                approval.note = note
+            elif not approval.note:
+                approval.note = "Scalata a decisione umana"
+        else:
+            approval.decided_at = datetime.now(timezone.utc).isoformat()
         self._persist()
         return approval
