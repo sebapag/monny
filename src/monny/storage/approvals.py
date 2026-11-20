@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 import logging
 import os
+import tempfile
+import threading
 import uuid
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
@@ -15,6 +17,20 @@ from typing import Any, Literal
 Decision = Literal["pending", "approved", "rejected", "delegated", "escalated"]
 
 logger = logging.getLogger(__name__)
+
+# Serialize writers that share the same approvals.json path (multiple store instances).
+_PATH_LOCKS: dict[str, threading.Lock] = {}
+_PATH_LOCKS_GUARD = threading.Lock()
+
+
+def _lock_for(path: Path) -> threading.Lock:
+    key = str(path.resolve())
+    with _PATH_LOCKS_GUARD:
+        lock = _PATH_LOCKS.get(key)
+        if lock is None:
+            lock = threading.Lock()
+            _PATH_LOCKS[key] = lock
+        return lock
 
 
 @dataclass
@@ -36,11 +52,27 @@ class Approval:
 
 
 def _atomic_write_text(path: Path, text: str) -> None:
-    """Write via temp file + replace so a crash cannot leave an empty/truncated JSON."""
+    """Write via unique temp file + replace so concurrent writers cannot collide."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(text, encoding="utf-8")
-    os.replace(tmp, path)
+    # Unique name: a fixed "*.json.tmp" races when two stores persist the same path.
+    fd, tmp_name = tempfile.mkstemp(
+        prefix=f".{path.name}.",
+        suffix=".tmp",
+        dir=str(path.parent),
+    )
+    tmp = Path(tmp_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(text)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp, path)
+    except Exception:
+        try:
+            tmp.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise
 
 
 class ApprovalStore:
@@ -48,8 +80,10 @@ class ApprovalStore:
         self.data_dir = Path(data_dir)
         self.path = self.data_dir / "approvals.json"
         self.data_dir.mkdir(parents=True, exist_ok=True)
+        self._lock = _lock_for(self.path)
         self._items: dict[str, Approval] = {}
-        self._load()
+        with self._lock:
+            self._load()
 
     def _load(self) -> None:
         if not self.path.exists():
@@ -92,6 +126,11 @@ class ApprovalStore:
         payload = [asdict(a) for a in self._items.values()]
         _atomic_write_text(self.path, json.dumps(payload, indent=2))
 
+    def _refresh_from_disk(self) -> None:
+        """Re-read approvals.json so multiple store instances sharing a path stay coherent."""
+        self._items = {}
+        self._load()
+
     def create(
         self,
         *,
@@ -109,8 +148,10 @@ class ApprovalStore:
             summary=summary,
             payload=payload,
         )
-        self._items[approval.id] = approval
-        self._persist()
+        with self._lock:
+            self._refresh_from_disk()
+            self._items[approval.id] = approval
+            self._persist()
         return approval
 
     def list(
@@ -118,7 +159,9 @@ class ApprovalStore:
         tenant_id: str | None = None,
         status: Decision | None = "pending",
     ) -> list[Approval]:
-        items = list(self._items.values())
+        with self._lock:
+            self._refresh_from_disk()
+            items = list(self._items.values())
         if tenant_id:
             items = [a for a in items if a.tenant_id == tenant_id]
         if status:
@@ -126,7 +169,9 @@ class ApprovalStore:
         return sorted(items, key=lambda a: a.created_at, reverse=True)
 
     def get(self, approval_id: str) -> Approval | None:
-        return self._items.get(approval_id)
+        with self._lock:
+            self._refresh_from_disk()
+            return self._items.get(approval_id)
 
     def decide(
         self,
@@ -135,25 +180,27 @@ class ApprovalStore:
         note: str | None = None,
         delegate_to: str | None = None,
     ) -> Approval:
-        approval = self._items.get(approval_id)
-        if approval is None:
-            raise KeyError(f"Unknown approval: {approval_id}")
-        # Escalated items stay actionable until resolved / delegated / rejected.
-        if approval.status not in ("pending", "escalated"):
-            raise ValueError(f"Approval already {approval.status}")
-        if decision == "delegated" and not delegate_to:
-            raise ValueError("delegate_to is required when decision is delegated")
-        approval.status = decision
-        approval.note = note
-        approval.delegate_to = delegate_to if decision == "delegated" else None
-        if decision == "escalated":
-            # Still open for a human — do not stamp decided_at yet.
-            approval.decided_at = None
-            if note:
-                approval.note = note
-            elif not approval.note:
-                approval.note = "Scalata a decisione umana"
-        else:
-            approval.decided_at = datetime.now(timezone.utc).isoformat()
-        self._persist()
-        return approval
+        with self._lock:
+            self._refresh_from_disk()
+            approval = self._items.get(approval_id)
+            if approval is None:
+                raise KeyError(f"Unknown approval: {approval_id}")
+            # Escalated items stay actionable until resolved / delegated / rejected.
+            if approval.status not in ("pending", "escalated"):
+                raise ValueError(f"Approval already {approval.status}")
+            if decision == "delegated" and not delegate_to:
+                raise ValueError("delegate_to is required when decision is delegated")
+            approval.status = decision
+            approval.note = note
+            approval.delegate_to = delegate_to if decision == "delegated" else None
+            if decision == "escalated":
+                # Still open for a human — do not stamp decided_at yet.
+                approval.decided_at = None
+                if note:
+                    approval.note = note
+                elif not approval.note:
+                    approval.note = "Scalata a decisione umana"
+            else:
+                approval.decided_at = datetime.now(timezone.utc).isoformat()
+            self._persist()
+            return approval

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import threading
 
 from monny.storage.approvals import ApprovalStore
 
@@ -89,3 +90,32 @@ def test_delegate_requires_target(tmp_path):
         raise AssertionError("expected ValueError")
     except ValueError as exc:
         assert "delegate_to" in str(exc)
+
+
+def test_concurrent_creates_across_store_instances(tmp_path):
+    """Fixed .tmp path used to race; unique temps + path lock must stay green."""
+    errors: list[BaseException] = []
+
+    def worker(n: int) -> None:
+        try:
+            store = ApprovalStore(tmp_path)
+            for i in range(8):
+                store.create(
+                    tenant_id="demo",
+                    thread_id=f"t{n}",
+                    action_type="reduce_budget",
+                    summary=f"w{n}-{i}",
+                    payload={"n": n, "i": i},
+                )
+        except BaseException as exc:  # noqa: BLE001 — collect for assertion
+            errors.append(exc)
+
+    threads = [threading.Thread(target=worker, args=(i,)) for i in range(6)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert not errors, errors
+    reloaded = ApprovalStore(tmp_path)
+    assert len(reloaded.list(status=None)) == 6 * 8
+    assert isinstance(json.loads((tmp_path / "approvals.json").read_text(encoding="utf-8")), list)
