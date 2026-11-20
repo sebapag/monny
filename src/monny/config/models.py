@@ -66,10 +66,32 @@ class SeoPolicy(BaseModel):
     max_urls_per_run: int = 50
 
 
+Autonomy = Literal["always_ask", "within_policy", "agent_resolves"]
+
+
+class DecisionRights(BaseModel):
+    """
+    Explicit decision rights per skill family (BCG-inspired sketch).
+    - always_ask: human/Leadership confirms before apply (default)
+    - within_policy: agent may apply when auto_apply / policy limits allow
+    - agent_resolves: agent may apply without HITL for that family
+    """
+
+    spend: Autonomy = "always_ask"
+    seo: Autonomy = "always_ask"
+    shopify: Autonomy = "always_ask"
+    leads: Autonomy = "always_ask"
+    operations: Autonomy = "always_ask"
+    design: Autonomy = "always_ask"
+    it: Autonomy = "always_ask"
+    controlling: Autonomy = "always_ask"
+
+
 class PolicyConfig(BaseModel):
     hitl_default: bool = True
     spend: SpendPolicy = Field(default_factory=SpendPolicy)
     seo: SeoPolicy = Field(default_factory=SeoPolicy)
+    decision_rights: DecisionRights = Field(default_factory=DecisionRights)
 
 
 class SearchConsoleConfig(BaseModel):

@@ -290,15 +290,23 @@ export function friendlyAgentReply(
 
 export function friendlyDecideNote(
   actionType: string,
-  decision: 'approved' | 'rejected',
+  decision: 'approved' | 'rejected' | 'delegated' | 'escalated',
   applyStatus?: string,
+  delegateTo?: string | null,
 ): string {
   const title = ACTION_LABELS[actionType] ?? humanizeSnake(actionType)
   if (decision === 'approved') {
     const st = applyStatus === 'dry_run' || applyStatus === 'stub' || applyStatus === 'ok'
       ? 'simulato in dry-run'
       : applyStatus || 'ok'
-    return `Hai approvato: ${title} (${st}).`
+    return `Hai risolto: ${title} (${st}).`
+  }
+  if (decision === 'delegated') {
+    const dest = delegateTo ? humanizeSnake(delegateTo) : 'altro reparto'
+    return `Hai delegato: ${title} → ${dest}.`
+  }
+  if (decision === 'escalated') {
+    return `Hai scalato a umano: ${title}. Resta in coda Decisioni.`
   }
   return `Hai rifiutato: ${title}.`
 }
