@@ -20,6 +20,7 @@ export function DeptFocusModal({
   light,
   liveSteps,
   officeOpens,
+  closing = false,
   onClose,
   onOpenFullPanel,
   onDecide,
@@ -31,6 +32,8 @@ export function DeptFocusModal({
   light: RoomLightState
   liveSteps: TimelineStep[]
   officeOpens: number
+  /** Fade-out while camera dollies back to overview. */
+  closing?: boolean
   onClose: () => void
   onOpenFullPanel: () => void
   onDecide?: (id: string, decision: 'approved' | 'rejected') => void
@@ -58,15 +61,17 @@ export function DeptFocusModal({
 
   return (
     <div
-      className="dept-focus-backdrop"
+      className={`dept-focus-backdrop${closing ? ' is-leaving' : ''}`}
       role="presentation"
-      onClick={onClose}
+      onClick={closing ? undefined : onClose}
       data-testid="dept-focus-modal"
+      data-closing={closing ? 'true' : undefined}
+      aria-hidden={closing || undefined}
     >
       <div
         className={`dept-focus-modal tint-${def?.tint ?? 'gray'}`}
         role="dialog"
-        aria-modal="true"
+        aria-modal={!closing}
         aria-labelledby="dept-focus-title"
         onClick={(e) => e.stopPropagation()}
       >

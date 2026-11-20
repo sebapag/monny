@@ -7,6 +7,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type ReactNode,
 } from 'react'
 import {
@@ -15,6 +16,7 @@ import {
   RepeatWrapping,
   SRGBColorSpace,
   Vector3,
+  PerspectiveCamera,
   type Camera,
   type Group,
   type MeshStandardMaterial,
@@ -178,11 +180,19 @@ const EASE = 3.2
 /** Overview framing — city + full floor (no free orbit). */
 const OVERVIEW_POS: [number, number, number] = [13.6, 14.4, 15.4]
 const OVERVIEW_LOOK: [number, number, number] = [0, 0.35, -0.6]
-/** Calm dolly into a single department (seconds). */
-const FOCUS_DURATION = 1.15
-function smoothstep(t: number) {
+const OVERVIEW_FOV = 38
+const FOCUS_FOV = 33.2
+/** Calm dolly in/out (seconds) — premium ease, no snaps. */
+export const FOCUS_DURATION = 1.55
+/** Modal enter/leave synced with the end of the dolly. */
+export const MODAL_FADE_MS = 560
+/** Soft ease-in-out without overshoot (CSS twin uses the same curve). */
+export const FOCUS_EASE_CSS = 'cubic-bezier(0.45, 0.05, 0.25, 1)'
+
+/** Ken Perlin smootherstep — gentler accel/decel than smoothstep. */
+function smootherstep(t: number) {
   const x = Math.min(1, Math.max(0, t))
-  return x * x * (3 - 2 * x)
+  return x * x * x * (x * (x * 6 - 15) + 10)
 }
 
 /** Scripted close-up for one room — same isometric bias, shorter distance. */
@@ -299,11 +309,14 @@ function ScriptedCamera({
   const { camera } = useThree()
   const posCurrent = useRef(new Vector3(...OVERVIEW_POS))
   const lookCurrent = useRef(new Vector3(...OVERVIEW_LOOK))
+  const fovCurrent = useRef(OVERVIEW_FOV)
   const anim = useRef<{
     fromPos: Vector3
     toPos: Vector3
     fromLook: Vector3
     toLook: Vector3
+    fromFov: number
+    toFov: number
     t: number
     id: DeptId | null
     notified: boolean
@@ -319,13 +332,18 @@ function ScriptedCamera({
     const target = room
       ? focusFraming(room)
       : { pos: new Vector3(...OVERVIEW_POS), look: new Vector3(...OVERVIEW_LOOK) }
+    const targetFov = room ? FOCUS_FOV : OVERVIEW_FOV
 
     if (reduceMotion) {
       posCurrent.current.copy(target.pos)
       lookCurrent.current.copy(target.look)
+      fovCurrent.current = targetFov
       camera.position.copy(target.pos)
       camera.lookAt(lookCurrent.current)
-      camera.updateProjectionMatrix()
+      if (camera instanceof PerspectiveCamera) {
+        camera.fov = targetFov
+        camera.updateProjectionMatrix()
+      }
       anim.current = null
       if (focusId && lastNotified.current !== focusId) {
         lastNotified.current = focusId
@@ -335,11 +353,14 @@ function ScriptedCamera({
       return
     }
 
+    // Continue from the live pose so mid-flight reverses stay continuous (no snap).
     anim.current = {
       fromPos: posCurrent.current.clone(),
       toPos: target.pos.clone(),
       fromLook: lookCurrent.current.clone(),
       toLook: target.look.clone(),
+      fromFov: fovCurrent.current,
+      toFov: targetFov,
       t: 0,
       id: focusId,
       notified: false,
@@ -350,12 +371,19 @@ function ScriptedCamera({
   useFrame((_, dt) => {
     const a = anim.current
     if (!a) return
-    a.t = Math.min(1, a.t + dt / FOCUS_DURATION)
-    const e = smoothstep(a.t)
+    // Cap dt so a long frame (tab switch) never jumps the dolly.
+    const step = Math.min(Math.max(dt, 0), 1 / 24)
+    a.t = Math.min(1, a.t + step / FOCUS_DURATION)
+    const e = smootherstep(a.t)
     posCurrent.current.lerpVectors(a.fromPos, a.toPos, e)
     lookCurrent.current.lerpVectors(a.fromLook, a.toLook, e)
+    fovCurrent.current = lerp(a.fromFov, a.toFov, e)
     camera.position.copy(posCurrent.current)
     camera.lookAt(lookCurrent.current)
+    if (camera instanceof PerspectiveCamera) {
+      camera.fov = fovCurrent.current
+      camera.updateProjectionMatrix()
+    }
     if (a.t >= 1 && a.id && !a.notified) {
       a.notified = true
       lastNotified.current = a.id
@@ -1800,13 +1828,13 @@ function OfficeLightTwin({
                 transform: `translate(${focusXf.x}%, ${focusXf.y}%) scale(${focusXf.scale})`,
                 transition: reduceMotion
                   ? 'none'
-                  : `transform ${FOCUS_DURATION}s cubic-bezier(0.22, 1, 0.36, 1)`,
+                  : `transform ${FOCUS_DURATION}s ${FOCUS_EASE_CSS}`,
               }
             : {
                 transform: 'translate(0%, 0%) scale(1)',
                 transition: reduceMotion
                   ? 'none'
-                  : `transform ${FOCUS_DURATION}s cubic-bezier(0.22, 1, 0.36, 1)`,
+                  : `transform ${FOCUS_DURATION}s ${FOCUS_EASE_CSS}`,
               }
         }
       >
@@ -2066,16 +2094,21 @@ export function OfficeTwin({
   /** Scripted department focus — null = overview framing. */
   const [focusId, setFocusId] = useState<DeptId | null>(null)
   const [focusBusy, setFocusBusy] = useState(false)
-  /** Closable dept modal after dolly (stays on office route). */
-  const [focusModalOpen, setFocusModalOpen] = useState(false)
+  /** Closable dept modal after dolly — open | leaving (fade) | closed. */
+  const [modalPhase, setModalPhase] = useState<'closed' | 'open' | 'leaving'>('closed')
   const [officeOpens, setOfficeOpens] = useState(0)
   const pendingOpen = useRef<DeptId | null>(null)
+  const lastFocusDept = useRef<DeptId | null>(null)
   const lightFocusTimer = useRef<number | null>(null)
+  const modalLeaveTimer = useRef<number | null>(null)
   const pendingTotal = pending.direzione || 0
+  const focusModalVisible = modalPhase === 'open' || modalPhase === 'leaving'
+  const modalDept = focusId ?? lastFocusDept.current
 
   useEffect(() => {
     return () => {
       if (lightFocusTimer.current != null) window.clearTimeout(lightFocusTimer.current)
+      if (modalLeaveTimer.current != null) window.clearTimeout(modalLeaveTimer.current)
     }
   }, [])
 
@@ -2111,21 +2144,40 @@ export function OfficeTwin({
     }
   }
 
+  const clearModalLeaveTimer = () => {
+    if (modalLeaveTimer.current != null) {
+      window.clearTimeout(modalLeaveTimer.current)
+      modalLeaveTimer.current = null
+    }
+  }
+
   const returnToOverview = () => {
     clearLightFocusTimer()
     pendingOpen.current = null
     setFocusBusy(false)
-    setFocusModalOpen(false)
+    // Fade modal out while the reverse dolly starts — no hard unmount snap.
+    if (modalPhase === 'open') {
+      setModalPhase('leaving')
+      clearModalLeaveTimer()
+      modalLeaveTimer.current = window.setTimeout(() => {
+        setModalPhase('closed')
+        modalLeaveTimer.current = null
+      }, reduceMotion ? 0 : MODAL_FADE_MS)
+    } else {
+      setModalPhase('closed')
+    }
     setFocusId(null)
   }
 
   const openFocusModal = (id: DeptId) => {
     if (pendingOpen.current !== id) return
     clearLightFocusTimer()
+    clearModalLeaveTimer()
     pendingOpen.current = null
     setFocusBusy(false)
+    lastFocusDept.current = id
     setOfficeOpens(bumpOfficeFocusCount(tenantId, id))
-    setFocusModalOpen(true)
+    setModalPhase('open')
   }
 
   const beginFocus = (id: DeptId) => {
@@ -2133,9 +2185,19 @@ export function OfficeTwin({
       onSelect(id)
       return
     }
-    if (focusBusy && focusId === id && focusModalOpen) return
+    if (focusBusy && focusId === id && modalPhase === 'open') return
     clearLightFocusTimer()
-    setFocusModalOpen(false)
+    clearModalLeaveTimer()
+    // Soft-dismiss any open modal before a new dolly (same fade curve).
+    if (modalPhase === 'open' || modalPhase === 'leaving') {
+      setModalPhase('leaving')
+      modalLeaveTimer.current = window.setTimeout(() => {
+        setModalPhase('closed')
+        modalLeaveTimer.current = null
+      }, reduceMotion ? 0 : MODAL_FADE_MS)
+    } else {
+      setModalPhase('closed')
+    }
     pendingOpen.current = id
     setFocusBusy(true)
     setFocusId(id)
@@ -2156,7 +2218,8 @@ export function OfficeTwin({
   const openFullPanel = () => {
     if (!focusId) return
     const id = focusId
-    setFocusModalOpen(false)
+    clearModalLeaveTimer()
+    setModalPhase('closed')
     setFocusId(null)
     setFocusBusy(false)
     onSelect(id)
@@ -2164,13 +2227,14 @@ export function OfficeTwin({
 
   const modeBadge = useLight ? 'Vista leggera' : 'Vista completa'
   const focusLabel = focusId ? ROOMS.find((r) => r.id === focusId)?.label : null
-  const modeHint = focusModalOpen
-    ? 'Chiudi il riquadro per tornare alla vista ufficio (zoom indietro).'
-    : focusId
-      ? `Ingrandisco ${focusLabel ?? 'il reparto'}… Tocca Indietro per la vista ufficio.`
-      : useLight
-        ? 'Vista leggera — tocca una stanza: zoom calmo, poi decisioni e metriche.'
-        : 'Vista fissa 3D (niente orbita). Tocca un reparto: zoom, poi il riquadro decisioni/metriche.'
+  const modeHint =
+    modalPhase === 'open'
+      ? 'Chiudi il riquadro per tornare alla vista ufficio (zoom calmo indietro).'
+      : focusId
+        ? `Ingrandisco ${focusLabel ?? 'il reparto'}… Tocca Indietro per la vista ufficio.`
+        : useLight
+          ? 'Vista leggera — tocca una stanza: zoom calmo, poi decisioni e metriche.'
+          : 'Vista fissa 3D (niente orbita). Tocca un reparto: zoom lungo e fluido, poi il riquadro.'
 
   return (
     <section
@@ -2178,6 +2242,13 @@ export function OfficeTwin({
       data-testid="office-twin"
       data-office-mode={useLight ? 'light' : 'full'}
       data-camera={focusId ? 'focus' : 'overview'}
+      style={
+        {
+          ['--office-focus-duration']: `${FOCUS_DURATION}s`,
+          ['--office-focus-ease']: FOCUS_EASE_CSS,
+          ['--office-modal-fade']: `${MODAL_FADE_MS}ms`,
+        } as CSSProperties
+      }
     >
       <div className="office-hero">
         <header className="office-hero-head">
@@ -2267,27 +2338,26 @@ export function OfficeTwin({
             </div>
           </div>
 
-          {focusId && (
-            <div className="office-focus-bar" data-testid="office-focus-bar">
-              <button
-                type="button"
-                className="btn btn-ghost office-back-overview"
-                data-testid="office-back-overview"
-                onClick={returnToOverview}
-              >
-                ← Indietro · Vista ufficio
-              </button>
-              <span className="office-focus-label">
-                {focusLabel ? `Focus · ${focusLabel}` : 'Focus reparto'}
-              </span>
-            </div>
-          )}
-
           <div
             className={`office-viewport flat-pastel locked-view ${useLight ? 'is-2d is-light' : 'is-3d'}${
               pendingTotal > 0 ? ' has-decisions' : ''
             }${focusId ? ' is-dept-focus' : ''}`}
           >
+            {focusId && (
+              <div className="office-focus-bar" data-testid="office-focus-bar">
+                <button
+                  type="button"
+                  className="btn btn-ghost office-back-overview"
+                  data-testid="office-back-overview"
+                  onClick={returnToOverview}
+                >
+                  ← Indietro · Vista ufficio
+                </button>
+                <span className="office-focus-label">
+                  {focusLabel ? `Focus · ${focusLabel}` : 'Focus reparto'}
+                </span>
+              </div>
+            )}
             {desired === null ? (
               <div className="office-viewport-loading" aria-busy="true">
                 Preparo l’ufficio…
@@ -2321,15 +2391,16 @@ export function OfficeTwin({
         <p className="office-hint">{modeHint}</p>
       </div>
 
-      {focusModalOpen && focusId && (
+      {focusModalVisible && modalDept && (
         <DeptFocusModal
-          dept={focusId}
+          dept={modalDept}
           pendingApprovals={approvals}
           audit={audit}
-          sessionQueries={sessionQueries[focusId] || 0}
-          light={lights[focusId]}
+          sessionQueries={sessionQueries[modalDept] || 0}
+          light={lights[modalDept]}
           liveSteps={liveSteps}
           officeOpens={officeOpens}
+          closing={modalPhase === 'leaving'}
           onClose={returnToOverview}
           onOpenFullPanel={openFullPanel}
           onDecide={onDecideApproval}
