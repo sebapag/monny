@@ -19,6 +19,23 @@ class Settings(BaseSettings):
     monny_api_port: int = 8000
     monny_cors_origins: str = "http://127.0.0.1:5173,http://localhost:5173"
 
+    # Portable local auth (JWT/session). Override secret in deploy; users from fixtures JSON.
+    monny_auth_secret: str = "atrium-local-dev-secret-change-me"
+    monny_auth_users_path: str = ""  # empty → fixtures/auth/users.json
+    monny_auth_ttl_seconds: int = 60 * 60 * 12
+    monny_auth_cookie_secure: bool = False  # set true behind HTTPS
+    # auto: Supabase when SUPABASE_URL + SUPABASE_ANON_KEY set, else fixtures.
+    # Force with "supabase" or "fixtures".
+    monny_auth_backend: str = "auto"
+    # When Supabase is on, still accept local fixture JWTs (useful for mixed tests).
+    monny_auth_allow_fixture_fallback: bool = True
+
+    # Supabase Auth + Postgres profiles/RLS (optional). Agent runtime stays on this container.
+    supabase_url: str = ""
+    supabase_anon_key: str = ""
+    supabase_service_role_key: str = ""  # server-only; never expose to the SPA
+    supabase_jwt_secret: str = ""  # Project Settings → API → JWT Secret
+
     # Optional planner LLM (xAI Grok). Empty key → keyword stub planner.
     xai_api_key: str = ""
     monny_llm_model: str = "grok-4.20-0309-non-reasoning"
@@ -39,6 +56,14 @@ class Settings(BaseSettings):
         if not self.monny_llm_enabled:
             return False
         return bool((self.xai_api_key or "").strip())
+
+    @property
+    def auth_secret(self) -> str:
+        return (self.monny_auth_secret or "").strip() or "atrium-local-dev-secret-change-me"
+
+    @property
+    def supabase_configured(self) -> bool:
+        return bool((self.supabase_url or "").strip() and (self.supabase_anon_key or "").strip())
 
 
 @lru_cache

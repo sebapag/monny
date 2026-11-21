@@ -13,20 +13,38 @@ import {
   type TenantDetail,
   type TenantListItem,
   type TimelineStep,
+  createAuthUser,
   decideApproval,
+  fetchHealth,
+  fetchMe,
   getRun,
   getTenant,
   getTenantArtifact,
   listApprovals,
+  listAuthUsers,
   listKnowledge,
   listTenantArtifacts,
   listTenantAudit,
   listTenants,
+  login,
+  logout,
   type AuditEvent,
   putTenant,
+  signup,
   startRun,
   toggleKnowledgeSource,
+  updateAuthUser,
 } from './api'
+import {
+  type AuthRole,
+  type AuthUser,
+  canAccessAdmin,
+  clearSession,
+  loadStoredToken,
+  loadStoredUser,
+  persistSession,
+} from './auth'
+import { LoginScreen } from './LoginScreen'
 import { ApprovalPathActions, type DecideHandler } from './ApprovalPaths'
 import {
   type DeptId,
@@ -465,6 +483,164 @@ function SeoPanel({ changes }: { changes: SeoChange[] }) {
 
 function FieldHelp({ children }: { children: string }) {
   return <p className="field-help">{children}</p>
+}
+
+function UsersAdminPanel({
+  tenantId,
+  busy,
+  supabaseAuth,
+}: {
+  tenantId: string
+  busy: boolean
+  supabaseAuth: boolean
+}) {
+  const [users, setUsers] = useState<AuthUser[]>([])
+  const [note, setNote] = useState<string | null>(null)
+  const [err, setErr] = useState<string | null>(null)
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [displayName, setDisplayName] = useState('')
+  const [role, setRole] = useState<AuthRole>('agent')
+  const [loading, setLoading] = useState(false)
+
+  const refresh = useCallback(async () => {
+    setLoading(true)
+    setErr(null)
+    try {
+      const rows = await listAuthUsers(tenantId)
+      setUsers(rows)
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e))
+    } finally {
+      setLoading(false)
+    }
+  }, [tenantId])
+
+  useEffect(() => {
+    void refresh()
+  }, [refresh])
+
+  const onCreate = async () => {
+    setNote(null)
+    setErr(null)
+    try {
+      await createAuthUser({
+        email,
+        password,
+        display_name: displayName || email.split('@')[0],
+        role,
+        tenant_id: tenantId,
+      })
+      setEmail('')
+      setPassword('')
+      setDisplayName('')
+      setRole('agent')
+      setNote('Utente creato.')
+      await refresh()
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e))
+    }
+  }
+
+  const onRole = async (user: AuthUser, next: AuthRole) => {
+    if (!user.user_id) {
+      setErr('Cambio ruolo disponibile solo con profili Supabase (user_id).')
+      return
+    }
+    setErr(null)
+    try {
+      await updateAuthUser(user.user_id, { role: next })
+      setNote(`Ruolo aggiornato: ${user.email} → ${next}`)
+      await refresh()
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e))
+    }
+  }
+
+  return (
+    <div className="users-admin">
+      {loading && <p className="status-line">Caricamento utenti…</p>}
+      <ul className="users-list">
+        {users.map((u) => (
+          <li key={u.user_id || u.email} className="users-row">
+            <div>
+              <strong>{u.display_name}</strong>
+              <span className="meta">
+                {u.email} · {u.role === 'admin' ? 'Admin' : 'Agent'} · {u.tenant_id}
+              </span>
+            </div>
+            {supabaseAuth && u.user_id && (
+              <div className="users-actions">
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  disabled={busy || u.role === 'agent'}
+                  onClick={() => void onRole(u, 'agent')}
+                >
+                  Imposta Agent
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  disabled={busy || u.role === 'admin'}
+                  onClick={() => void onRole(u, 'admin')}
+                >
+                  Imposta Admin
+                </button>
+              </div>
+            )}
+          </li>
+        ))}
+      </ul>
+
+      {supabaseAuth ? (
+        <div className="users-create">
+          <h3>Nuovo utente</h3>
+          <div className="users-create-grid">
+            <label>
+              Email
+              <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" />
+            </label>
+            <label>
+              Password
+              <input
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                type="password"
+                minLength={8}
+              />
+            </label>
+            <label>
+              Nome
+              <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
+            </label>
+            <label>
+              Ruolo
+              <select value={role} onChange={(e) => setRole(e.target.value as AuthRole)}>
+                <option value="agent">Agent</option>
+                <option value="admin">Admin</option>
+              </select>
+            </label>
+          </div>
+          <button
+            type="button"
+            className="btn btn-primary"
+            disabled={busy || !email || password.length < 8}
+            onClick={() => void onCreate()}
+          >
+            Crea utente
+          </button>
+        </div>
+      ) : (
+        <p className="muted">
+          Per creare utenti e cambiare ruoli imposta SUPABASE_URL e le relative chiavi
+          sull’API (vedi .env.example).
+        </p>
+      )}
+      {note && <p className="status-line">{note}</p>}
+      {err && <p className="error">{err}</p>}
+    </div>
+  )
 }
 
 function KnowledgeAdminPanel({
@@ -1049,8 +1225,17 @@ function DecisionsAlert({
   )
 }
 
+function intendedRoleFromRoute(route: RouteState): AuthRole {
+  return route.mode === 'admin' ? 'admin' : 'agent'
+}
+
 function App() {
   const [route, setRoute] = useState<RouteState>(() => parseHash(window.location.hash))
+  const [authUser, setAuthUser] = useState<AuthUser | null>(() => loadStoredUser())
+  const [authReady, setAuthReady] = useState(() => !loadStoredToken())
+  const [loginBusy, setLoginBusy] = useState(false)
+  const [loginError, setLoginError] = useState<string | null>(null)
+  const [supabaseAuth, setSupabaseAuth] = useState(false)
   const [tenants, setTenants] = useState<TenantListItem[]>([])
   const [tenantId, setTenantId] = useState(
     () => localStorage.getItem(TENANT_KEY) || 'demo',
@@ -1091,6 +1276,106 @@ function App() {
     return () => window.removeEventListener('hashchange', onHash)
   }, [])
 
+  useEffect(() => {
+    fetchHealth()
+      .then((h) => setSupabaseAuth(h.auth?.backend === 'supabase'))
+      .catch(() => setSupabaseAuth(false))
+  }, [])
+
+  useEffect(() => {
+    const token = loadStoredToken()
+    if (!token) {
+      setAuthUser(null)
+      setAuthReady(true)
+      return
+    }
+    let cancelled = false
+    fetchMe()
+      .then((user) => {
+        if (cancelled) return
+        setAuthUser(user)
+        persistSession(token, user)
+      })
+      .catch(() => {
+        if (cancelled) return
+        clearSession()
+        setAuthUser(null)
+      })
+      .finally(() => {
+        if (!cancelled) setAuthReady(true)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const intendedRole = intendedRoleFromRoute(route)
+  const needsLogin =
+    authReady &&
+    (!authUser || (route.mode === 'admin' && !canAccessAdmin(authUser.role)))
+
+  const applyAuthResult = async (
+    result: Awaited<ReturnType<typeof login>>,
+    forAdmin: boolean,
+  ) => {
+    if (forAdmin && !canAccessAdmin(result.user.role)) {
+      clearSession()
+      setAuthUser(null)
+      setLoginError('Questo account non può aprire Admin. Usa un account Admin.')
+      return
+    }
+    if (!result.token) {
+      setLoginError(
+        'Account creato. Conferma l’email se richiesto, poi accedi.',
+      )
+      return
+    }
+    persistSession(result.token, result.user)
+    setAuthUser(result.user)
+    if (result.user.tenant_id) setTenantId(result.user.tenant_id)
+  }
+
+  const handleLogin = async (email: string, password: string) => {
+    setLoginBusy(true)
+    setLoginError(null)
+    try {
+      const result = await login(email, password)
+      await applyAuthResult(result, intendedRole === 'admin')
+    } catch (err) {
+      setLoginError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setLoginBusy(false)
+    }
+  }
+
+  const handleSignup = async (email: string, password: string, displayName: string) => {
+    setLoginBusy(true)
+    setLoginError(null)
+    try {
+      const result = await signup(email, password, displayName)
+      await applyAuthResult(result, false)
+    } catch (err) {
+      setLoginError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setLoginBusy(false)
+    }
+  }
+
+  const handleLogout = async () => {
+    try {
+      await logout()
+    } catch {
+      /* ignore network errors on logout */
+    }
+    clearSession()
+    setAuthUser(null)
+    setTenants([])
+    setTenantDetail(null)
+    setApprovals([])
+    setError(null)
+    setLoginError(null)
+  }
+
   const refreshTenants = useCallback(async () => {
     const items = await listTenants()
     setTenants(items)
@@ -1100,8 +1385,9 @@ function App() {
   }, [tenantId])
 
   useEffect(() => {
+    if (!authUser || needsLogin) return
     refreshTenants().catch((err: Error) => setError(err.message))
-  }, [refreshTenants])
+  }, [refreshTenants, authUser, needsLogin])
 
   useEffect(() => {
     localStorage.setItem(TENANT_KEY, tenantId)
@@ -1136,23 +1422,26 @@ function App() {
   }, [])
 
   useEffect(() => {
+    if (!authUser || needsLogin) return
     refreshApprovals(tenantId).catch((err: Error) => setError(err.message))
     void loadArtifacts(tenantId)
     void loadAudit(tenantId)
     getTenant(tenantId)
       .then(setTenantDetail)
       .catch((err: Error) => setError(err.message))
-  }, [tenantId, refreshApprovals, loadArtifacts, loadAudit])
+  }, [tenantId, refreshApprovals, loadArtifacts, loadAudit, authUser, needsLogin])
 
   useEffect(() => {
+    if (!authUser || needsLogin) return
     if (route.mode !== 'admin') return
+    if (!canAccessAdmin(authUser.role)) return
     getTenant(tenantId)
       .then((detail) => {
         setTenantDetail(detail)
         setSaveNote(null)
       })
       .catch((err: Error) => setError(err.message))
-  }, [route.mode, tenantId])
+  }, [route.mode, tenantId, authUser, needsLogin])
 
   useEffect(() => {
     if (!runNeedsLightTick(liveRun, nowMs)) return
@@ -1386,6 +1675,64 @@ function App() {
     }, 80)
   }
 
+  if (!authReady) {
+    return (
+      <div className="login-shell login-loading">
+        <p className="login-blurb">Caricamento sessione…</p>
+      </div>
+    )
+  }
+
+  if (authUser && route.mode === 'admin' && !canAccessAdmin(authUser.role)) {
+    return (
+      <div className="login-shell" data-intended="admin">
+        <div className="login-atmosphere" aria-hidden />
+        <main className="login-panel">
+          <header className="login-brand">
+            <span className="brand-strip" aria-hidden />
+            <div className="brand-lockup">
+              <span className="brand-mark">Atrium</span>
+              <span className="brand-tag">Workspace marketing</span>
+            </div>
+          </header>
+          <h1 className="login-title">Accesso Admin negato</h1>
+          <p className="login-blurb">
+            L’account Agent non può aprire Admin. Usa un account Admin oppure torna
+            all’ufficio Agent.
+          </p>
+          <div className="login-actions">
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => navigate({ mode: 'piano' })}
+            >
+              Torna ad Agent
+            </button>
+            <button type="button" className="btn btn-ghost" onClick={handleLogout}>
+              Esci e accedi come Admin
+            </button>
+          </div>
+        </main>
+      </div>
+    )
+  }
+
+  if (needsLogin) {
+    return (
+      <LoginScreen
+        key={intendedRole}
+        intended={intendedRole}
+        busy={loginBusy}
+        error={loginError}
+        allowSignup={supabaseAuth}
+        onSubmit={handleLogin}
+        onSignup={handleSignup}
+      />
+    )
+  }
+
+  const showAdminNav = canAccessAdmin(authUser?.role)
+
   return (
     <div className="app-shell">
       <div className="app-chrome">
@@ -1417,28 +1764,41 @@ function App() {
               </span>
             )}
           </div>
-          <nav className="nav">
-            <a
-              href="#agent"
-              className={route.mode !== 'admin' ? 'active' : ''}
-              onClick={(e) => {
-                e.preventDefault()
-                navigate({ mode: 'piano' })
-              }}
-            >
-              Agent
-            </a>
-            <a
-              href="#admin"
-              className={route.mode === 'admin' ? 'active' : ''}
-              onClick={(e) => {
-                e.preventDefault()
-                navigate({ mode: 'admin' })
-              }}
-            >
-              Admin
-            </a>
-          </nav>
+          <div className="topbar-end">
+            <nav className="nav">
+              <a
+                href="#agent"
+                className={route.mode !== 'admin' ? 'active' : ''}
+                onClick={(e) => {
+                  e.preventDefault()
+                  navigate({ mode: 'piano' })
+                }}
+              >
+                Agent
+              </a>
+              {showAdminNav && (
+                <a
+                  href="#admin"
+                  className={route.mode === 'admin' ? 'active' : ''}
+                  onClick={(e) => {
+                    e.preventDefault()
+                    navigate({ mode: 'admin' })
+                  }}
+                >
+                  Admin
+                </a>
+              )}
+            </nav>
+            <div className="session-chip">
+              <span className="session-user" title={authUser?.email}>
+                {authUser?.display_name ?? authUser?.email}
+                <em>{authUser?.role === 'admin' ? 'Admin' : 'Agent'}</em>
+              </span>
+              <button type="button" className="btn btn-ghost btn-logout" onClick={handleLogout}>
+                Esci
+              </button>
+            </div>
+          </div>
         </header>
 
         {route.mode !== 'admin' && approvals.length > 0 && (
@@ -1488,6 +1848,16 @@ function App() {
             <section className="panel">
               <h2>Conoscenza aziendale</h2>
               <KnowledgeAdminPanel tenantId={tenantId} busy={busy} />
+            </section>
+            <section className="panel">
+              <h2>Utenti e ruoli</h2>
+              <p className="muted">
+                Agent non apre Admin. Admin può usare entrambe le superfici.
+                {supabaseAuth
+                  ? ' Backend: Supabase Auth + Postgres.'
+                  : ' Modalità demo locale (fixture); attiva Supabase per gestire utenti.'}
+              </p>
+              <UsersAdminPanel tenantId={tenantId} busy={busy} supabaseAuth={supabaseAuth} />
             </section>
           </>
         ) : route.mode === 'piano' ? (
