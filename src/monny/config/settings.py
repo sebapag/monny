@@ -24,6 +24,17 @@ class Settings(BaseSettings):
     monny_auth_users_path: str = ""  # empty → fixtures/auth/users.json
     monny_auth_ttl_seconds: int = 60 * 60 * 12
     monny_auth_cookie_secure: bool = False  # set true behind HTTPS
+    # auto: Supabase when SUPABASE_URL + SUPABASE_ANON_KEY set, else fixtures.
+    # Force with "supabase" or "fixtures".
+    monny_auth_backend: str = "auto"
+    # When Supabase is on, still accept local fixture JWTs (useful for mixed tests).
+    monny_auth_allow_fixture_fallback: bool = True
+
+    # Supabase Auth + Postgres profiles/RLS (optional). Agent runtime stays on this container.
+    supabase_url: str = ""
+    supabase_anon_key: str = ""
+    supabase_service_role_key: str = ""  # server-only; never expose to the SPA
+    supabase_jwt_secret: str = ""  # Project Settings → API → JWT Secret
 
     # Optional planner LLM (xAI Grok). Empty key → keyword stub planner.
     xai_api_key: str = ""
@@ -49,6 +60,10 @@ class Settings(BaseSettings):
     @property
     def auth_secret(self) -> str:
         return (self.monny_auth_secret or "").strip() or "atrium-local-dev-secret-change-me"
+
+    @property
+    def supabase_configured(self) -> bool:
+        return bool((self.supabase_url or "").strip() and (self.supabase_anon_key or "").strip())
 
 
 @lru_cache

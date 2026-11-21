@@ -19,5 +19,5 @@
     "agent@demo": "agent-demo",
     "admin@demo": "admin-demo"
   },
-  "note": "Demo fixtures only. Passwords are intentional and documented for local/CI. Replace fixtures and MONNY_AUTH_SECRET in real deployments. Optional OAuth can wrap the same roles later."
+  "note": "Demo fixtures only (local/CI when Supabase env is unset). Passwords are intentional. Production: Supabase Auth + public.profiles RLS — see supabase/README.md. Agent runtime stays on the FastAPI container."
 }

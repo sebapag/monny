@@ -12,6 +12,7 @@ from monny.auth.passwords import verify_password
 
 Role = Literal["agent", "admin"]
 
+
 def default_users_path() -> Path:
     """Resolve fixture path for local repo, Docker (/app), or CWD."""
     candidates = [
@@ -31,14 +32,18 @@ class AuthenticatedUser:
     display_name: str
     role: Role
     tenant_id: str
+    user_id: str | None = None
 
     def to_public(self) -> dict[str, str]:
-        return {
+        out = {
             "email": self.email,
             "display_name": self.display_name,
             "role": self.role,
             "tenant_id": self.tenant_id,
         }
+        if self.user_id:
+            out["user_id"] = self.user_id
+        return out
 
     @property
     def can_access_admin(self) -> bool:
@@ -67,11 +72,15 @@ class StoredUser:
         )
 
 
-def _normalize_role(raw: str) -> Role:
+def normalize_role(raw: str) -> Role:
     role = (raw or "").strip().lower()
     if role not in ("agent", "admin"):
         raise ValueError(f"Unsupported role: {raw}")
     return role  # type: ignore[return-value]
+
+
+# Back-compat alias used by supabase_client / older imports.
+_normalize_role = normalize_role
 
 
 @lru_cache
@@ -85,7 +94,7 @@ def load_users(path: str | None = None) -> tuple[StoredUser, ...]:
             StoredUser(
                 email=str(row["email"]).strip().lower(),
                 display_name=str(row.get("display_name") or row["email"]),
-                role=_normalize_role(str(row["role"])),
+                role=normalize_role(str(row["role"])),
                 tenant_id=str(row.get("tenant_id") or "demo"),
                 password_hash=str(row["password_hash"]),
             )

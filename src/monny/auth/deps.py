@@ -6,8 +6,8 @@ from typing import Annotated
 
 from fastapi import Cookie, Depends, Header, HTTPException, Request
 
-from monny.auth.tokens import decode_token
-from monny.auth.users import AuthenticatedUser, Role, find_user
+from monny.auth.service import resolve_user_from_token
+from monny.auth.users import AuthenticatedUser, Role
 from monny.config.settings import get_settings
 
 COOKIE_NAME = "atrium_session"
@@ -23,28 +23,6 @@ def _extract_bearer(authorization: str | None) -> str | None:
     return token or None
 
 
-def _user_from_token(token: str) -> AuthenticatedUser:
-    settings = get_settings()
-    try:
-        claims = decode_token(token, secret=settings.auth_secret)
-    except ValueError as exc:
-        raise HTTPException(status_code=401, detail="Sessione non valida o scaduta") from exc
-    email = str(claims.get("sub") or "").strip().lower()
-    role = str(claims.get("role") or "").strip().lower()
-    if not email or role not in ("agent", "admin"):
-        raise HTTPException(status_code=401, detail="Sessione non valida")
-    stored = find_user(email, path=settings.monny_auth_users_path or None)
-    if stored is None:
-        raise HTTPException(status_code=401, detail="Utente non trovato")
-    # Prefer live fixture role so demoting a user invalidates old admin claims.
-    return AuthenticatedUser(
-        email=stored.email,
-        display_name=stored.display_name,
-        role=stored.role,
-        tenant_id=stored.tenant_id,
-    )
-
-
 def get_current_user(
     request: Request,
     authorization: Annotated[str | None, Header()] = None,
@@ -56,7 +34,11 @@ def get_current_user(
         token = request.cookies.get(COOKIE_NAME)
     if not token:
         raise HTTPException(status_code=401, detail="Autenticazione richiesta")
-    return _user_from_token(token)
+    settings = get_settings()
+    try:
+        return resolve_user_from_token(settings, token)
+    except ValueError as exc:
+        raise HTTPException(status_code=401, detail="Sessione non valida o scaduta") from exc
 
 
 def require_user(

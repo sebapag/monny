@@ -40,12 +40,56 @@ export function login(email: string, password: string) {
   })
 }
 
+export function signup(email: string, password: string, display_name?: string) {
+  return request<LoginResult>('/api/auth/signup', {
+    method: 'POST',
+    body: JSON.stringify({ email, password, display_name: display_name ?? '' }),
+  })
+}
+
 export function logout() {
   return request<{ ok: boolean }>('/api/auth/logout', { method: 'POST' })
 }
 
 export function fetchMe() {
   return request<AuthUser>('/api/auth/me')
+}
+
+export type AuthBackendInfo = {
+  ok: boolean
+  auth?: { backend: 'supabase' | 'fixtures'; supabase_configured: boolean }
+}
+
+export function fetchHealth() {
+  return request<AuthBackendInfo>('/api/health')
+}
+
+export function listAuthUsers(tenantId?: string) {
+  const q = tenantId ? `?tenant_id=${encodeURIComponent(tenantId)}` : ''
+  return request<AuthUser[]>(`/api/auth/users${q}`)
+}
+
+export function createAuthUser(body: {
+  email: string
+  password: string
+  display_name?: string
+  role?: AuthUser['role']
+  tenant_id?: string
+}) {
+  return request<AuthUser>('/api/auth/users', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
+export function updateAuthUser(
+  userId: string,
+  body: { role: AuthUser['role']; display_name?: string; tenant_id?: string },
+) {
+  return request<AuthUser>(`/api/auth/users/${encodeURIComponent(userId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  })
 }
 
 export type SpendCampaign = {

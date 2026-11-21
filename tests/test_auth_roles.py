@@ -54,6 +54,7 @@ def test_login_me_logout(api_client: TestClient):
     assert ok.status_code == 200
     body = ok.json()
     assert body["user"]["role"] == "agent"
+    assert body["backend"] == "fixtures"
     assert body["token"]
     assert "atrium_session" in ok.cookies
 
@@ -64,8 +65,34 @@ def test_login_me_logout(api_client: TestClient):
     assert me.status_code == 200
     assert me.json()["email"] == "agent@demo"
 
+    users = api_client.get(
+        "/api/auth/users",
+        headers={"Authorization": f"Bearer {body['token']}"},
+    )
+    assert users.status_code == 403  # agent cannot list users
+
     out = api_client.post("/api/auth/logout")
     assert out.status_code == 200
+
+
+def test_admin_lists_fixture_users(api_client: TestClient):
+    headers = admin_headers(api_client)
+    users = api_client.get("/api/auth/users", headers=headers)
+    assert users.status_code == 200
+    emails = {u["email"] for u in users.json()}
+    assert "agent@demo" in emails and "admin@demo" in emails
+
+    signup = api_client.post(
+        "/api/auth/signup",
+        json={"email": "new@demo", "password": "password123", "display_name": "New"},
+    )
+    assert signup.status_code == 503
+
+
+def test_health_reports_fixture_backend(api_client: TestClient):
+    health = api_client.get("/api/health")
+    assert health.status_code == 200
+    assert health.json()["auth"]["backend"] == "fixtures"
 
 
 def test_unauthenticated_api_rejected(api_client: TestClient):

@@ -7,12 +7,15 @@ export type AuthUser = {
   display_name: string
   role: AuthRole
   tenant_id: string
+  user_id?: string | null
 }
 
 export type LoginResult = {
   token: string
   user: AuthUser
   expires_in: number
+  backend?: 'supabase' | 'fixtures'
+  refresh_token?: string | null
 }
 
 const TOKEN_KEY = 'atrium.auth.token'

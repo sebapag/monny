@@ -3151,7 +3151,8 @@ a {
 }
 
 .login-hint,
-.login-role-note {
+.login-role-note,
+.login-switch {
   margin: 0.85rem 0 0;
   font-size: 0.78rem;
   color: var(--steel);
@@ -3160,6 +3161,74 @@ a {
 
 .login-role-note {
   margin-top: 0.35rem;
+}
+
+.login-switch .linkish {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--purple, #5645d4);
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.users-admin {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.users-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.users-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.65rem 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--ink, #1a1a1a) 8%, transparent);
+}
+
+.users-row .meta {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--steel);
+}
+
+.users-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.users-create-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 0.75rem;
+  margin: 0.75rem 0;
+}
+
+.users-create-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+}
+
+.muted {
+  color: var(--steel);
+  font-size: 0.9rem;
+  line-height: 1.45;
 }
 
 .login-actions {

@@ -8,7 +8,7 @@ import threading
 from pathlib import Path
 from typing import Annotated, Any
 
-from fastapi import Depends, FastAPI, HTTPException, Response
+from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
@@ -18,6 +18,7 @@ from monny.api.schemas import (
     AuthUserOut,
     ChatRequest,
     ChatResponse,
+    CreateUserRequest,
     KnowledgeRetrieveRequest,
     KnowledgeSourceToggle,
     LoginRequest,
@@ -25,11 +26,22 @@ from monny.api.schemas import (
     RunOut,
     RunStartRequest,
     SecretStatus,
+    SignupRequest,
     TenantUpsert,
+    UpdateUserRequest,
 )
 from monny.auth.deps import COOKIE_NAME, get_current_user, require_admin, require_user
-from monny.auth.tokens import issue_token
-from monny.auth.users import AuthenticatedUser, authenticate, clear_users_cache
+from monny.auth.service import (
+    auth_backend,
+    create_user,
+    list_users,
+    login as auth_login,
+    logout_token,
+    set_user_role,
+    signup as auth_signup,
+)
+from monny.auth.supabase_client import SupabaseError
+from monny.auth.users import AuthenticatedUser, clear_users_cache
 from monny.knowledge import list_sources, load_manifest, retrieve, set_source_enabled
 from monny.config.entitlements import (
     ENTITLEMENT_LABELS_IT,
@@ -78,54 +90,134 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    def _set_session_cookie(response: Response, token: str) -> None:
+    def _set_session_cookie(response: Response, token: str, *, max_age: int) -> None:
+        if not token:
+            return
         response.set_cookie(
             key=COOKIE_NAME,
             value=token,
             httponly=True,
             samesite="lax",
             secure=settings.monny_auth_cookie_secure,
-            max_age=settings.monny_auth_ttl_seconds,
+            max_age=max_age,
             path="/",
         )
 
     def _clear_session_cookie(response: Response) -> None:
         response.delete_cookie(key=COOKIE_NAME, path="/")
 
+    def _auth_user_out(user: AuthenticatedUser) -> AuthUserOut:
+        return AuthUserOut(
+            email=user.email,
+            display_name=user.display_name,
+            role=user.role,
+            tenant_id=user.tenant_id,
+            user_id=user.user_id,
+        )
+
     @app.post("/api/auth/login", response_model=LoginResponse)
     def login(body: LoginRequest, response: Response) -> LoginResponse:
-        user = authenticate(
-            body.email,
-            body.password,
-            path=settings.monny_auth_users_path or None,
-        )
-        if user is None:
-            raise HTTPException(status_code=401, detail="Email o password non validi")
-        token = issue_token(
-            {
-                "sub": user.email,
-                "role": user.role,
-                "tenant_id": user.tenant_id,
-                "name": user.display_name,
-            },
-            secret=settings.auth_secret,
-            ttl_seconds=settings.monny_auth_ttl_seconds,
-        )
-        _set_session_cookie(response, token)
+        try:
+            outcome = auth_login(settings, body.email, body.password)
+        except SupabaseError as exc:
+            raise HTTPException(
+                status_code=exc.status_code or 401,
+                detail=str(exc) or "Email o password non validi",
+            ) from exc
+        _set_session_cookie(response, outcome.token, max_age=outcome.expires_in or 3600)
         return LoginResponse(
-            token=token,
-            user=AuthUserOut(**user.to_public()),
-            expires_in=settings.monny_auth_ttl_seconds,
+            token=outcome.token,
+            user=_auth_user_out(outcome.user),
+            expires_in=outcome.expires_in,
+            backend=outcome.backend,
+            refresh_token=outcome.refresh_token,
+        )
+
+    @app.post("/api/auth/signup", response_model=LoginResponse)
+    def signup(body: SignupRequest, response: Response) -> LoginResponse:
+        try:
+            outcome = auth_signup(
+                settings,
+                email=body.email,
+                password=body.password,
+                display_name=body.display_name,
+            )
+        except SupabaseError as exc:
+            raise HTTPException(
+                status_code=exc.status_code or 400,
+                detail=str(exc),
+            ) from exc
+        if outcome.token:
+            _set_session_cookie(response, outcome.token, max_age=outcome.expires_in or 3600)
+        return LoginResponse(
+            token=outcome.token,
+            user=_auth_user_out(outcome.user),
+            expires_in=outcome.expires_in,
+            backend=outcome.backend,
+            refresh_token=outcome.refresh_token,
         )
 
     @app.post("/api/auth/logout")
-    def logout(response: Response) -> dict[str, bool]:
+    def logout(
+        request: Request,
+        response: Response,
+        authorization: Annotated[str | None, Header()] = None,
+    ) -> dict[str, bool]:
+        token = None
+        if authorization and authorization.lower().startswith("bearer "):
+            token = authorization.split(" ", 1)[1].strip()
+        token = token or request.cookies.get(COOKIE_NAME)
+        logout_token(settings, token)
         _clear_session_cookie(response)
         return {"ok": True}
 
     @app.get("/api/auth/me", response_model=AuthUserOut)
     def me(user: Annotated[AuthenticatedUser, Depends(get_current_user)]) -> AuthUserOut:
-        return AuthUserOut(**user.to_public())
+        return _auth_user_out(user)
+
+    @app.get("/api/auth/users", response_model=list[AuthUserOut])
+    def auth_users_list(
+        _admin: AdminDep,
+        tenant_id: str | None = None,
+    ) -> list[AuthUserOut]:
+        try:
+            users = list_users(settings, tenant_id=tenant_id)
+        except SupabaseError as exc:
+            raise HTTPException(status_code=exc.status_code or 500, detail=str(exc)) from exc
+        return [_auth_user_out(u) for u in users]
+
+    @app.post("/api/auth/users", response_model=AuthUserOut)
+    def auth_users_create(body: CreateUserRequest, _admin: AdminDep) -> AuthUserOut:
+        try:
+            user = create_user(
+                settings,
+                email=body.email,
+                password=body.password,
+                display_name=body.display_name or body.email.split("@")[0],
+                role=body.role,
+                tenant_id=body.tenant_id or settings.monny_default_tenant,
+            )
+        except SupabaseError as exc:
+            raise HTTPException(status_code=exc.status_code or 400, detail=str(exc)) from exc
+        return _auth_user_out(user)
+
+    @app.patch("/api/auth/users/{user_id}", response_model=AuthUserOut)
+    def auth_users_update(
+        user_id: str,
+        body: UpdateUserRequest,
+        _admin: AdminDep,
+    ) -> AuthUserOut:
+        try:
+            user = set_user_role(
+                settings,
+                user_id=user_id,
+                role=body.role,
+                display_name=body.display_name,
+                tenant_id=body.tenant_id,
+            )
+        except SupabaseError as exc:
+            raise HTTPException(status_code=exc.status_code or 400, detail=str(exc)) from exc
+        return _auth_user_out(user)
 
     def approvals() -> ApprovalStore:
         return ApprovalStore(settings.monny_data_dir)
@@ -139,6 +231,10 @@ def create_app() -> FastAPI:
             "ok": True,
             "dry_run": settings.dry_run,
             "default_tenant": settings.monny_default_tenant,
+            "auth": {
+                "backend": auth_backend(settings),
+                "supabase_configured": settings.supabase_configured,
+            },
             "llm": {
                 "enabled": llm_on,
                 "provider": "xai" if llm_on else None,

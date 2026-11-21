@@ -16,6 +16,8 @@ monny/
   fixtures/spend/     # Mock Ads metrics for dry-run
   fixtures/seo/       # HTML fixtures for .example hosts
   fixtures/shopify/   # Shop + page metadata by shop_domain
+  fixtures/auth/      # Local demo users (fallback when Supabase unset)
+  supabase/           # SQL migration: profiles + RLS (Auth only)
   web/                # Vite + React UI (Agent + Admin)
   data/               # Runtime (checkpoints, approvals, artifacts, audit)
   Dockerfile          # Multi-stage API image (Cloud Run / App Runner / ACA)
@@ -30,14 +32,31 @@ monny/
 1. **Agent UI** (`/#agent`) — 3D office twin: rooms light when skills run; locked rooms for disabled entitlements; free-text + shortcuts respect the plan. Requires login (`agent` or `admin` role).
 2. **Admin UI** (`/#admin`) — tenant editor + **Attivazione piano / reparti** toggles (`subscription.skills`: spend, seo, shopify, leads). Leadership/HITL always on. Requires `admin` role (Agent accounts cannot open Admin).
 
-### Demo login (fixtures)
+### Auth & roles
+
+| Role | Surfaces |
+|------|----------|
+| `agent` | Agent only (cannot open Admin) |
+| `admin` | Admin + Agent |
+
+**Local / CI fallback** (no Supabase env): fixtures in `fixtures/auth/users.json`.
 
 | Email | Password | Role |
 |-------|----------|------|
-| `agent@demo` | `agent-demo` | Agent (HITL / office) |
-| `admin@demo` | `admin-demo` | Admin (+ Agent) |
+| `agent@demo` | `agent-demo` | Agent |
+| `admin@demo` | `admin-demo` | Admin |
 
-Users live in `fixtures/auth/users.json`. Set `MONNY_AUTH_SECRET` in deploy. Optional OAuth can wrap the same roles later (not wired).
+**Production:** Supabase Auth + `public.profiles` (Postgres RLS). Set on the **API container**:
+
+- `SUPABASE_URL`
+- `SUPABASE_ANON_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY` (server-only; user management)
+- `SUPABASE_JWT_SECRET`
+
+Apply `supabase/migrations/20261121_profiles_rls.sql` in the Supabase SQL editor.  
+Setup detail: [`supabase/README.md`](supabase/README.md).
+
+The LangGraph agent runtime stays on the FastAPI Docker image — Supabase is identity/roles only, not agent hosting.
 
 ## Quick start (dry-run / mock)
 
