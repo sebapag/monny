@@ -7,6 +7,7 @@ from monny.api.app import create_app
 from monny.config.settings import get_settings
 from monny.graph.app import get_graph
 from monny.storage.runs import reset_run_store_for_tests
+from tests.conftest import agent_headers
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -21,8 +22,10 @@ def test_async_run_exposes_skill_timeline(tmp_path, monkeypatch):
     reset_run_store_for_tests()
 
     client = TestClient(create_app())
+    headers = agent_headers(client)
     started = client.post(
         "/api/runs",
+        headers=headers,
         json={"tenant_id": "demo", "message": "report spend ultimi 7 giorni"},
     )
     assert started.status_code == 200
@@ -37,7 +40,7 @@ def test_async_run_exposes_skill_timeline(tmp_path, monkeypatch):
     saw_running = False
     final = None
     for _ in range(80):
-        snap = client.get(f"/api/runs/{run_id}").json()
+        snap = client.get(f"/api/runs/{run_id}", headers=headers).json()
         if any(s["status"] == "running" for s in snap["steps"]) or snap.get("active_skill"):
             saw_running = True
         if snap["status"] in terminal:
@@ -65,8 +68,10 @@ def test_seo_run_includes_crawler_step(tmp_path, monkeypatch):
     reset_run_store_for_tests()
 
     client = TestClient(create_app())
+    headers = agent_headers(client)
     started = client.post(
         "/api/runs",
+        headers=headers,
         json={"tenant_id": "demo", "message": "seo audit of priority pages"},
     )
     run_id = started.json()["id"]
@@ -74,7 +79,7 @@ def test_seo_run_includes_crawler_step(tmp_path, monkeypatch):
     assert skills.index("seo_crawler") < skills.index("seo_audit")
 
     for _ in range(80):
-        snap = client.get(f"/api/runs/{run_id}").json()
+        snap = client.get(f"/api/runs/{run_id}", headers=headers).json()
         if snap["status"] in {"completed", "awaiting_approval", "error"}:
             assert any(s["skill"] == "seo_crawler" and s["status"] == "done" for s in snap["steps"])
             break

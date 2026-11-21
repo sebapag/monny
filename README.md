@@ -27,8 +27,17 @@ monny/
 
 ## Product surfaces
 
-1. **Agent UI** (`/#agent`) — 3D office twin: rooms light when skills run; locked rooms for disabled entitlements; free-text + shortcuts respect the plan.
-2. **Admin UI** (`/#admin`) — tenant editor + **Attivazione piano / reparti** toggles (`subscription.skills`: spend, seo, shopify, leads). Leadership/HITL always on.
+1. **Agent UI** (`/#agent`) — 3D office twin: rooms light when skills run; locked rooms for disabled entitlements; free-text + shortcuts respect the plan. Requires login (`agent` or `admin` role).
+2. **Admin UI** (`/#admin`) — tenant editor + **Attivazione piano / reparti** toggles (`subscription.skills`: spend, seo, shopify, leads). Leadership/HITL always on. Requires `admin` role (Agent accounts cannot open Admin).
+
+### Demo login (fixtures)
+
+| Email | Password | Role |
+|-------|----------|------|
+| `agent@demo` | `agent-demo` | Agent (HITL / office) |
+| `admin@demo` | `admin-demo` | Admin (+ Agent) |
+
+Users live in `fixtures/auth/users.json`. Set `MONNY_AUTH_SECRET` in deploy. Optional OAuth can wrap the same roles later (not wired).
 
 ## Quick start (dry-run / mock)
 
@@ -84,8 +93,8 @@ Optional: point the SPA at a remote API (Cloud Run):
 VITE_API_BASE_URL=https://YOUR-CLOUD-RUN-URL npm run dev
 ```
 
-- Agent: http://127.0.0.1:5173  
-- Admin: http://127.0.0.1:5173/#admin  
+- Agent: http://127.0.0.1:5173 — login gate, then office twin  
+- Admin: http://127.0.0.1:5173/#admin — Admin-only login  
 
 ### 3. Tests
 

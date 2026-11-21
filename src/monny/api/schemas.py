@@ -101,3 +101,21 @@ class KnowledgeRetrieveRequest(BaseModel):
 
 class KnowledgeSourceToggle(BaseModel):
     enabled: bool
+
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+class AuthUserOut(BaseModel):
+    email: str
+    display_name: str
+    role: Literal["agent", "admin"]
+    tenant_id: str
+
+
+class LoginResponse(BaseModel):
+    token: str
+    user: AuthUserOut
+    expires_in: int
