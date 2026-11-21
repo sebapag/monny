@@ -1,0 +1,23 @@
+{
+  "users": [
+    {
+      "email": "agent@demo",
+      "display_name": "Agent Demo",
+      "role": "agent",
+      "tenant_id": "demo",
+      "password_hash": "pbkdf2_sha256$120000$YXRyaXVtLWRlbW8tYWdlbnQ$w1lcPKLIB1LKtgJ3ZHfr6Dcay41_01n27oVIFaHjf8U"
+    },
+    {
+      "email": "admin@demo",
+      "display_name": "Admin Demo",
+      "role": "admin",
+      "tenant_id": "demo",
+      "password_hash": "pbkdf2_sha256$120000$YXRyaXVtLWRlbW8tYWRtaW4h$TMXMDMBJRjsP0JWlN_VWv8XcuzOf6BFpByTiEQGNJus"
+    }
+  ],
+  "demo_passwords": {
+    "agent@demo": "agent-demo",
+    "admin@demo": "admin-demo"
+  },
+  "note": "Demo fixtures only. Passwords are intentional and documented for local/CI. Replace fixtures and MONNY_AUTH_SECRET in real deployments. Optional OAuth can wrap the same roles later."
+}

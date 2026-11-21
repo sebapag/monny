@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 
 from monny.api.app import create_app
 from monny.config.settings import get_settings
+from tests.conftest import admin_headers
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -19,7 +20,8 @@ def test_tenant_get_and_put(tmp_path, monkeypatch):
     get_settings.cache_clear()
 
     client = TestClient(create_app())
-    got = client.get("/api/tenants/demo")
+    headers = admin_headers(client)
+    got = client.get("/api/tenants/demo", headers=headers)
     assert got.status_code == 200
     cfg = got.json()["config"]
     assert cfg["display_name"] == "Demo Shop"
@@ -27,10 +29,10 @@ def test_tenant_get_and_put(tmp_path, monkeypatch):
 
     cfg["display_name"] = "Demo Shop Updated"
     cfg["policy"]["spend"]["thresholds"]["min_roas"] = 2.5
-    saved = client.put("/api/tenants/demo", json={"config": cfg})
+    saved = client.put("/api/tenants/demo", headers=headers, json={"config": cfg})
     assert saved.status_code == 200
 
-    again = client.get("/api/tenants/demo").json()["config"]
+    again = client.get("/api/tenants/demo", headers=headers).json()["config"]
     assert again["display_name"] == "Demo Shop Updated"
     assert again["policy"]["spend"]["thresholds"]["min_roas"] == 2.5
     get_settings.cache_clear()

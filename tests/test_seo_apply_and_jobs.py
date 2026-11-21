@@ -81,15 +81,20 @@ def test_hitl_seo_apply_uses_tenant(tmp_path, monkeypatch):
     monkeypatch.setenv("MONNY_DRY_RUN", "1")
     get_settings.cache_clear()
     get_graph.cache_clear()
+    from tests.conftest import agent_headers
+
     client = TestClient(create_app())
+    headers = agent_headers(client)
     chat = client.post(
         "/api/chat",
+        headers=headers,
         json={"tenant_id": "demo", "message": "seo audit of priority pages"},
     )
     assert chat.status_code == 200
     approval_id = chat.json()["approval_ids"][0]
     decided = client.post(
         f"/api/approvals/{approval_id}/decide",
+        headers=headers,
         json={"decision": "approved"},
     )
     assert decided.status_code == 200

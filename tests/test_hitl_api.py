@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 from monny.api.app import create_app
 from monny.config.settings import get_settings
 from monny.graph.app import get_graph
+from tests.conftest import agent_headers
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -18,8 +19,10 @@ def test_chat_spend_and_approve_reject(tmp_path, monkeypatch):
     get_graph.cache_clear()
 
     client = TestClient(create_app())
+    headers = agent_headers(client)
     chat = client.post(
         "/api/chat",
+        headers=headers,
         json={"tenant_id": "demo", "message": "report spend ultimi 7 giorni"},
     )
     assert chat.status_code == 200
@@ -28,11 +31,16 @@ def test_chat_spend_and_approve_reject(tmp_path, monkeypatch):
     assert body["report"]["spend_channels"]
     assert body["approval_ids"]
 
-    pending = client.get("/api/approvals", params={"tenant_id": "demo"}).json()
+    pending = client.get(
+        "/api/approvals",
+        headers=headers,
+        params={"tenant_id": "demo"},
+    ).json()
     assert len(pending) >= 1
     first = pending[0]["id"]
     approved = client.post(
         f"/api/approvals/{first}/decide",
+        headers=headers,
         json={"decision": "approved"},
     )
     assert approved.status_code == 200
@@ -43,6 +51,7 @@ def test_chat_spend_and_approve_reject(tmp_path, monkeypatch):
         second = pending[1]["id"]
         rejected = client.post(
             f"/api/approvals/{second}/decide",
+            headers=headers,
             json={"decision": "rejected", "note": "not now"},
         )
         assert rejected.status_code == 200
@@ -64,8 +73,10 @@ def test_seo_chat_emits_changeset(tmp_path, monkeypatch):
     get_settings.cache_clear()
     get_graph.cache_clear()
     client = TestClient(create_app())
+    headers = agent_headers(client)
     chat = client.post(
         "/api/chat",
+        headers=headers,
         json={"tenant_id": "demo", "message": "seo audit of priority pages"},
     )
     assert chat.status_code == 200

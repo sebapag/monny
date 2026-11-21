@@ -11,6 +11,7 @@ from monny.api.app import create_app
 from monny.config.settings import get_settings
 from monny.knowledge import list_sources, retrieve, set_source_enabled
 from monny.skills import spend_google
+from tests.conftest import admin_headers, agent_headers
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -45,7 +46,9 @@ def test_knowledge_api_list_retrieve_toggle(tmp_path, monkeypatch):
     get_settings.cache_clear()
 
     client = TestClient(create_app())
-    listed = client.get("/api/tenants/demo/knowledge")
+    admin = admin_headers(client)
+    agent = agent_headers(client)
+    listed = client.get("/api/tenants/demo/knowledge", headers=admin)
     assert listed.status_code == 200
     body = listed.json()
     assert body["tenant_id"] == "demo"
@@ -53,6 +56,7 @@ def test_knowledge_api_list_retrieve_toggle(tmp_path, monkeypatch):
 
     retrieved = client.post(
         "/api/tenants/demo/knowledge/retrieve",
+        headers=agent,
         json={"query": "budget ads", "tags": ["spend"], "limit": 3},
     )
     assert retrieved.status_code == 200
@@ -60,6 +64,7 @@ def test_knowledge_api_list_retrieve_toggle(tmp_path, monkeypatch):
 
     toggled = client.patch(
         "/api/tenants/demo/knowledge/sources/brand-voice",
+        headers=admin,
         json={"enabled": False},
     )
     assert toggled.status_code == 200
