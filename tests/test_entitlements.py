@@ -105,8 +105,12 @@ def test_api_refuses_disabled_skill_goal(tmp_path, monkeypatch):
     monkeypatch.setenv("MONNY_DATA_DIR", str(tmp_path / "data"))
     get_settings.cache_clear()
 
+    from tests.conftest import admin_headers, agent_headers
+
     client = TestClient(create_app())
-    detail = client.get("/api/tenants/demo").json()
+    admin = admin_headers(client)
+    agent = agent_headers(client)
+    detail = client.get("/api/tenants/demo", headers=admin).json()
     cfg = detail["config"]
     cfg["subscription"] = {
         "plan": "growth",
@@ -121,10 +125,11 @@ def test_api_refuses_disabled_skill_goal(tmp_path, monkeypatch):
             "controlling": False,
         },
     }
-    assert client.put("/api/tenants/demo", json={"config": cfg}).status_code == 200
+    assert client.put("/api/tenants/demo", headers=admin, json={"config": cfg}).status_code == 200
 
     blocked = client.post(
         "/api/runs",
+        headers=agent,
         json={"tenant_id": "demo", "message": "lead warming sequence stub"},
     )
     assert blocked.status_code == 403
@@ -132,6 +137,7 @@ def test_api_refuses_disabled_skill_goal(tmp_path, monkeypatch):
 
     ok = client.post(
         "/api/runs",
+        headers=agent,
         json={"tenant_id": "demo", "message": "report spend ultimi 7 giorni"},
     )
     assert ok.status_code == 200

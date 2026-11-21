@@ -14,6 +14,7 @@ import {
   type TenantListItem,
   type TimelineStep,
   decideApproval,
+  fetchMe,
   getRun,
   getTenant,
   getTenantArtifact,
@@ -22,11 +23,23 @@ import {
   listTenantArtifacts,
   listTenantAudit,
   listTenants,
+  login,
+  logout,
   type AuditEvent,
   putTenant,
   startRun,
   toggleKnowledgeSource,
 } from './api'
+import {
+  type AuthRole,
+  type AuthUser,
+  canAccessAdmin,
+  clearSession,
+  loadStoredToken,
+  loadStoredUser,
+  persistSession,
+} from './auth'
+import { LoginScreen } from './LoginScreen'
 import { ApprovalPathActions, type DecideHandler } from './ApprovalPaths'
 import {
   type DeptId,
@@ -1049,8 +1062,16 @@ function DecisionsAlert({
   )
 }
 
+function intendedRoleFromRoute(route: RouteState): AuthRole {
+  return route.mode === 'admin' ? 'admin' : 'agent'
+}
+
 function App() {
   const [route, setRoute] = useState<RouteState>(() => parseHash(window.location.hash))
+  const [authUser, setAuthUser] = useState<AuthUser | null>(() => loadStoredUser())
+  const [authReady, setAuthReady] = useState(() => !loadStoredToken())
+  const [loginBusy, setLoginBusy] = useState(false)
+  const [loginError, setLoginError] = useState<string | null>(null)
   const [tenants, setTenants] = useState<TenantListItem[]>([])
   const [tenantId, setTenantId] = useState(
     () => localStorage.getItem(TENANT_KEY) || 'demo',
@@ -1091,6 +1112,74 @@ function App() {
     return () => window.removeEventListener('hashchange', onHash)
   }, [])
 
+  useEffect(() => {
+    const token = loadStoredToken()
+    if (!token) {
+      setAuthUser(null)
+      setAuthReady(true)
+      return
+    }
+    let cancelled = false
+    fetchMe()
+      .then((user) => {
+        if (cancelled) return
+        setAuthUser(user)
+        persistSession(token, user)
+      })
+      .catch(() => {
+        if (cancelled) return
+        clearSession()
+        setAuthUser(null)
+      })
+      .finally(() => {
+        if (!cancelled) setAuthReady(true)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const intendedRole = intendedRoleFromRoute(route)
+  const needsLogin =
+    authReady &&
+    (!authUser || (route.mode === 'admin' && !canAccessAdmin(authUser.role)))
+
+  const handleLogin = async (email: string, password: string) => {
+    setLoginBusy(true)
+    setLoginError(null)
+    try {
+      const result = await login(email, password)
+      if (intendedRole === 'admin' && !canAccessAdmin(result.user.role)) {
+        clearSession()
+        setAuthUser(null)
+        setLoginError('Questo account non può aprire Admin. Usa un account Admin.')
+        return
+      }
+      persistSession(result.token, result.user)
+      setAuthUser(result.user)
+      if (result.user.tenant_id) setTenantId(result.user.tenant_id)
+    } catch (err) {
+      setLoginError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setLoginBusy(false)
+    }
+  }
+
+  const handleLogout = async () => {
+    try {
+      await logout()
+    } catch {
+      /* ignore network errors on logout */
+    }
+    clearSession()
+    setAuthUser(null)
+    setTenants([])
+    setTenantDetail(null)
+    setApprovals([])
+    setError(null)
+    setLoginError(null)
+  }
+
   const refreshTenants = useCallback(async () => {
     const items = await listTenants()
     setTenants(items)
@@ -1100,8 +1189,9 @@ function App() {
   }, [tenantId])
 
   useEffect(() => {
+    if (!authUser || needsLogin) return
     refreshTenants().catch((err: Error) => setError(err.message))
-  }, [refreshTenants])
+  }, [refreshTenants, authUser, needsLogin])
 
   useEffect(() => {
     localStorage.setItem(TENANT_KEY, tenantId)
@@ -1136,23 +1226,26 @@ function App() {
   }, [])
 
   useEffect(() => {
+    if (!authUser || needsLogin) return
     refreshApprovals(tenantId).catch((err: Error) => setError(err.message))
     void loadArtifacts(tenantId)
     void loadAudit(tenantId)
     getTenant(tenantId)
       .then(setTenantDetail)
       .catch((err: Error) => setError(err.message))
-  }, [tenantId, refreshApprovals, loadArtifacts, loadAudit])
+  }, [tenantId, refreshApprovals, loadArtifacts, loadAudit, authUser, needsLogin])
 
   useEffect(() => {
+    if (!authUser || needsLogin) return
     if (route.mode !== 'admin') return
+    if (!canAccessAdmin(authUser.role)) return
     getTenant(tenantId)
       .then((detail) => {
         setTenantDetail(detail)
         setSaveNote(null)
       })
       .catch((err: Error) => setError(err.message))
-  }, [route.mode, tenantId])
+  }, [route.mode, tenantId, authUser, needsLogin])
 
   useEffect(() => {
     if (!runNeedsLightTick(liveRun, nowMs)) return
@@ -1386,6 +1479,62 @@ function App() {
     }, 80)
   }
 
+  if (!authReady) {
+    return (
+      <div className="login-shell login-loading">
+        <p className="login-blurb">Caricamento sessione…</p>
+      </div>
+    )
+  }
+
+  if (authUser && route.mode === 'admin' && !canAccessAdmin(authUser.role)) {
+    return (
+      <div className="login-shell" data-intended="admin">
+        <div className="login-atmosphere" aria-hidden />
+        <main className="login-panel">
+          <header className="login-brand">
+            <span className="brand-strip" aria-hidden />
+            <div className="brand-lockup">
+              <span className="brand-mark">Atrium</span>
+              <span className="brand-tag">Workspace marketing</span>
+            </div>
+          </header>
+          <h1 className="login-title">Accesso Admin negato</h1>
+          <p className="login-blurb">
+            L’account Agent non può aprire Admin. Usa un account Admin oppure torna
+            all’ufficio Agent.
+          </p>
+          <div className="login-actions">
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => navigate({ mode: 'piano' })}
+            >
+              Torna ad Agent
+            </button>
+            <button type="button" className="btn btn-ghost" onClick={handleLogout}>
+              Esci e accedi come Admin
+            </button>
+          </div>
+        </main>
+      </div>
+    )
+  }
+
+  if (needsLogin) {
+    return (
+      <LoginScreen
+        key={intendedRole}
+        intended={intendedRole}
+        busy={loginBusy}
+        error={loginError}
+        onSubmit={handleLogin}
+      />
+    )
+  }
+
+  const showAdminNav = canAccessAdmin(authUser?.role)
+
   return (
     <div className="app-shell">
       <div className="app-chrome">
@@ -1417,28 +1566,41 @@ function App() {
               </span>
             )}
           </div>
-          <nav className="nav">
-            <a
-              href="#agent"
-              className={route.mode !== 'admin' ? 'active' : ''}
-              onClick={(e) => {
-                e.preventDefault()
-                navigate({ mode: 'piano' })
-              }}
-            >
-              Agent
-            </a>
-            <a
-              href="#admin"
-              className={route.mode === 'admin' ? 'active' : ''}
-              onClick={(e) => {
-                e.preventDefault()
-                navigate({ mode: 'admin' })
-              }}
-            >
-              Admin
-            </a>
-          </nav>
+          <div className="topbar-end">
+            <nav className="nav">
+              <a
+                href="#agent"
+                className={route.mode !== 'admin' ? 'active' : ''}
+                onClick={(e) => {
+                  e.preventDefault()
+                  navigate({ mode: 'piano' })
+                }}
+              >
+                Agent
+              </a>
+              {showAdminNav && (
+                <a
+                  href="#admin"
+                  className={route.mode === 'admin' ? 'active' : ''}
+                  onClick={(e) => {
+                    e.preventDefault()
+                    navigate({ mode: 'admin' })
+                  }}
+                >
+                  Admin
+                </a>
+              )}
+            </nav>
+            <div className="session-chip">
+              <span className="session-user" title={authUser?.email}>
+                {authUser?.display_name ?? authUser?.email}
+                <em>{authUser?.role === 'admin' ? 'Admin' : 'Agent'}</em>
+              </span>
+              <button type="button" className="btn btn-ghost btn-logout" onClick={handleLogout}>
+                Esci
+              </button>
+            </div>
+          </div>
         </header>
 
         {route.mode !== 'admin' && approvals.length > 0 && (

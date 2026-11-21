@@ -82,24 +82,28 @@ def test_artifacts_api_and_tenant_list(tmp_path, monkeypatch):
     get_settings.cache_clear()
     get_graph.cache_clear()
 
+    from tests.conftest import agent_headers
+
     client = TestClient(create_app())
-    tenants = client.get("/api/tenants").json()
+    headers = agent_headers(client)
+    tenants = client.get("/api/tenants", headers=headers).json()
     ids = {t["tenant_id"] for t in tenants}
     assert ids == {"demo", "acme"}
     assert all("secrets_total" in t for t in tenants)
 
     chat = client.post(
         "/api/chat",
+        headers=headers,
         json={"tenant_id": "demo", "message": "report spend ultimi 7 giorni"},
     )
     assert chat.status_code == 200
 
-    arts = client.get("/api/tenants/demo/artifacts").json()
+    arts = client.get("/api/tenants/demo/artifacts", headers=headers).json()
     names = {a["name"] for a in arts["artifacts"]}
     assert "last_report.json" in names
     assert "last_spend_report.json" in names
 
-    last = client.get("/api/tenants/demo/artifacts/last_report.json").json()
+    last = client.get("/api/tenants/demo/artifacts/last_report.json", headers=headers).json()
     assert last["payload"]["spend_channels"]
 
     get_settings.cache_clear()
