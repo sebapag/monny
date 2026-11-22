@@ -69,4 +69,4 @@ subscription:
     controlling: false
   features:
     office_view: true
-  office_mode: auto
+  office_mode: full

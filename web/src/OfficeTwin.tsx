@@ -34,6 +34,7 @@ import {
   resolvePresentation,
   type OfficeCapability,
 } from './officeMode'
+import { buildExteriorTrees, TREE_CANOPY } from './officeTrees'
 
 /** Soft Notion pastels — always readable, brighter when lit. */
 type RoomLayout = {
@@ -1393,6 +1394,43 @@ function makeCityFacadeTexture(): Texture {
   return tex
 }
 
+const TREE_TRUNK = '#9a7b52'
+
+/**
+ * Stylized street trees around the office plaza (outside the floor plate).
+ * Simple trunk + sphere canopy — same language as interior Plant props.
+ */
+function ExteriorTree({
+  position,
+  scale = 1,
+  canopy = TREE_CANOPY[0],
+}: {
+  position: [number, number, number]
+  scale?: number
+  canopy?: string
+}) {
+  return (
+    <group position={position} scale={scale} raycast={() => null}>
+      <mesh position={[0, 0.55, 0]} raycast={() => null}>
+        <cylinderGeometry args={[0.08, 0.12, 1.1, 8]} />
+        <meshStandardMaterial color={TREE_TRUNK} roughness={0.95} metalness={0} />
+      </mesh>
+      <mesh position={[0, 1.35, 0]} raycast={() => null}>
+        <sphereGeometry args={[0.55, 12, 12]} />
+        <meshStandardMaterial color={canopy} roughness={1} metalness={0} />
+      </mesh>
+      <mesh position={[0.28, 1.5, 0.12]} raycast={() => null}>
+        <sphereGeometry args={[0.32, 10, 10]} />
+        <meshStandardMaterial color="#8bc9a0" roughness={1} metalness={0} />
+      </mesh>
+      <mesh position={[-0.22, 1.42, -0.18]} raycast={() => null}>
+        <sphereGeometry args={[0.28, 10, 10]} />
+        <meshStandardMaterial color="#4f9a6e" roughness={1} metalness={0} />
+      </mesh>
+    </group>
+  )
+}
+
 /** Deterministic commercial blocks outside the office apron. */
 function buildCityLayout(): CityBuildingSpec[] {
   const out: CityBuildingSpec[] = []
@@ -1553,6 +1591,7 @@ function CityBuildingMesh({
  */
 function CityAroundOffice() {
   const buildings = useMemo(() => buildCityLayout(), [])
+  const trees = useMemo(() => buildExteriorTrees(), [])
   const facadeMap = useMemo(() => {
     const tex = makeCityFacadeTexture()
     tex.repeat.set(1, 1)
@@ -1599,6 +1638,17 @@ function CityAroundOffice() {
       {buildings.map((b) => (
         <CityBuildingMesh key={b.id} building={b} facadeMap={facadeMap} />
       ))}
+      {/* Street trees — plaza ring only, never on the office floor */}
+      <group data-testid="office-exterior-trees">
+        {trees.map((t) => (
+          <ExteriorTree
+            key={t.id}
+            position={[t.x, -0.08, t.z]}
+            scale={t.scale}
+            canopy={t.canopy}
+          />
+        ))}
+      </group>
     </group>
   )
 }
@@ -1799,6 +1849,21 @@ function OfficeLightTwin({
             <span className="city-bldg tone-c" style={{ width: '54%' }} />
           </div>
           <div className="office-city-blocks" />
+          {/* Stylized trees around the plaza (Leggera) — trunk + canopy dots */}
+          <div className="office-city-trees" data-testid="office-city-trees-2d" aria-hidden>
+            <span className="city-tree t1" />
+            <span className="city-tree t2" />
+            <span className="city-tree t3" />
+            <span className="city-tree t4" />
+            <span className="city-tree t5" />
+            <span className="city-tree t6" />
+            <span className="city-tree t7" />
+            <span className="city-tree t8" />
+            <span className="city-tree t9" />
+            <span className="city-tree t10" />
+            <span className="city-tree t11" />
+            <span className="city-tree t12" />
+          </div>
         </div>
         <div className="office-light-floor-grain" />
         <div className="office-light-wall wall-n" />
@@ -2057,8 +2122,8 @@ export function OfficeTwin({
   lights,
   pending,
   enabled,
-  officeMode = 'auto',
-  officeViewEntitled = false,
+  officeMode = 'full',
+  officeViewEntitled = true,
   statusLine,
   busy,
   tenantId = 'demo',
@@ -2272,7 +2337,7 @@ export function OfficeTwin({
             title={
               officeViewEntitled
                 ? `Preferenza: ${officeMode}`
-                : 'Modalità automatica (upgrade piano per scegliere Completa / Leggera)'
+                : 'Vista completa 3D (Leggera se WebGL non è disponibile)'
             }
           >
             {modeBadge}
