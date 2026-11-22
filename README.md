@@ -16,6 +16,8 @@ monny/
   fixtures/spend/     # Mock Ads metrics for dry-run
   fixtures/seo/       # HTML fixtures for .example hosts
   fixtures/shopify/   # Shop + page metadata by shop_domain
+  fixtures/auth/      # Local demo users (fallback when Supabase unset)
+  supabase/           # SQL migration: profiles + RLS (Auth only)
   web/                # Vite + React UI (Agent + Admin)
   data/               # Runtime (checkpoints, approvals, artifacts, audit)
   Dockerfile          # Multi-stage API image (Cloud Run / App Runner / ACA)
@@ -27,8 +29,34 @@ monny/
 
 ## Product surfaces
 
-1. **Agent UI** (`/#agent`) — 3D office twin: rooms light when skills run; locked rooms for disabled entitlements; free-text + shortcuts respect the plan.
-2. **Admin UI** (`/#admin`) — tenant editor + **Attivazione piano / reparti** toggles (`subscription.skills`: spend, seo, shopify, leads). Leadership/HITL always on.
+1. **Agent UI** (`/#agent`) — 3D office twin: rooms light when skills run; locked rooms for disabled entitlements; free-text + shortcuts respect the plan. Requires login (`agent` or `admin` role).
+2. **Admin UI** (`/#admin`) — tenant editor + **Attivazione piano / reparti** toggles (`subscription.skills`: spend, seo, shopify, leads). Leadership/HITL always on. Requires `admin` role (Agent accounts cannot open Admin).
+
+### Auth & roles
+
+| Role | Surfaces |
+|------|----------|
+| `agent` | Agent only (cannot open Admin) |
+| `admin` | Admin + Agent |
+
+**Local / CI fallback** (no Supabase env): fixtures in `fixtures/auth/users.json`.
+
+| Email | Password | Role |
+|-------|----------|------|
+| `agent@demo` | `agent-demo` | Agent |
+| `admin@demo` | `admin-demo` | Admin |
+
+**Production:** Supabase Auth + `public.profiles` (Postgres RLS). Set on the **API container**:
+
+- `SUPABASE_URL`
+- `SUPABASE_ANON_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY` (server-only; user management)
+- `SUPABASE_JWT_SECRET`
+
+Apply `supabase/migrations/20261121_profiles_rls.sql` in the Supabase SQL editor.  
+Setup detail: [`supabase/README.md`](supabase/README.md).
+
+The LangGraph agent runtime stays on the FastAPI Docker image — Supabase is identity/roles only, not agent hosting.
 
 ## Quick start (dry-run / mock)
 
@@ -84,8 +112,8 @@ Optional: point the SPA at a remote API (Cloud Run):
 VITE_API_BASE_URL=https://YOUR-CLOUD-RUN-URL npm run dev
 ```
 
-- Agent: http://127.0.0.1:5173  
-- Admin: http://127.0.0.1:5173/#admin  
+- Agent: http://127.0.0.1:5173 — login gate, then office twin  
+- Admin: http://127.0.0.1:5173/#admin — Admin-only login  
 
 ### 3. Tests
 

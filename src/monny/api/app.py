@@ -6,24 +6,42 @@ import asyncio
 import json
 import threading
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
 from monny.api.schemas import (
     ApprovalDecision,
     ApprovalOut,
+    AuthUserOut,
     ChatRequest,
     ChatResponse,
+    CreateUserRequest,
     KnowledgeRetrieveRequest,
     KnowledgeSourceToggle,
+    LoginRequest,
+    LoginResponse,
     RunOut,
     RunStartRequest,
     SecretStatus,
+    SignupRequest,
     TenantUpsert,
+    UpdateUserRequest,
 )
+from monny.auth.deps import COOKIE_NAME, get_current_user, require_admin, require_user
+from monny.auth.service import (
+    auth_backend,
+    create_user,
+    list_users,
+    login as auth_login,
+    logout_token,
+    set_user_role,
+    signup as auth_signup,
+)
+from monny.auth.supabase_client import SupabaseError
+from monny.auth.users import AuthenticatedUser, clear_users_cache
 from monny.knowledge import list_sources, load_manifest, retrieve, set_source_enabled
 from monny.config.entitlements import (
     ENTITLEMENT_LABELS_IT,
@@ -56,9 +74,13 @@ from monny.storage.artifacts import (
 from monny.storage.audit import append_audit
 from monny.storage.runs import get_run_store
 
+UserDep = Annotated[AuthenticatedUser, Depends(require_user)]
+AdminDep = Annotated[AuthenticatedUser, Depends(require_admin)]
+
 
 def create_app() -> FastAPI:
     settings = get_settings()
+    clear_users_cache()
     app = FastAPI(title="Atrium API", version="0.1.0")
     app.add_middleware(
         CORSMiddleware,
@@ -67,6 +89,135 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    def _set_session_cookie(response: Response, token: str, *, max_age: int) -> None:
+        if not token:
+            return
+        response.set_cookie(
+            key=COOKIE_NAME,
+            value=token,
+            httponly=True,
+            samesite="lax",
+            secure=settings.monny_auth_cookie_secure,
+            max_age=max_age,
+            path="/",
+        )
+
+    def _clear_session_cookie(response: Response) -> None:
+        response.delete_cookie(key=COOKIE_NAME, path="/")
+
+    def _auth_user_out(user: AuthenticatedUser) -> AuthUserOut:
+        return AuthUserOut(
+            email=user.email,
+            display_name=user.display_name,
+            role=user.role,
+            tenant_id=user.tenant_id,
+            user_id=user.user_id,
+        )
+
+    @app.post("/api/auth/login", response_model=LoginResponse)
+    def login(body: LoginRequest, response: Response) -> LoginResponse:
+        try:
+            outcome = auth_login(settings, body.email, body.password)
+        except SupabaseError as exc:
+            raise HTTPException(
+                status_code=exc.status_code or 401,
+                detail=str(exc) or "Email o password non validi",
+            ) from exc
+        _set_session_cookie(response, outcome.token, max_age=outcome.expires_in or 3600)
+        return LoginResponse(
+            token=outcome.token,
+            user=_auth_user_out(outcome.user),
+            expires_in=outcome.expires_in,
+            backend=outcome.backend,
+            refresh_token=outcome.refresh_token,
+        )
+
+    @app.post("/api/auth/signup", response_model=LoginResponse)
+    def signup(body: SignupRequest, response: Response) -> LoginResponse:
+        try:
+            outcome = auth_signup(
+                settings,
+                email=body.email,
+                password=body.password,
+                display_name=body.display_name,
+            )
+        except SupabaseError as exc:
+            raise HTTPException(
+                status_code=exc.status_code or 400,
+                detail=str(exc),
+            ) from exc
+        if outcome.token:
+            _set_session_cookie(response, outcome.token, max_age=outcome.expires_in or 3600)
+        return LoginResponse(
+            token=outcome.token,
+            user=_auth_user_out(outcome.user),
+            expires_in=outcome.expires_in,
+            backend=outcome.backend,
+            refresh_token=outcome.refresh_token,
+        )
+
+    @app.post("/api/auth/logout")
+    def logout(
+        request: Request,
+        response: Response,
+        authorization: Annotated[str | None, Header()] = None,
+    ) -> dict[str, bool]:
+        token = None
+        if authorization and authorization.lower().startswith("bearer "):
+            token = authorization.split(" ", 1)[1].strip()
+        token = token or request.cookies.get(COOKIE_NAME)
+        logout_token(settings, token)
+        _clear_session_cookie(response)
+        return {"ok": True}
+
+    @app.get("/api/auth/me", response_model=AuthUserOut)
+    def me(user: Annotated[AuthenticatedUser, Depends(get_current_user)]) -> AuthUserOut:
+        return _auth_user_out(user)
+
+    @app.get("/api/auth/users", response_model=list[AuthUserOut])
+    def auth_users_list(
+        _admin: AdminDep,
+        tenant_id: str | None = None,
+    ) -> list[AuthUserOut]:
+        try:
+            users = list_users(settings, tenant_id=tenant_id)
+        except SupabaseError as exc:
+            raise HTTPException(status_code=exc.status_code or 500, detail=str(exc)) from exc
+        return [_auth_user_out(u) for u in users]
+
+    @app.post("/api/auth/users", response_model=AuthUserOut)
+    def auth_users_create(body: CreateUserRequest, _admin: AdminDep) -> AuthUserOut:
+        try:
+            user = create_user(
+                settings,
+                email=body.email,
+                password=body.password,
+                display_name=body.display_name or body.email.split("@")[0],
+                role=body.role,
+                tenant_id=body.tenant_id or settings.monny_default_tenant,
+            )
+        except SupabaseError as exc:
+            raise HTTPException(status_code=exc.status_code or 400, detail=str(exc)) from exc
+        return _auth_user_out(user)
+
+    @app.patch("/api/auth/users/{user_id}", response_model=AuthUserOut)
+    def auth_users_update(
+        user_id: str,
+        body: UpdateUserRequest,
+        _admin: AdminDep,
+    ) -> AuthUserOut:
+        try:
+            user = set_user_role(
+                settings,
+                user_id=user_id,
+                role=body.role,
+                display_name=body.display_name,
+                tenant_id=body.tenant_id,
+            )
+        except SupabaseError as exc:
+            raise HTTPException(status_code=exc.status_code or 400, detail=str(exc)) from exc
+        return _auth_user_out(user)
 
     def approvals() -> ApprovalStore:
         return ApprovalStore(settings.monny_data_dir)
@@ -80,6 +231,10 @@ def create_app() -> FastAPI:
             "ok": True,
             "dry_run": settings.dry_run,
             "default_tenant": settings.monny_default_tenant,
+            "auth": {
+                "backend": auth_backend(settings),
+                "supabase_configured": settings.supabase_configured,
+            },
             "llm": {
                 "enabled": llm_on,
                 "provider": "xai" if llm_on else None,
@@ -167,7 +322,7 @@ def create_app() -> FastAPI:
         return run.id
 
     @app.post("/api/runs", response_model=RunOut)
-    def start_run(body: RunStartRequest) -> RunOut:
+    def start_run(body: RunStartRequest, _user: UserDep) -> RunOut:
         try:
             cfg = load_tenant(body.tenant_id, Path(settings.monny_tenants_dir))
         except FileNotFoundError as exc:
@@ -187,14 +342,14 @@ def create_app() -> FastAPI:
         return RunOut(**run.to_dict())
 
     @app.get("/api/runs/{run_id}", response_model=RunOut)
-    def get_run(run_id: str) -> RunOut:
+    def get_run(run_id: str, _user: UserDep) -> RunOut:
         run = runs().get(run_id)
         if run is None:
             raise HTTPException(status_code=404, detail="Run not found")
         return RunOut(**run.to_dict())
 
     @app.get("/api/runs/{run_id}/stream")
-    async def stream_run(run_id: str) -> StreamingResponse:
+    async def stream_run(run_id: str, _user: UserDep) -> StreamingResponse:
         if runs().get(run_id) is None:
             raise HTTPException(status_code=404, detail="Run not found")
 
@@ -214,7 +369,7 @@ def create_app() -> FastAPI:
         return StreamingResponse(event_gen(), media_type="text/event-stream")
 
     @app.post("/api/chat", response_model=ChatResponse)
-    def chat(body: ChatRequest) -> ChatResponse:
+    def chat(body: ChatRequest, _user: UserDep) -> ChatResponse:
         """Sync chat (CLI-compatible). Prefer POST /api/runs for live skill UX."""
         try:
             cfg = load_tenant(body.tenant_id, Path(settings.monny_tenants_dir))
@@ -258,7 +413,11 @@ def create_app() -> FastAPI:
         )
 
     @app.get("/api/approvals", response_model=list[ApprovalOut])
-    def list_approvals(tenant_id: str | None = None, status: str | None = "pending"):
+    def list_approvals(
+        _user: UserDep,
+        tenant_id: str | None = None,
+        status: str | None = "pending",
+    ):
         store = approvals()
         # Default inbox: open proposals (pending) + those already escalated to a human.
         if status == "pending":
@@ -274,7 +433,7 @@ def create_app() -> FastAPI:
         return [ApprovalOut(**item.__dict__) for item in items]
 
     @app.post("/api/approvals/{approval_id}/decide", response_model=ApprovalOut)
-    def decide(approval_id: str, body: ApprovalDecision) -> ApprovalOut:
+    def decide(approval_id: str, body: ApprovalDecision, _user: UserDep) -> ApprovalOut:
         store = approvals()
         try:
             item = store.decide(
@@ -315,7 +474,7 @@ def create_app() -> FastAPI:
         return out
 
     @app.get("/api/tenants")
-    def tenants() -> list[dict[str, Any]]:
+    def tenants(_user: UserDep) -> list[dict[str, Any]]:
         out = []
         store = approvals()
         for tenant_id in list_tenant_ids(Path(settings.monny_tenants_dir)):
@@ -338,7 +497,7 @@ def create_app() -> FastAPI:
         return out
 
     @app.get("/api/tenants/{tenant_id}")
-    def get_tenant(tenant_id: str) -> dict[str, Any]:
+    def get_tenant(tenant_id: str, _user: UserDep) -> dict[str, Any]:
         try:
             cfg = load_tenant(tenant_id, Path(settings.monny_tenants_dir))
         except FileNotFoundError as exc:
@@ -353,7 +512,7 @@ def create_app() -> FastAPI:
         }
 
     @app.put("/api/tenants/{tenant_id}")
-    def put_tenant(tenant_id: str, body: TenantUpsert) -> dict[str, Any]:
+    def put_tenant(tenant_id: str, body: TenantUpsert, _admin: AdminDep) -> dict[str, Any]:
         payload = dict(body.config)
         payload["tenant_id"] = tenant_id
         try:
@@ -370,7 +529,11 @@ def create_app() -> FastAPI:
         return {"ok": True, "path": str(path), "tenant_id": tenant_id}
 
     @app.get("/api/tenants/{tenant_id}/audit")
-    def tenant_audit(tenant_id: str, limit: int = 50) -> list[dict[str, Any]]:
+    def tenant_audit(
+        tenant_id: str,
+        _user: UserDep,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
         path = Path(settings.monny_data_dir) / tenant_id / "audit.jsonl"
         if not path.exists():
             return []
@@ -381,7 +544,7 @@ def create_app() -> FastAPI:
         return list(reversed(rows[-limit:]))
 
     @app.get("/api/tenants/{tenant_id}/artifacts")
-    def tenant_artifacts(tenant_id: str) -> dict[str, Any]:
+    def tenant_artifacts(tenant_id: str, _user: UserDep) -> dict[str, Any]:
         try:
             load_tenant(tenant_id, Path(settings.monny_tenants_dir))
         except FileNotFoundError as exc:
@@ -390,7 +553,7 @@ def create_app() -> FastAPI:
         return {"tenant_id": tenant_id, "artifacts": items}
 
     @app.get("/api/tenants/{tenant_id}/artifacts/{name}")
-    def tenant_artifact(tenant_id: str, name: str) -> dict[str, Any]:
+    def tenant_artifact(tenant_id: str, name: str, _user: UserDep) -> dict[str, Any]:
         if "/" in name or ".." in name or not name.endswith(".json"):
             raise HTTPException(status_code=400, detail="Invalid artifact name")
         try:
@@ -409,7 +572,7 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     @app.get("/api/tenants/{tenant_id}/knowledge")
-    def knowledge_list(tenant_id: str) -> dict[str, Any]:
+    def knowledge_list(tenant_id: str, _admin: AdminDep) -> dict[str, Any]:
         """List knowledge sources for Admin «Conoscenza aziendale»."""
         _require_tenant(tenant_id)
         root = Path(settings.monny_tenants_dir)
@@ -423,7 +586,11 @@ def create_app() -> FastAPI:
         }
 
     @app.post("/api/tenants/{tenant_id}/knowledge/retrieve")
-    def knowledge_retrieve(tenant_id: str, body: KnowledgeRetrieveRequest) -> dict[str, Any]:
+    def knowledge_retrieve(
+        tenant_id: str,
+        body: KnowledgeRetrieveRequest,
+        _user: UserDep,
+    ) -> dict[str, Any]:
         """Stub retrieval used by planner/skills (markdown + tags, dry-run friendly)."""
         _require_tenant(tenant_id)
         root = Path(settings.monny_tenants_dir)
@@ -446,6 +613,7 @@ def create_app() -> FastAPI:
         tenant_id: str,
         source_id: str,
         body: KnowledgeSourceToggle,
+        _admin: AdminDep,
     ) -> dict[str, Any]:
         """Enable / disable a knowledge source (persists to manifest.yaml)."""
         _require_tenant(tenant_id)

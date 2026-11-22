@@ -1,19 +1,95 @@
+import { authHeaders, type AuthUser, type LoginResult } from './auth'
+
 /** Prefer VITE_API_BASE_URL (Netlify/Cloud Run); fall back to legacy VITE_API_BASE. */
 const API_BASE =
   (import.meta.env.VITE_API_BASE_URL as string | undefined) ||
   (import.meta.env.VITE_API_BASE as string | undefined) ||
   ''
 
+function parseErrorDetail(text: string, fallback: string): string {
+  if (!text) return fallback
+  try {
+    const parsed = JSON.parse(text) as { detail?: unknown }
+    if (typeof parsed.detail === 'string') return parsed.detail
+  } catch {
+    /* plain text */
+  }
+  return text
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
     ...init,
+    credentials: 'include',
+    headers: authHeaders({
+      'Content-Type': 'application/json',
+      ...(init?.headers ?? {}),
+    }),
   })
   if (!res.ok) {
     const text = await res.text()
-    throw new Error(text || res.statusText)
+    throw new Error(parseErrorDetail(text, res.statusText))
   }
   return res.json() as Promise<T>
+}
+
+export function login(email: string, password: string) {
+  return request<LoginResult>('/api/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ email, password }),
+  })
+}
+
+export function signup(email: string, password: string, display_name?: string) {
+  return request<LoginResult>('/api/auth/signup', {
+    method: 'POST',
+    body: JSON.stringify({ email, password, display_name: display_name ?? '' }),
+  })
+}
+
+export function logout() {
+  return request<{ ok: boolean }>('/api/auth/logout', { method: 'POST' })
+}
+
+export function fetchMe() {
+  return request<AuthUser>('/api/auth/me')
+}
+
+export type AuthBackendInfo = {
+  ok: boolean
+  auth?: { backend: 'supabase' | 'fixtures'; supabase_configured: boolean }
+}
+
+export function fetchHealth() {
+  return request<AuthBackendInfo>('/api/health')
+}
+
+export function listAuthUsers(tenantId?: string) {
+  const q = tenantId ? `?tenant_id=${encodeURIComponent(tenantId)}` : ''
+  return request<AuthUser[]>(`/api/auth/users${q}`)
+}
+
+export function createAuthUser(body: {
+  email: string
+  password: string
+  display_name?: string
+  role?: AuthUser['role']
+  tenant_id?: string
+}) {
+  return request<AuthUser>('/api/auth/users', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
+export function updateAuthUser(
+  userId: string,
+  body: { role: AuthUser['role']; display_name?: string; tenant_id?: string },
+) {
+  return request<AuthUser>(`/api/auth/users/${encodeURIComponent(userId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  })
 }
 
 export type SpendCampaign = {

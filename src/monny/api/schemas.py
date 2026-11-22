@@ -101,3 +101,44 @@ class KnowledgeRetrieveRequest(BaseModel):
 
 class KnowledgeSourceToggle(BaseModel):
     enabled: bool
+
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+class SignupRequest(BaseModel):
+    email: str
+    password: str
+    display_name: str = ""
+
+
+class AuthUserOut(BaseModel):
+    email: str
+    display_name: str
+    role: Literal["agent", "admin"]
+    tenant_id: str
+    user_id: str | None = None
+
+
+class LoginResponse(BaseModel):
+    token: str
+    user: AuthUserOut
+    expires_in: int
+    backend: Literal["supabase", "fixtures"] = "fixtures"
+    refresh_token: str | None = None
+
+
+class CreateUserRequest(BaseModel):
+    email: str
+    password: str
+    display_name: str = ""
+    role: Literal["agent", "admin"] = "agent"
+    tenant_id: str = "demo"
+
+
+class UpdateUserRequest(BaseModel):
+    role: Literal["agent", "admin"]
+    display_name: str | None = None
+    tenant_id: str | None = None
