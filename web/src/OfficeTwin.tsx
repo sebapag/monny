@@ -34,7 +34,18 @@ import {
   resolvePresentation,
   type OfficeCapability,
 } from './officeMode'
+import {
+  FOCUS_DURATION,
+  FOCUS_EASE_CSS,
+  MODAL_FADE_MS,
+  cancelMotion,
+  playFocusBarEnter,
+  playLightFloorplanFocus,
+  type MotionHandle,
+} from './officeMotion'
 import { buildExteriorTrees, TREE_CANOPY } from './officeTrees'
+
+export { FOCUS_DURATION, FOCUS_EASE_CSS, MODAL_FADE_MS } from './officeMotion'
 
 /** Soft Notion pastels — always readable, brighter when lit. */
 type RoomLayout = {
@@ -183,14 +194,8 @@ const OVERVIEW_POS: [number, number, number] = [13.6, 14.4, 15.4]
 const OVERVIEW_LOOK: [number, number, number] = [0, 0.35, -0.6]
 const OVERVIEW_FOV = 38
 const FOCUS_FOV = 33.2
-/** Calm dolly in/out (seconds) — premium ease, no snaps. */
-export const FOCUS_DURATION = 1.55
-/** Modal enter/leave synced with the end of the dolly. */
-export const MODAL_FADE_MS = 560
-/** Soft ease-in-out without overshoot (CSS twin uses the same curve). */
-export const FOCUS_EASE_CSS = 'cubic-bezier(0.45, 0.05, 0.25, 1)'
 
-/** Ken Perlin smootherstep — gentler accel/decel than smoothstep. */
+/** Ken Perlin smootherstep — R3F camera dolly (anime.js is for DOM overlays). */
 function smootherstep(t: number) {
   const x = Math.min(1, Math.max(0, t))
   return x * x * x * (x * (x * 6 - 15) + 10)
@@ -318,7 +323,8 @@ function ScriptedCamera({
     toLook: Vector3
     fromFov: number
     toFov: number
-    t: number
+    /** performance.now() when this leg started — wall-clock so low FPS can't stretch the dolly. */
+    startedAt: number
     id: DeptId | null
     notified: boolean
   } | null>(null)
@@ -362,20 +368,22 @@ function ScriptedCamera({
       toLook: target.look.clone(),
       fromFov: fovCurrent.current,
       toFov: targetFov,
-      t: 0,
+      startedAt: performance.now(),
       id: focusId,
       notified: false,
     }
     if (!focusId) lastNotified.current = null
   }, [focusId, reduceMotion, camera])
 
-  useFrame((_, dt) => {
+  useFrame(() => {
     const a = anim.current
     if (!a) return
-    // Cap dt so a long frame (tab switch) never jumps the dolly.
-    const step = Math.min(Math.max(dt, 0), 1 / 24)
-    a.t = Math.min(1, a.t + step / FOCUS_DURATION)
-    const e = smootherstep(a.t)
+    // Wall-clock progress: samples the ease curve at real elapsed time so a slow
+    // GPU / headless WebGL path can't stretch a 1.55s dolly into tens of seconds
+    // (the old capped-dt accumulator did). Large gaps still look continuous via
+    // smootherstep, without a single-frame snap to the end.
+    const t = Math.min(1, (performance.now() - a.startedAt) / (FOCUS_DURATION * 1000))
+    const e = smootherstep(t)
     posCurrent.current.lerpVectors(a.fromPos, a.toPos, e)
     lookCurrent.current.lerpVectors(a.fromLook, a.toLook, e)
     fovCurrent.current = lerp(a.fromFov, a.toFov, e)
@@ -385,7 +393,7 @@ function ScriptedCamera({
       camera.fov = fovCurrent.current
       camera.updateProjectionMatrix()
     }
-    if (a.t >= 1 && a.id && !a.notified) {
+    if (t >= 1 && a.id && !a.notified) {
       a.notified = true
       lastNotified.current = a.id
       arrivedRef.current(a.id)
@@ -1799,7 +1807,24 @@ function OfficeLightTwin({
   focusId: DeptId | null
 }) {
   const direzionePending = pending.direzione || 0
-  const focusXf = focusId ? LIGHT_FOCUS[focusId] : null
+  const floorplanRef = useRef<HTMLDivElement>(null)
+  const floorMotionRef = useRef<MotionHandle>(null)
+
+  useEffect(() => {
+    const el = floorplanRef.current
+    if (!el) return
+    floorMotionRef.current = playLightFloorplanFocus(
+      el,
+      focusId ? LIGHT_FOCUS[focusId] : null,
+      reduceMotion,
+      floorMotionRef.current,
+    )
+    return () => {
+      cancelMotion(floorMotionRef.current)
+      floorMotionRef.current = null
+    }
+  }, [focusId, reduceMotion])
+
   return (
     <div
       className={`office-light-twin${reduceMotion ? ' reduce-motion' : ''}${
@@ -1807,6 +1832,7 @@ function OfficeLightTwin({
       }`}
       data-testid="office-floorplan-2d"
       data-focus-dept={focusId ?? undefined}
+      data-motion="anime"
     >
       <div className="office-light-blueprint" aria-hidden>
         <div className="office-light-sky" />
@@ -1885,23 +1911,10 @@ function OfficeLightTwin({
         <div className="office-light-corridor-wing" />
       </div>
       <div
+        ref={floorplanRef}
         className="office-floorplan office-floorplan-light"
         data-testid="office-floorplan-focus"
-        style={
-          focusXf
-            ? {
-                transform: `translate(${focusXf.x}%, ${focusXf.y}%) scale(${focusXf.scale})`,
-                transition: reduceMotion
-                  ? 'none'
-                  : `transform ${FOCUS_DURATION}s ${FOCUS_EASE_CSS}`,
-              }
-            : {
-                transform: 'translate(0%, 0%) scale(1)',
-                transition: reduceMotion
-                  ? 'none'
-                  : `transform ${FOCUS_DURATION}s ${FOCUS_EASE_CSS}`,
-              }
-        }
+        style={{ transform: 'translate(0%, 0%) scale(1)' }}
       >
         {ROOMS.map((room) => {
           const light = lights[room.id]
@@ -2114,6 +2127,52 @@ function HardenedOfficeCanvas({
         badge={focusId && focusId !== 'direzione' ? null : overlayBadge}
         onSelect={onSelect}
       />
+    </div>
+  )
+}
+
+/** Absolute focus chrome — anime.js enter (no stage reflow). */
+function OfficeFocusBar({
+  label,
+  reduceMotion,
+  onBack,
+}: {
+  label: string | null | undefined
+  reduceMotion: boolean
+  onBack: () => void
+}) {
+  const barRef = useRef<HTMLDivElement>(null)
+  const motionRef = useRef<MotionHandle>(null)
+
+  useEffect(() => {
+    const el = barRef.current
+    if (!el) return
+    cancelMotion(motionRef.current)
+    motionRef.current = playFocusBarEnter(el, reduceMotion)
+    return () => {
+      cancelMotion(motionRef.current)
+      motionRef.current = null
+    }
+  }, [reduceMotion, label])
+
+  return (
+    <div
+      ref={barRef}
+      className="office-focus-bar"
+      data-testid="office-focus-bar"
+      data-motion="anime"
+    >
+      <button
+        type="button"
+        className="btn btn-ghost office-back-overview"
+        data-testid="office-back-overview"
+        onClick={onBack}
+      >
+        ← Indietro · Vista ufficio
+      </button>
+      <span className="office-focus-label">
+        {label ? `Focus · ${label}` : 'Focus reparto'}
+      </span>
     </div>
   )
 }
@@ -2413,19 +2472,11 @@ export function OfficeTwin({
             }${focusId ? ' is-dept-focus' : ''}`}
           >
             {focusId && (
-              <div className="office-focus-bar" data-testid="office-focus-bar">
-                <button
-                  type="button"
-                  className="btn btn-ghost office-back-overview"
-                  data-testid="office-back-overview"
-                  onClick={returnToOverview}
-                >
-                  ← Indietro · Vista ufficio
-                </button>
-                <span className="office-focus-label">
-                  {focusLabel ? `Focus · ${focusLabel}` : 'Focus reparto'}
-                </span>
-              </div>
+              <OfficeFocusBar
+                label={focusLabel}
+                reduceMotion={reduceMotion}
+                onBack={returnToOverview}
+              />
             )}
             {desired === null ? (
               <div className="office-viewport-loading" aria-busy="true">
@@ -2470,6 +2521,7 @@ export function OfficeTwin({
           liveSteps={liveSteps}
           officeOpens={officeOpens}
           closing={modalPhase === 'leaving'}
+          reduceMotion={reduceMotion}
           onClose={returnToOverview}
           onOpenFullPanel={openFullPanel}
           onDecide={onDecideApproval}

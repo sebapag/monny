@@ -29,6 +29,7 @@ export default defineConfig({
   projects: [
     {
       name: 'mobile-chrome',
+      testMatch: /office-mobile\.spec\.ts/,
       use: {
         ...devices['Pixel 5'],
         channel: undefined,
@@ -37,6 +38,14 @@ export default defineConfig({
         isMobile: true,
         hasTouch: true,
         deviceScaleFactor: 2,
+      },
+    },
+    {
+      name: 'desktop-chrome',
+      testMatch: /office-motion\.spec\.ts/,
+      use: {
+        browserName: 'chromium',
+        viewport: { width: 1280, height: 800 },
       },
     },
   ],

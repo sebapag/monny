@@ -1179,7 +1179,7 @@ a {
   }
 }
 
-/* —— Dept focus modal (after scripted zoom; synced with camera dolly) —— */
+/* —— Dept focus modal (after scripted zoom; enter/leave via anime.js) —— */
 .dept-focus-backdrop {
   position: fixed;
   inset: 0;
@@ -1187,8 +1187,10 @@ a {
   display: grid;
   place-items: center;
   padding: 1.25rem;
+  /* backgroundColor tweened by anime.js — keep opacity:1 so dialog stays a11y-visible */
   background: rgba(10, 21, 48, 0.4);
-  animation: dept-focus-fade-in var(--office-modal-fade, 520ms) var(--office-focus-ease, cubic-bezier(0.45, 0.05, 0.25, 1)) both;
+  opacity: 1;
+  will-change: background-color;
 }
 
 .dept-focus-modal {
@@ -1200,49 +1202,13 @@ a {
   border-radius: 14px;
   box-shadow: 0 20px 52px rgba(10, 21, 48, 0.2);
   padding: 1.15rem 1.2rem 1.05rem;
-  animation: dept-focus-rise-in calc(var(--office-modal-fade, 520ms) + 40ms) var(--office-focus-ease, cubic-bezier(0.45, 0.05, 0.25, 1)) both;
   border-top: 4px solid rgba(86, 69, 212, 0.45);
+  will-change: opacity, transform;
+  transform-origin: 50% 50%;
 }
 
 .dept-focus-backdrop.is-leaving {
   pointer-events: none;
-  animation: dept-focus-fade-out var(--office-modal-fade, 520ms) var(--office-focus-ease, cubic-bezier(0.45, 0.05, 0.25, 1)) both;
-}
-
-.dept-focus-backdrop.is-leaving .dept-focus-modal {
-  animation: dept-focus-rise-out var(--office-modal-fade, 520ms) var(--office-focus-ease, cubic-bezier(0.45, 0.05, 0.25, 1)) both;
-}
-
-@keyframes dept-focus-fade-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-@keyframes dept-focus-fade-out {
-  from { opacity: 1; }
-  to { opacity: 0; }
-}
-
-@keyframes dept-focus-rise-in {
-  from {
-    opacity: 0;
-    transform: translateY(14px) scale(0.975);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-@keyframes dept-focus-rise-out {
-  from {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-  to {
-    opacity: 0;
-    transform: translateY(10px) scale(0.98);
-  }
 }
 
 .dept-focus-modal.tint-yellow { border-top-color: #f5d75e; }
@@ -1438,14 +1404,7 @@ a {
   border-top: 1px solid var(--hairline);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .dept-focus-backdrop,
-  .dept-focus-modal,
-  .dept-focus-backdrop.is-leaving,
-  .dept-focus-backdrop.is-leaving .dept-focus-modal {
-    animation: none;
-  }
-}
+/* prefers-reduced-motion: anime.js helpers short-circuit in officeMotion.ts */
 
 .office-light-twin .office-floorplan-light {
   will-change: transform;
@@ -1733,7 +1692,8 @@ a {
   padding: 0.4rem 0.85rem 0.5rem;
   background: linear-gradient(180deg, rgba(255, 252, 248, 0.96), rgba(255, 248, 240, 0.88));
   border-bottom: 1px solid rgba(200, 188, 168, 0.4);
-  animation: dept-focus-fade-in 480ms var(--office-focus-ease, cubic-bezier(0.45, 0.05, 0.25, 1)) both;
+  /* Enter motion via anime.js (officeMotion.playFocusBarEnter) */
+  will-change: opacity, transform;
   pointer-events: auto;
 }
 
@@ -1762,7 +1722,8 @@ a {
   transition: box-shadow var(--office-focus-duration, 1.45s) var(--office-focus-ease, cubic-bezier(0.45, 0.05, 0.25, 1));
 }
 
-.office-light-twin.is-focusing .office-floorplan-light {
+.office-light-twin.is-focusing .office-floorplan-light,
+.office-floorplan-light {
   transform-origin: 50% 50%;
   will-change: transform;
 }
