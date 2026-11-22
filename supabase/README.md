@@ -1,9 +1,9 @@
 # Supabase — Atrium market-test backend
 
-Primary backend for Atrium: **Auth + Postgres/RLS + Edge Functions**.  
-Frontend: **Netlify**. Same Supabase project for free and paid (differentiate on skills/limits; 3D office for all).
+**Auth + Postgres/RLS + Edge Functions** for the product surface.  
+**LangGraph worker** (Cloud Run / local Ubuntu) owns real agent runs — set Edge secret `WORKER_URL` (and Netlify `VITE_WORKER_URL`) to enable it; without it, Edge keeps a keyword stub for CI.
 
-The FastAPI/Docker API is **not** required for market test.
+Frontend: **Netlify**. Same Supabase project for free and paid (3D office for all).
 
 ## 1. Migrations
 

@@ -4,9 +4,11 @@
 # Required build env (Netlify UI):
 #   VITE_SUPABASE_URL      = https://YOUR_PROJECT.supabase.co
 #   VITE_SUPABASE_ANON_KEY = <anon public key>
+# Optional LangGraph worker (Cloud Run):
+#   VITE_WORKER_URL        = https://atrium-worker-….run.app
 #
-# Without those vars the SPA falls back to an in-browser fixture backend (CI/demo).
-# Do NOT set VITE_API_BASE_URL for the market-test path (no API container).
+# Without Supabase vars the SPA uses in-browser fixtures (CI/demo).
+# Without VITE_WORKER_URL, runs use Edge stub (or fixtures).
 
 [build]
   base = "web"
