@@ -52,15 +52,16 @@ def test_demo_seed_subscription_defaults():
     assert cfg.subscription.skills.it is True
     assert cfg.subscription.skills.controlling is False
     assert cfg.subscription.features.office_view is True
-    assert cfg.subscription.office_mode == "auto"
+    # Market rule: full 3D for everyone; free/paid = skills only.
+    assert cfg.subscription.office_mode == "full"
 
 
-def test_office_view_entitlement_gates_mode():
+def test_office_view_available_to_all_plans():
     cfg = load_tenant("acme", ROOT / "tenants")
-    assert is_office_view_entitled(cfg) is False
-    assert effective_office_mode(cfg) == "auto"
+    assert is_office_view_entitled(cfg) is True
+    assert effective_office_mode(cfg) == "full"
 
-    entitled = cfg.model_copy(
+    light = cfg.model_copy(
         update={
             "subscription": SubscriptionConfig(
                 plan="growth",
@@ -70,10 +71,10 @@ def test_office_view_entitlement_gates_mode():
             )
         }
     )
-    assert is_office_view_entitled(entitled) is True
-    assert effective_office_mode(entitled) == "light"
+    assert is_office_view_entitled(light) is True
+    assert effective_office_mode(light) == "light"
 
-    summary = entitlement_summary(entitled)
+    summary = entitlement_summary(light)
     assert summary["office_view"] is True
     assert summary["office_mode"] == "light"
     assert "office_view" in summary["feature_labels_it"]

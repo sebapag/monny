@@ -64,15 +64,19 @@ export function probeOfficeCapability(
   return { webgl, reducedMotion, lowCapability }
 }
 
-/** Auto prefers light when capability is weak; never traps the user. */
+/**
+ * Auto prefers light only when WebGL is unavailable.
+ * Software / low-GPU and reduced-motion still get full 3D (motion is softened
+ * separately). Canvas errors / context loss still fall back to light.
+ */
 export function autoPrefersLight(cap: OfficeCapability): boolean {
-  return !cap.webgl || cap.reducedMotion || cap.lowCapability
+  return !cap.webgl
 }
 
 /**
  * Resolve which presentation to show.
  * - light / full: honor preference (full may still fall back after Canvas error)
- * - auto: prefer light on weak capability, else full
+ * - auto: full 3D when WebGL works; light only if WebGL is missing
  */
 export function resolvePresentation(
   mode: OfficeMode,

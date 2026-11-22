@@ -60,5 +60,5 @@ subscription:
     it: false
     controlling: false
   features:
-    office_view: false
-  office_mode: auto
+    office_view: true
+  office_mode: full

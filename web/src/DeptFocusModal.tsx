@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import type { Approval } from './api'
 import { ApprovalPathActions, type DecideHandler } from './ApprovalPaths'
 import {
@@ -12,6 +12,12 @@ import { filterApprovals, getDept, type DeptId } from './depts'
 import { plainApproval } from './labels'
 import type { RoomLightState } from './lights'
 import type { TimelineStep } from './api'
+import {
+  cancelMotion,
+  playDeptFocusEnter,
+  playDeptFocusLeave,
+  type MotionHandle,
+} from './officeMotion'
 
 export function DeptFocusModal({
   dept,
@@ -22,6 +28,7 @@ export function DeptFocusModal({
   liveSteps,
   officeOpens,
   closing = false,
+  reduceMotion = false,
   onClose,
   onOpenFullPanel,
   onDecide,
@@ -35,6 +42,7 @@ export function DeptFocusModal({
   officeOpens: number
   /** Fade-out while camera dollies back to overview. */
   closing?: boolean
+  reduceMotion?: boolean
   onClose: () => void
   onOpenFullPanel: () => void
   onDecide?: DecideHandler
@@ -51,6 +59,9 @@ export function DeptFocusModal({
     officeOpens,
   })
   const title = deptFocusTitle(dept)
+  const backdropRef = useRef<HTMLDivElement>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
+  const motionRef = useRef<MotionHandle>(null)
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -60,16 +71,33 @@ export function DeptFocusModal({
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
+  useEffect(() => {
+    const backdrop = backdropRef.current
+    const panel = panelRef.current
+    if (!backdrop || !panel) return
+    cancelMotion(motionRef.current)
+    motionRef.current = closing
+      ? playDeptFocusLeave(backdrop, panel, reduceMotion)
+      : playDeptFocusEnter(backdrop, panel, reduceMotion)
+    return () => {
+      cancelMotion(motionRef.current)
+      motionRef.current = null
+    }
+  }, [closing, reduceMotion, dept])
+
   return (
     <div
+      ref={backdropRef}
       className={`dept-focus-backdrop${closing ? ' is-leaving' : ''}`}
       role="presentation"
       onClick={closing ? undefined : onClose}
       data-testid="dept-focus-modal"
       data-closing={closing ? 'true' : undefined}
+      data-motion="anime"
       aria-hidden={closing || undefined}
     >
       <div
+        ref={panelRef}
         className={`dept-focus-modal tint-${def?.tint ?? 'gray'}`}
         role="dialog"
         aria-modal={!closing}

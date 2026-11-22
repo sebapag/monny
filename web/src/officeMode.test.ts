@@ -20,19 +20,21 @@ const noGl: OfficeCapability = {
 }
 
 describe('office presentation modes', () => {
-  it('auto prefers light on weak / no WebGL / reduced motion', () => {
+  it('auto prefers light only when WebGL is missing', () => {
     expect(autoPrefersLight(capable)).toBe(false)
-    expect(autoPrefersLight(weak)).toBe(true)
+    // Software / low GPU still get full 3D (market: 3D for everyone).
+    expect(autoPrefersLight(weak)).toBe(false)
     expect(autoPrefersLight(noGl)).toBe(true)
     expect(
       autoPrefersLight({ webgl: true, reducedMotion: true, lowCapability: false }),
-    ).toBe(true)
+    ).toBe(false)
   })
 
-  it('honors full / light override; auto follows capability', () => {
+  it('honors full / light override; auto follows WebGL only', () => {
     expect(resolvePresentation('full', noGl)).toBe('full')
     expect(resolvePresentation('light', capable)).toBe('light')
     expect(resolvePresentation('auto', capable)).toBe('full')
-    expect(resolvePresentation('auto', weak)).toBe('light')
+    expect(resolvePresentation('auto', weak)).toBe('full')
+    expect(resolvePresentation('auto', noGl)).toBe('light')
   })
 })
