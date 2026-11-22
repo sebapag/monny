@@ -118,18 +118,18 @@ class SubscriptionSkills(BaseModel):
 
 
 class SubscriptionFeatures(BaseModel):
-    """Paid frontend / UX entitlements (not graph skills)."""
+    """Frontend / UX flags (not graph skills)."""
 
-    # Admin may choose full 3D / light / auto for the office twin.
-    office_view: bool = False
+    # Market rule: 3D office for everyone (kept for YAML/API compatibility).
+    office_view: bool = True
 
 
 class SubscriptionConfig(BaseModel):
     plan: Literal["starter", "growth", "scale"] = "growth"
     skills: SubscriptionSkills = Field(default_factory=SubscriptionSkills)
     features: SubscriptionFeatures = Field(default_factory=SubscriptionFeatures)
-    # Presentation preference; without features.office_view runtime always uses auto.
-    office_mode: Literal["auto", "full", "light"] = "auto"
+    # Presentation preference — full 3D default for all plans.
+    office_mode: Literal["auto", "full", "light"] = "full"
 
 
 class TenantConfig(BaseModel):

@@ -75,21 +75,19 @@ def is_skill_allowed(tenant: TenantConfig, skill_name: str) -> bool:
 
 
 def is_office_view_entitled(tenant: TenantConfig) -> bool:
-    """Paid frontend entitlement: Admin may lock full / light / auto."""
-    return bool(tenant.subscription.features.office_view)
+    """
+    Market rule: full 3D office for everyone; free vs paid = skills/limits only.
+    Kept for API shape compatibility — always treated as on.
+    """
+    return True
 
 
 def effective_office_mode(tenant: TenantConfig) -> str:
-    """
-    Without office_view entitlement, always auto.
-    With entitlement, honor subscription.office_mode.
-    """
-    if not is_office_view_entitled(tenant):
-        return "auto"
+    """Honor subscription.office_mode; default full 3D for all plans."""
     mode = tenant.subscription.office_mode
     if mode in ("auto", "full", "light"):
         return mode
-    return "auto"
+    return "full"
 
 
 def filter_plan(tenant: TenantConfig, plan: Iterable[str]) -> list[str]:
