@@ -132,6 +132,23 @@ class SubscriptionConfig(BaseModel):
     office_mode: Literal["auto", "full", "light"] = "full"
 
 
+class BillingConfig(BaseModel):
+    """
+    Always-visible monthly spend for paying users (Admin).
+    Ads spend is billed by Google/Meta; Atrium subscription is separate.
+    """
+
+    currency: Literal["EUR"] = "EUR"
+    # Day of month when the Atrium plan renews / charges.
+    renews_on_day: int = Field(default=1, ge=1, le=28)
+    # List price for the current plan (stub until Stripe).
+    atrium_price_eur: float = 49.0
+    # Soft monthly ads ceiling the merchant set (not a hard kill-switch).
+    ads_monthly_budget_eur: float = 2500.0
+    # Snapshot of ads spend in the current calendar month (demo / last sync).
+    ads_spent_this_month_eur: float = 0.0
+
+
 class TenantConfig(BaseModel):
     tenant_id: str
     display_name: str
@@ -141,3 +158,4 @@ class TenantConfig(BaseModel):
     policy: PolicyConfig = Field(default_factory=PolicyConfig)
     integrations: IntegrationsConfig = Field(default_factory=IntegrationsConfig)
     subscription: SubscriptionConfig = Field(default_factory=SubscriptionConfig)
+    billing: BillingConfig = Field(default_factory=BillingConfig)

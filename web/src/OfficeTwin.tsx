@@ -44,6 +44,13 @@ import {
   type MotionHandle,
 } from './officeMotion'
 import { buildExteriorTrees, TREE_CANOPY } from './officeTrees'
+import {
+  buildRoomWalkers,
+  walkOffset,
+  walkSpeedForActivity,
+  walkState,
+  type WalkerPath,
+} from './officeWalkers'
 
 export { FOCUS_DURATION, FOCUS_EASE_CSS, MODAL_FADE_MS } from './officeMotion'
 
@@ -539,21 +546,26 @@ function easeWave(t: number) {
   return 0.5 - 0.5 * Math.cos(t)
 }
 
-/** Stylized person — slow idle bob, slightly livelier when lit, staggered phases. */
+/**
+ * Stylized person — calm back-and-forth walk inside the room, soft bob,
+ * slightly livelier when the skill light is on (staggered phases).
+ */
 function Ometto({
-  position,
+  path,
   accent,
   active,
-  phase = 0,
   reduceMotion,
 }: {
-  position: [number, number, number]
+  path: WalkerPath
   accent: string
   active: boolean
-  phase?: number
   reduceMotion: boolean
 }) {
   const ref = useRef<Group>(null)
+  const legL = useRef<Group>(null)
+  const legR = useRef<Group>(null)
+  const armLGroup = useRef<Group>(null)
+  const armRGroup = useRef<Group>(null)
   const shirtMat = useRef<MeshStandardMaterial>(null)
   const armL = useRef<MeshStandardMaterial>(null)
   const armR = useRef<MeshStandardMaterial>(null)
@@ -570,23 +582,41 @@ function Ometto({
     const a = activity.current
 
     if (ref.current) {
-      // ~2.5–3× slower than before; idle calm, active only a bit livelier
-      const speed = lerp(0.36, 0.88, a)
-      const amp = reduceMotion ? 0 : lerp(0.016, 0.038, a)
-      const t = clock.elapsedTime * speed + phase
-      const bob = (easeWave(t) * 2 - 1) * amp
-      ref.current.position.y = position[1] + bob
-      ref.current.position.x = position[0]
-      ref.current.position.z =
-        position[2] +
-        (reduceMotion
-          ? 0
-          : Math.sin(clock.elapsedTime * lerp(0.22, 0.55, a) + phase * 1.37) *
-            lerp(0.012, 0.028, a))
-      ref.current.rotation.y = reduceMotion
+      const [hx, hy, hz] = path.home
+      let x = hx
+      let z = hz
+      let faceY = 0
+
+      if (!reduceMotion) {
+        const speed = walkSpeedForActivity(path.speed, a)
+        const { t, facing } = walkState(clock.elapsedTime, speed, path.phase)
+        const off = walkOffset(t, path.amplitude)
+        if (path.axis === 'x') {
+          x = hx + off
+          faceY = facing > 0 ? Math.PI / 2 : -Math.PI / 2
+        } else {
+          z = hz + off
+          faceY = facing > 0 ? 0 : Math.PI
+        }
+      }
+
+      // Soft bob — slower idle, a touch livelier when lit
+      const bobSpeed = lerp(0.36, 0.72, a)
+      const bobAmp = reduceMotion ? 0 : lerp(0.014, 0.028, a)
+      const bob =
+        (easeWave(clock.elapsedTime * bobSpeed + path.phase) * 2 - 1) * bobAmp
+      ref.current.position.set(x, hy + bob, z)
+      ref.current.rotation.y = faceY
+
+      // Subtle limb swing only while walking (skip when reduced motion)
+      const stride = reduceMotion
         ? 0
-        : Math.sin(clock.elapsedTime * lerp(0.32, 0.72, a) + phase * 0.9) *
-          lerp(0.05, 0.11, a)
+        : Math.sin(clock.elapsedTime * lerp(2.1, 2.8, a) + path.phase) *
+          lerp(0.18, 0.28, a)
+      if (legL.current) legL.current.rotation.x = stride
+      if (legR.current) legR.current.rotation.x = -stride
+      if (armLGroup.current) armLGroup.current.rotation.x = -stride * 0.55
+      if (armRGroup.current) armRGroup.current.rotation.x = stride * 0.55
     }
 
     tmp.copy(idleColor).lerp(accentColor, a)
@@ -602,27 +632,35 @@ function Ometto({
   const pants = '#5d5b54'
 
   return (
-    <group ref={ref} position={position}>
-      <mesh position={[-0.07, 0.18, 0]}>
-        <boxGeometry args={[0.1, 0.36, 0.1]} />
-        <FlatMat color={pants} />
-      </mesh>
-      <mesh position={[0.07, 0.18, 0]}>
-        <boxGeometry args={[0.1, 0.36, 0.1]} />
-        <FlatMat color={pants} />
-      </mesh>
+    <group ref={ref} position={path.home}>
+      <group ref={legL} position={[-0.07, 0.18, 0]}>
+        <mesh position={[0, 0, 0]}>
+          <boxGeometry args={[0.1, 0.36, 0.1]} />
+          <FlatMat color={pants} />
+        </mesh>
+      </group>
+      <group ref={legR} position={[0.07, 0.18, 0]}>
+        <mesh position={[0, 0, 0]}>
+          <boxGeometry args={[0.1, 0.36, 0.1]} />
+          <FlatMat color={pants} />
+        </mesh>
+      </group>
       <mesh position={[0, 0.52, 0]}>
         <boxGeometry args={[0.32, 0.38, 0.22]} />
         <meshStandardMaterial ref={shirtMat} color="#ffffff" {...MATTE} />
       </mesh>
-      <mesh position={[-0.22, 0.5, 0]} rotation={[0, 0, 0.15]}>
-        <boxGeometry args={[0.08, 0.32, 0.08]} />
-        <meshStandardMaterial ref={armL} color="#ffffff" {...MATTE} />
-      </mesh>
-      <mesh position={[0.22, 0.5, 0]} rotation={[0, 0, -0.15]}>
-        <boxGeometry args={[0.08, 0.32, 0.08]} />
-        <meshStandardMaterial ref={armR} color="#ffffff" {...MATTE} />
-      </mesh>
+      <group ref={armLGroup} position={[-0.22, 0.5, 0]}>
+        <mesh rotation={[0, 0, 0.15]}>
+          <boxGeometry args={[0.08, 0.32, 0.08]} />
+          <meshStandardMaterial ref={armL} color="#ffffff" {...MATTE} />
+        </mesh>
+      </group>
+      <group ref={armRGroup} position={[0.22, 0.5, 0]}>
+        <mesh rotation={[0, 0, -0.15]}>
+          <boxGeometry args={[0.08, 0.32, 0.08]} />
+          <meshStandardMaterial ref={armR} color="#ffffff" {...MATTE} />
+        </mesh>
+      </group>
       <mesh position={[0, 0.82, 0]}>
         <sphereGeometry args={[0.14, 16, 16]} />
         <FlatMat color={skin} />
@@ -1120,16 +1158,12 @@ function RoomZone({
 
   const halfW = room.size[0] / 2
   const halfD = room.size[2] / 2
-  const phaseBase = room.hotspot * 2.7
 
-  const peopleOffsets = useMemo(() => {
-    const offsets: [number, number, number][] = []
-    for (let i = 0; i < room.people; i++) {
-      const side = i % 2 === 0 ? -1 : 1
-      offsets.push([hx + side * 0.55, 0, hz + (i < 2 ? 0.2 : -0.35)])
-    }
-    return offsets
-  }, [hx, hz, room.people])
+  const walkerPaths = useMemo(
+    () =>
+      buildRoomWalkers(hx, hz, halfW, halfD, room.people, room.hotspot),
+    [hx, hz, halfW, halfD, room.people, room.hotspot],
+  )
 
   useFrame(({ clock }, dt) => {
     const target = locked ? 0 : lightLevel(light)
@@ -1276,7 +1310,7 @@ function RoomZone({
         </>
       )}
 
-      {peopleOffsets.map((pos, i) => (
+      {walkerPaths.map((path, i) => (
         <group
           key={`${room.id}-p${i}`}
           onClick={(e) => {
@@ -1291,10 +1325,9 @@ function RoomZone({
           }}
         >
           <Ometto
-            position={pos}
+            path={path}
             accent={room.accent}
             active={active}
-            phase={phaseBase + i * 2.35 + i * 0.41}
             reduceMotion={reduceMotion}
           />
         </group>
@@ -1952,14 +1985,20 @@ function OfficeLightTwin({
                 )}
               </span>
               <strong>{room.label}</strong>
-              <div className="floor-people" aria-hidden>
+              <div className="floor-people" aria-hidden data-testid="floor-people-walk">
                 {Array.from({ length: room.people }).map((_, i) => (
                   <span
                     key={i}
-                    className={`ometto-2d ${
+                    className={`ometto-2d ometto-walk ${
                       !locked && (light === 'on' || needsDecision) ? 'active' : ''
                     }`}
-                    style={{ animationDelay: `${-i * 0.7}s` }}
+                    style={
+                      {
+                        animationDelay: `${-i * 1.8 - room.hotspot * 0.35}s`,
+                        ['--walk-span' as string]: `${10 + (i % 2) * 6}px`,
+                        ['--walk-dur' as string]: `${18 + ((room.hotspot + i) % 5) * 2.4}s`,
+                      } as CSSProperties
+                    }
                   />
                 ))}
               </div>

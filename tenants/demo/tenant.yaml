@@ -70,3 +70,9 @@ subscription:
   features:
     office_view: true
   office_mode: full
+billing:
+  currency: EUR
+  renews_on_day: 1
+  atrium_price_eur: 79.0
+  ads_monthly_budget_eur: 2500.0
+  ads_spent_this_month_eur: 2015.5

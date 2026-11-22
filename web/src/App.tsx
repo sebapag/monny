@@ -67,7 +67,7 @@ import {
   reportPopupTitle,
   skillLabel,
 } from './labels'
-import type { OfficeMode } from './api'
+import type { BillingConfig, OfficeMode } from './api'
 import {
   assertGoalAllowed,
   effectiveOfficeMode,
@@ -76,6 +76,13 @@ import {
   mergeSkills,
   skillsFromConfig,
 } from './entitlements'
+import {
+  billingFromConfig,
+  chargeExplainers,
+  formatEuro,
+  monthPeriodLabelIt,
+  spendProgressPct,
+} from './adminBilling'
 import {
   LIGHT_LINGER_MS,
   litDeptsFromAgentRun,
@@ -741,6 +748,10 @@ function KnowledgeAdminPanel({
   )
 }
 
+function setBilling(cfg: TenantConfig, patch: Partial<BillingConfig>): BillingConfig {
+  return { ...billingFromConfig(cfg), ...patch }
+}
+
 function AdminForm({
   detail,
   onSave,
@@ -759,211 +770,371 @@ function AdminForm({
   const secretStatus = (ref: string) =>
     detail.secrets.find((s) => s.secret_ref === ref)?.configured
 
+  const billing = billingFromConfig(cfg)
+  const spent = billing.ads_spent_this_month_eur
+  const budget = billing.ads_monthly_budget_eur
+  const pct = spendProgressPct(spent, budget)
+  const charges = chargeExplainers(billing, cfg.subscription?.plan)
+  const period = monthPeriodLabelIt()
+
+  const saveBar = (
+    <div className="admin-save-bar">
+      <button className="btn btn-primary" disabled={busy} onClick={() => void onSave(cfg)}>
+        {busy ? 'Salvataggio…' : 'Salva configurazione'}
+      </button>
+      <span className="status-line">
+        File: {detail.path.split('/').slice(-2).join('/')}
+      </span>
+    </div>
+  )
+
   return (
-    <div className="form-grid">
-      <div className="field">
-        <label>Nome del negozio</label>
-        <input
-          value={cfg.display_name}
-          onChange={(e) => set('display_name', e.target.value)}
-        />
-        <FieldHelp>Come compare Atrium nell’header e nei report.</FieldHelp>
-      </div>
-
-      <div className="section-title">Negozio Shopify</div>
-      <div className="field-row">
-        <div className="field">
-          <label>Dominio negozio</label>
-          <input
-            value={cfg.shopify.shop_domain}
-            onChange={(e) =>
-              set('shopify', { ...cfg.shopify, shop_domain: e.target.value })
-            }
-          />
-          <FieldHelp>Es. mio-negozio.myshopify.com</FieldHelp>
+    <div className="admin-stack" data-testid="admin-stack">
+      {/* 1 — Monthly spend always first and obvious */}
+      <section className="admin-block admin-spend" data-testid="admin-monthly-spend">
+        <header className="admin-block-head">
+          <p className="admin-kicker">Atrium</p>
+          <h3>Spesa del mese</h3>
+          <p>Quanto hai speso, il limite che ti sei dato e quando arrivano gli addebiti.</p>
+        </header>
+        <div className="spend-hero">
+          <div className="spend-hero-main">
+            <span className="spend-hero-label">Speso in ads · {period}</span>
+            <strong className="spend-hero-value" data-testid="admin-ads-spent">
+              {formatEuro(spent)}
+            </strong>
+            <span className="spend-hero-sub">
+              su un limite di {formatEuro(budget)} ({pct}% del budget)
+            </span>
+            <div
+              className="spend-progress"
+              role="progressbar"
+              aria-valuenow={pct}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-label={`Budget ads usato al ${pct} percento`}
+            >
+              <span style={{ width: `${pct}%` }} />
+            </div>
+          </div>
+          <div className="spend-hero-side">
+            <div className="spend-chip">
+              <span>Abbonamento Atrium</span>
+              <strong data-testid="admin-atrium-price">
+                {billing.atrium_price_eur > 0
+                  ? `${formatEuro(billing.atrium_price_eur)} / mese`
+                  : 'Nessun addebito'}
+              </strong>
+            </div>
+            <div className="spend-chip">
+              <span>Rinnovo piano</span>
+              <strong>giorno {billing.renews_on_day}</strong>
+            </div>
+          </div>
         </div>
-        <div className="field">
-          <label>Versione API</label>
-          <input
-            value={cfg.shopify.api_version}
-            onChange={(e) =>
-              set('shopify', { ...cfg.shopify, api_version: e.target.value })
-            }
-          />
+        <ul className="spend-charges">
+          <li data-testid="admin-charge-atrium">{charges.atrium}</li>
+          <li data-testid="admin-charge-ads">{charges.ads}</li>
+        </ul>
+        <div className="field-row admin-spend-edit">
+          <div className="field">
+            <label htmlFor="ads-budget">Limite ads mensile (€)</label>
+            <input
+              id="ads-budget"
+              data-testid="ads-monthly-budget"
+              type="number"
+              min={0}
+              step="50"
+              value={budget}
+              onChange={(e) =>
+                set('billing', setBilling(cfg, { ads_monthly_budget_eur: Number(e.target.value) }))
+              }
+            />
+            <FieldHelp>Soglia che vuoi rispettare questo mese. Non blocca Google/Meta da sola.</FieldHelp>
+          </div>
+          <div className="field">
+            <label htmlFor="ads-spent">Speso ads questo mese (€)</label>
+            <input
+              id="ads-spent"
+              data-testid="ads-spent-month"
+              type="number"
+              min={0}
+              step="10"
+              value={spent}
+              onChange={(e) =>
+                set(
+                  'billing',
+                  setBilling(cfg, { ads_spent_this_month_eur: Number(e.target.value) }),
+                )
+              }
+            />
+            <FieldHelp>Ultimo sync o valore manuale finché i canali non aggiornano in automatico.</FieldHelp>
+          </div>
+          <div className="field">
+            <label htmlFor="renew-day">Giorno addebito Atrium</label>
+            <input
+              id="renew-day"
+              data-testid="atrium-renew-day"
+              type="number"
+              min={1}
+              max={28}
+              value={billing.renews_on_day}
+              onChange={(e) =>
+                set(
+                  'billing',
+                  setBilling(cfg, {
+                    renews_on_day: Math.min(28, Math.max(1, Number(e.target.value) || 1)),
+                  }),
+                )
+              }
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="atrium-price">Prezzo piano Atrium (€ / mese)</label>
+            <input
+              id="atrium-price"
+              data-testid="atrium-price-eur"
+              type="number"
+              min={0}
+              step="1"
+              value={billing.atrium_price_eur}
+              onChange={(e) =>
+                set('billing', setBilling(cfg, { atrium_price_eur: Number(e.target.value) }))
+              }
+            />
+          </div>
         </div>
-      </div>
-      <div className="secret-status-row">
-        <span>Accesso Shopify</span>
-        <span className={`pill ${secretStatus(cfg.shopify.auth.secret_ref) ? 'ok' : 'miss'}`}>
-          {secretStatus(cfg.shopify.auth.secret_ref) ? 'Configurato' : 'Mancante'}
-        </span>
-      </div>
+      </section>
 
-      <div className="section-title">Account Google Ads</div>
-      <div className="field">
-        <label>ID cliente Google Ads</label>
-        <input
-          value={cfg.ads.google?.customer_id ?? ''}
-          onChange={(e) =>
-            set('ads', {
-              ...cfg.ads,
-              google: {
-                customer_id: e.target.value,
-                login_customer_id: cfg.ads.google?.login_customer_id ?? null,
-                secret_ref: cfg.ads.google?.secret_ref ?? 'GOOGLE_ADS_DEMO',
-              },
-            })
-          }
-        />
-      </div>
-      <div className="secret-status-row">
-        <span>Credenziali Google Ads</span>
-        <span
-          className={`pill ${secretStatus(cfg.ads.google?.secret_ref || '') ? 'ok' : 'miss'}`}
-        >
-          {secretStatus(cfg.ads.google?.secret_ref || '') ? 'Configurato' : 'Mancante'}
-        </span>
-      </div>
-
-      <div className="section-title">Account Meta Ads</div>
-      <div className="field">
-        <label>ID account pubblicitario</label>
-        <input
-          value={cfg.ads.meta?.ad_account_id ?? ''}
-          onChange={(e) =>
-            set('ads', {
-              ...cfg.ads,
-              meta: {
-                ad_account_id: e.target.value,
-                secret_ref: cfg.ads.meta?.secret_ref ?? 'META_ADS_DEMO',
-              },
-            })
-          }
-        />
-      </div>
-      <div className="secret-status-row">
-        <span>Credenziali Meta</span>
-        <span
-          className={`pill ${secretStatus(cfg.ads.meta?.secret_ref || '') ? 'ok' : 'miss'}`}
-        >
-          {secretStatus(cfg.ads.meta?.secret_ref || '') ? 'Configurato' : 'Mancante'}
-        </span>
-      </div>
-
-      <div className="section-title">Sito e SEO</div>
-      <div className="field-row">
-        <div className="field">
-          <label>Indirizzo del sito</label>
-          <input
-            value={cfg.site.base_url}
-            onChange={(e) => set('site', { ...cfg.site, base_url: e.target.value })}
-          />
-        </div>
-        <div className="field">
-          <label>Sitemap (opzionale)</label>
-          <input
-            value={cfg.site.sitemap_url ?? ''}
-            onChange={(e) => set('site', { ...cfg.site, sitemap_url: e.target.value })}
-          />
-        </div>
-      </div>
-      <div className="field">
-        <label>Pagine da controllare per prime (una per riga)</label>
-        <textarea
-          rows={4}
-          value={(cfg.site.priority_urls ?? []).join('\n')}
-          onChange={(e) =>
-            set('site', {
-              ...cfg.site,
-              priority_urls: e.target.value
-                .split('\n')
-                .map((l) => l.trim())
-                .filter(Boolean),
-            })
-          }
-        />
-      </div>
-
-      <div className="section-title">Attivazione piano / reparti</div>
-      <FieldHelp>
-        Scegli i reparti inclusi nella sottoscrizione. Leadership (decisioni HITL) resta
-        sempre disponibile. I reparti spenti non partono nell’agent e restano chiusi
-        nell’ufficio.
-      </FieldHelp>
-      <div className="field">
-        <label>Piano</label>
-        <select
-          value={cfg.subscription?.plan ?? 'growth'}
-          onChange={(e) =>
-            set('subscription', {
-              plan: e.target.value as 'starter' | 'growth' | 'scale',
-              skills: mergeSkills(cfg.subscription?.skills),
-              features: {
-                office_view: true,
-                ...(cfg.subscription?.features ?? {}),
-              },
-              office_mode: cfg.subscription?.office_mode ?? 'full',
-            })
-          }
-        >
-          <option value="starter">Starter</option>
-          <option value="growth">Growth</option>
-          <option value="scale">Scale</option>
-        </select>
-      </div>
-      <div className="skill-toggles">
-        {(
-          [
-            ['spend', 'Spend pubblicitario', 'Google Ads e Meta'],
-            ['seo', 'SEO', 'Title, meta e H1'],
-            ['shopify', 'Negozio Shopify', 'Promo e anteprime negozio'],
-            ['leads', 'Lead', 'Sequenze di lead warming'],
-            ['operations', 'Operations', 'Ordini, giacenze, spedizioni'],
-            ['design', 'Graphic Designer', 'Asset, creatività ads, brand kit'],
-            ['it', 'IT', 'Integrazioni, accessi, monitoring'],
-            ['controlling', 'Controlling', 'Budget, KPI, costi anomali'],
-          ] as const
-        ).map(([key, title, hint]) => {
-          const skills = mergeSkills(cfg.subscription?.skills)
-          return (
-            <label key={key} className="check-row skill-toggle">
+      {/* 2 — Shop URLs / store settings */}
+      <section className="admin-block" data-testid="admin-shop-urls">
+        <header className="admin-block-head">
+          <h3>Negozio e URL</h3>
+          <p>Dominio Shopify, sito pubblico e pagine da controllare per prime.</p>
+        </header>
+        <div className="form-grid">
+          <div className="field">
+            <label>Nome del negozio</label>
+            <input
+              value={cfg.display_name}
+              onChange={(e) => set('display_name', e.target.value)}
+            />
+            <FieldHelp>Come compare Atrium nell’header e nei report.</FieldHelp>
+          </div>
+          <div className="field-row">
+            <div className="field">
+              <label>Dominio Shopify</label>
               <input
-                type="checkbox"
-                checked={Boolean(skills[key])}
+                value={cfg.shopify.shop_domain}
                 onChange={(e) =>
-                  set('subscription', {
-                    plan: cfg.subscription?.plan ?? 'growth',
-                    skills: { ...skills, [key]: e.target.checked },
-                    features: {
-                      office_view: true,
-                      ...(cfg.subscription?.features ?? {}),
-                    },
-                    office_mode: cfg.subscription?.office_mode ?? 'full',
-                  })
+                  set('shopify', { ...cfg.shopify, shop_domain: e.target.value })
                 }
               />
-              <span>
-                <strong>{title}</strong>
-                <span className="muted"> — {hint}</span>
-              </span>
-            </label>
-          )
-        })}
-        <p className="status-line" style={{ marginTop: '0.35rem' }}>
-          Leadership / decisioni: sempre attivo. Free vs paid = skill/limiti, non la grafica 3D.
-        </p>
-      </div>
+              <FieldHelp>Es. mio-negozio.myshopify.com</FieldHelp>
+            </div>
+            <div className="field">
+              <label>Versione API Shopify</label>
+              <input
+                value={cfg.shopify.api_version}
+                onChange={(e) =>
+                  set('shopify', { ...cfg.shopify, api_version: e.target.value })
+                }
+              />
+            </div>
+          </div>
+          <div className="secret-status-row">
+            <span>Accesso Shopify</span>
+            <span
+              className={`pill ${secretStatus(cfg.shopify.auth.secret_ref) ? 'ok' : 'miss'}`}
+            >
+              {secretStatus(cfg.shopify.auth.secret_ref) ? 'Configurato' : 'Mancante'}
+            </span>
+          </div>
+          <div className="field-row">
+            <div className="field">
+              <label>Indirizzo del sito</label>
+              <input
+                value={cfg.site.base_url}
+                onChange={(e) => set('site', { ...cfg.site, base_url: e.target.value })}
+              />
+            </div>
+            <div className="field">
+              <label>Sitemap (opzionale)</label>
+              <input
+                value={cfg.site.sitemap_url ?? ''}
+                onChange={(e) => set('site', { ...cfg.site, sitemap_url: e.target.value })}
+              />
+            </div>
+          </div>
+          <div className="field">
+            <label>Pagine da controllare per prime (una per riga)</label>
+            <textarea
+              rows={4}
+              value={(cfg.site.priority_urls ?? []).join('\n')}
+              onChange={(e) =>
+                set('site', {
+                  ...cfg.site,
+                  priority_urls: e.target.value
+                    .split('\n')
+                    .map((l) => l.trim())
+                    .filter(Boolean),
+                })
+              }
+            />
+          </div>
+        </div>
+      </section>
 
-      <div className="section-title">Vista ufficio</div>
-      <FieldHelp>
-        L’ufficio 3D è incluso per tutti i piani. Qui scegli solo la presentazione
-        preferita: completa (3D), leggera (2D) o automatica in base al browser.
-      </FieldHelp>
-      {(() => {
-        const officeMode = (cfg.subscription?.office_mode ?? 'full') as OfficeMode
-        return (
-          <div className="skill-toggles office-view-toggles">
-            <div className="field" style={{ marginTop: '0.35rem' }}>
+      {/* 3 — Meta + Google Ads accounts */}
+      <section className="admin-block" data-testid="admin-ads-accounts">
+        <header className="admin-block-head">
+          <h3>Account Meta e Ads</h3>
+          <p>Collega gli ID account. Le credenziali restano nei secret del tenant.</p>
+        </header>
+        <div className="form-grid">
+          <div className="field">
+            <label>ID account Meta Ads</label>
+            <input
+              data-testid="meta-ad-account-id"
+              value={cfg.ads.meta?.ad_account_id ?? ''}
+              onChange={(e) =>
+                set('ads', {
+                  ...cfg.ads,
+                  meta: {
+                    ad_account_id: e.target.value,
+                    secret_ref: cfg.ads.meta?.secret_ref ?? 'META_ADS_DEMO',
+                  },
+                })
+              }
+            />
+            <FieldHelp>Es. act_123456789</FieldHelp>
+          </div>
+          <div className="secret-status-row">
+            <span>Credenziali Meta</span>
+            <span
+              className={`pill ${secretStatus(cfg.ads.meta?.secret_ref || '') ? 'ok' : 'miss'}`}
+            >
+              {secretStatus(cfg.ads.meta?.secret_ref || '') ? 'Configurato' : 'Mancante'}
+            </span>
+          </div>
+          <div className="field">
+            <label>ID cliente Google Ads</label>
+            <input
+              data-testid="google-ads-customer-id"
+              value={cfg.ads.google?.customer_id ?? ''}
+              onChange={(e) =>
+                set('ads', {
+                  ...cfg.ads,
+                  google: {
+                    customer_id: e.target.value,
+                    login_customer_id: cfg.ads.google?.login_customer_id ?? null,
+                    secret_ref: cfg.ads.google?.secret_ref ?? 'GOOGLE_ADS_DEMO',
+                  },
+                })
+              }
+            />
+            <FieldHelp>Formato 000-000-0000</FieldHelp>
+          </div>
+          <div className="secret-status-row">
+            <span>Credenziali Google Ads</span>
+            <span
+              className={`pill ${secretStatus(cfg.ads.google?.secret_ref || '') ? 'ok' : 'miss'}`}
+            >
+              {secretStatus(cfg.ads.google?.secret_ref || '') ? 'Configurato' : 'Mancante'}
+            </span>
+          </div>
+        </div>
+      </section>
+
+      {/* 4 — Plan / departments */}
+      <section className="admin-block" data-testid="admin-plan-skills">
+        <header className="admin-block-head">
+          <h3>Piano e reparti</h3>
+          <p>
+            Scegli i reparti nel piano. Leadership resta sempre disponibile. I reparti spenti
+            non partono nell’agent.
+          </p>
+        </header>
+        <div className="form-grid">
+          <div className="field">
+            <label>Piano</label>
+            <select
+              value={cfg.subscription?.plan ?? 'growth'}
+              onChange={(e) =>
+                set('subscription', {
+                  plan: e.target.value as 'starter' | 'growth' | 'scale',
+                  skills: mergeSkills(cfg.subscription?.skills),
+                  features: {
+                    office_view: true,
+                    ...(cfg.subscription?.features ?? {}),
+                  },
+                  office_mode: cfg.subscription?.office_mode ?? 'full',
+                })
+              }
+            >
+              <option value="starter">Starter</option>
+              <option value="growth">Growth</option>
+              <option value="scale">Scale</option>
+            </select>
+          </div>
+          <div className="skill-toggles">
+            {(
+              [
+                ['spend', 'Spend pubblicitario', 'Google Ads e Meta'],
+                ['seo', 'SEO', 'Title, meta e H1'],
+                ['shopify', 'Negozio Shopify', 'Promo e anteprime negozio'],
+                ['leads', 'Lead', 'Sequenze di lead warming'],
+                ['operations', 'Operations', 'Ordini, giacenze, spedizioni'],
+                ['design', 'Graphic Designer', 'Asset, creatività ads, brand kit'],
+                ['it', 'IT', 'Integrazioni, accessi, monitoring'],
+                ['controlling', 'Controlling', 'Budget, KPI, costi anomali'],
+              ] as const
+            ).map(([key, title, hint]) => {
+              const skills = mergeSkills(cfg.subscription?.skills)
+              return (
+                <label key={key} className="check-row skill-toggle">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(skills[key])}
+                    onChange={(e) =>
+                      set('subscription', {
+                        plan: cfg.subscription?.plan ?? 'growth',
+                        skills: { ...skills, [key]: e.target.checked },
+                        features: {
+                          office_view: true,
+                          ...(cfg.subscription?.features ?? {}),
+                        },
+                        office_mode: cfg.subscription?.office_mode ?? 'full',
+                      })
+                    }
+                  />
+                  <span>
+                    <strong>{title}</strong>
+                    <span className="muted"> — {hint}</span>
+                  </span>
+                </label>
+              )
+            })}
+            <p className="status-line" style={{ marginTop: '0.35rem' }}>
+              Leadership / decisioni: sempre attivo. Free vs paid = skill e limiti, non la
+              grafica 3D.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* 5 — Office view */}
+      <section className="admin-block" data-testid="admin-office-view">
+        <header className="admin-block-head">
+          <h3>Vista ufficio</h3>
+          <p>
+            L’ufficio 3D è incluso per tutti. Scegli completa (3D), leggera (2D) o automatica.
+          </p>
+        </header>
+        {(() => {
+          const officeMode = (cfg.subscription?.office_mode ?? 'full') as OfficeMode
+          return (
+            <div className="field">
               <label htmlFor="office-mode-select">Presentazione ufficio</label>
               <select
                 id="office-mode-select"
@@ -986,146 +1157,147 @@ function AdminForm({
                 <option value="light">Leggera</option>
               </select>
             </div>
+          )
+        })()}
+      </section>
+
+      {/* 6 — Safety + decision rights + spend thresholds */}
+      <section className="admin-block" data-testid="admin-rules">
+        <header className="admin-block-head">
+          <h3>Regole e diritti</h3>
+          <p>Conferme HITL, autonomia per reparto e soglie ads (ROAS / CPA).</p>
+        </header>
+        <div className="form-grid">
+          <label className="check-row">
+            <input
+              type="checkbox"
+              checked={cfg.policy.hitl_default}
+              onChange={(e) =>
+                set('policy', { ...cfg.policy, hitl_default: e.target.checked })
+              }
+            />
+            Chiedi sempre conferma prima di applicare cambiamenti
+          </label>
+
+          <p className="admin-subhead">Diritti decisionali per reparto</p>
+          <FieldHelp>
+            «Sempre chiedi» rispetta anche il flag sopra; «Entro policy» applica solo se
+            auto_apply è attivo; «L’agente risolve» salta l’HITL per quella famiglia.
+          </FieldHelp>
+          <div className="decision-rights-grid">
+            {(
+              [
+                ['spend', 'Spend pubblicitario'],
+                ['seo', 'SEO'],
+                ['shopify', 'Negozio Shopify'],
+                ['leads', 'Lead'],
+                ['operations', 'Operations'],
+                ['design', 'Graphic Designer'],
+                ['it', 'IT'],
+                ['controlling', 'Controlling'],
+              ] as const
+            ).map(([key, title]) => {
+              const rights: DecisionRights = {
+                spend: 'always_ask',
+                seo: 'always_ask',
+                shopify: 'always_ask',
+                leads: 'always_ask',
+                operations: 'always_ask',
+                design: 'always_ask',
+                it: 'always_ask',
+                controlling: 'always_ask',
+                ...(cfg.policy.decision_rights ?? {}),
+              }
+              const value = rights[key]
+              return (
+                <div className="field" key={key}>
+                  <label htmlFor={`decision-right-${key}`}>{title}</label>
+                  <select
+                    id={`decision-right-${key}`}
+                    data-testid={`decision-right-${key}`}
+                    value={value}
+                    onChange={(e) =>
+                      set('policy', {
+                        ...cfg.policy,
+                        decision_rights: {
+                          ...rights,
+                          [key]: e.target.value as DecisionAutonomy,
+                        },
+                      })
+                    }
+                  >
+                    <option value="always_ask">Sempre chiedi</option>
+                    <option value="within_policy">Entro policy</option>
+                    <option value="agent_resolves">L’agente risolve</option>
+                  </select>
+                </div>
+              )
+            })}
           </div>
-        )
-      })()}
 
-      <div className="section-title">Regole di sicurezza</div>
-      <label className="check-row">
-        <input
-          type="checkbox"
-          checked={cfg.policy.hitl_default}
-          onChange={(e) =>
-            set('policy', { ...cfg.policy, hitl_default: e.target.checked })
-          }
-        />
-        Chiedi sempre conferma prima di applicare cambiamenti
-      </label>
-
-      <div className="section-title">Diritti decisionali per reparto</div>
-      <FieldHelp>
-        Cosa può fare ogni skill senza passare da Leadership. «Sempre chiedi» rispetta
-        anche il flag sopra; «Entro policy» applica solo se auto_apply è attivo;
-        «L’agente risolve» salta l’HITL per quella famiglia.
-      </FieldHelp>
-      <div className="decision-rights-grid">
-        {(
-          [
-            ['spend', 'Spend pubblicitario'],
-            ['seo', 'SEO'],
-            ['shopify', 'Negozio Shopify'],
-            ['leads', 'Lead'],
-            ['operations', 'Operations'],
-            ['design', 'Graphic Designer'],
-            ['it', 'IT'],
-            ['controlling', 'Controlling'],
-          ] as const
-        ).map(([key, title]) => {
-          const rights: DecisionRights = {
-            spend: 'always_ask',
-            seo: 'always_ask',
-            shopify: 'always_ask',
-            leads: 'always_ask',
-            operations: 'always_ask',
-            design: 'always_ask',
-            it: 'always_ask',
-            controlling: 'always_ask',
-            ...(cfg.policy.decision_rights ?? {}),
-          }
-          const value = rights[key]
-          return (
-            <div className="field" key={key}>
-              <label htmlFor={`decision-right-${key}`}>{title}</label>
-              <select
-                id={`decision-right-${key}`}
-                data-testid={`decision-right-${key}`}
-                value={value}
+          <p className="admin-subhead">Soglie ads</p>
+          <div className="field-row">
+            <div className="field">
+              <label>ROAS minimo accettabile</label>
+              <input
+                type="number"
+                step="0.1"
+                value={cfg.policy.spend.thresholds.min_roas}
                 onChange={(e) =>
                   set('policy', {
                     ...cfg.policy,
-                    decision_rights: {
-                      ...rights,
-                      [key]: e.target.value as DecisionAutonomy,
+                    spend: {
+                      ...cfg.policy.spend,
+                      thresholds: {
+                        ...cfg.policy.spend.thresholds,
+                        min_roas: Number(e.target.value),
+                      },
                     },
                   })
                 }
-              >
-                <option value="always_ask">Sempre chiedi</option>
-                <option value="within_policy">Entro policy</option>
-                <option value="agent_resolves">L’agente risolve</option>
-              </select>
+              />
             </div>
-          )
-        })}
-      </div>
+            <div className="field">
+              <label>CPA massimo accettabile</label>
+              <input
+                type="number"
+                step="0.1"
+                value={cfg.policy.spend.thresholds.max_cpa}
+                onChange={(e) =>
+                  set('policy', {
+                    ...cfg.policy,
+                    spend: {
+                      ...cfg.policy.spend,
+                      thresholds: {
+                        ...cfg.policy.spend.thresholds,
+                        max_cpa: Number(e.target.value),
+                      },
+                    },
+                  })
+                }
+              />
+            </div>
+            <div className="field">
+              <label>Taglio budget max %</label>
+              <input
+                type="number"
+                value={cfg.policy.spend.max_budget_delta_pct}
+                onChange={(e) =>
+                  set('policy', {
+                    ...cfg.policy,
+                    spend: {
+                      ...cfg.policy.spend,
+                      max_budget_delta_pct: Number(e.target.value),
+                    },
+                  })
+                }
+              />
+            </div>
+          </div>
+        </div>
+      </section>
 
-      <div className="field-row">
-        <div className="field">
-          <label>ROAS minimo accettabile</label>
-          <input
-            type="number"
-            step="0.1"
-            value={cfg.policy.spend.thresholds.min_roas}
-            onChange={(e) =>
-              set('policy', {
-                ...cfg.policy,
-                spend: {
-                  ...cfg.policy.spend,
-                  thresholds: {
-                    ...cfg.policy.spend.thresholds,
-                    min_roas: Number(e.target.value),
-                  },
-                },
-              })
-            }
-          />
-        </div>
-        <div className="field">
-          <label>CPA massimo accettabile</label>
-          <input
-            type="number"
-            step="0.1"
-            value={cfg.policy.spend.thresholds.max_cpa}
-            onChange={(e) =>
-              set('policy', {
-                ...cfg.policy,
-                spend: {
-                  ...cfg.policy.spend,
-                  thresholds: {
-                    ...cfg.policy.spend.thresholds,
-                    max_cpa: Number(e.target.value),
-                  },
-                },
-              })
-            }
-          />
-        </div>
-        <div className="field">
-          <label>Taglio budget max %</label>
-          <input
-            type="number"
-            value={cfg.policy.spend.max_budget_delta_pct}
-            onChange={(e) =>
-              set('policy', {
-                ...cfg.policy,
-                spend: {
-                  ...cfg.policy.spend,
-                  max_budget_delta_pct: Number(e.target.value),
-                },
-              })
-            }
-          />
-        </div>
-      </div>
-
-      <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center' }}>
-        <button className="btn btn-primary" disabled={busy} onClick={() => void onSave(cfg)}>
-          {busy ? 'Salvataggio…' : 'Salva configurazione'}
-        </button>
-        <span className="status-line">
-          Salvato in {detail.path.split('/').slice(-2).join('/')}
-        </span>
-      </div>
+      {saveBar}
     </div>
   )
 }
@@ -1781,17 +1953,21 @@ function App() {
       <main className="page">
         {route.mode === 'admin' ? (
           <>
-            <section className="page-intro">
+            <section className="page-intro admin-intro">
               <div>
+                <p className="admin-brand-lockup">
+                  <span className="admin-brand-name">Atrium</span>
+                  <span className="admin-brand-sub">Workspace marketing</span>
+                </p>
                 <h1>Admin</h1>
                 <p>
-                  Impostazioni di <strong>{tenantLabel}</strong>. Solo ciò che serve per
-                  collegare negozio e ads.
+                  Tre cose chiare per <strong>{tenantLabel}</strong>: spesa del mese, URL del
+                  negozio, account Meta e Ads.
                 </p>
               </div>
             </section>
-            <section className="panel">
-              <h2>I tuoi negozi</h2>
+            <section className="panel admin-tenants-panel">
+              <h2>Negozio attivo</h2>
               <div className="tenant-chips">
                 {tenants.map((t) => (
                   <button
@@ -1809,8 +1985,7 @@ function App() {
                 ))}
               </div>
             </section>
-            <section className="panel">
-              <h2>Configurazione · {tenantLabel}</h2>
+            <section className="panel admin-config-panel">
               {tenantDetail && (
                 <AdminForm detail={tenantDetail} onSave={saveConfig} busy={busy} />
               )}
