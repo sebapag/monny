@@ -1,11 +1,36 @@
 /**
- * Atrium market-test API (Supabase Edge Function).
- * Replaces FastAPI for Netlify + Supabase stack.
- *
- * Full LangGraph lives out-of-process for now — keyword/Grok-light planner stub.
- * TODO(later): optional FastAPI/LangGraph container when load requires it.
+ * Atrium thin API (Supabase Edge Function).
+ * Auth-adjacent + tenants/knowledge. Real LangGraph runs go to WORKER_URL
+ * (Cloud Run / local uvicorn) when set; otherwise keyword stub fallback.
  */
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+
+function workerUrl(): string | null {
+  const raw = (Deno.env.get("WORKER_URL") ?? "").trim().replace(/\/$/, "");
+  return raw || null;
+}
+
+/** Proxy agent routes to the LangGraph worker; returns null if no worker. */
+async function proxyWorker(req: Request, path: string): Promise<Response | null> {
+  const base = workerUrl();
+  if (!base) return null;
+  const url = new URL(req.url);
+  const target = `${base}${path}${url.search}`;
+  const headers = new Headers();
+  const auth = req.headers.get("Authorization");
+  if (auth) headers.set("Authorization", auth);
+  headers.set("Content-Type", "application/json");
+  const init: RequestInit = { method: req.method, headers };
+  if (req.method !== "GET" && req.method !== "HEAD") {
+    init.body = await req.text();
+  }
+  const res = await fetch(target, init);
+  const body = await res.text();
+  return new Response(body, {
+    status: res.status,
+    headers: { ...cors, "Content-Type": res.headers.get("Content-Type") ?? "application/json" },
+  });
+}
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -344,18 +369,20 @@ Deno.serve(async (req) => {
   try {
     if (req.method === "GET" && (path === "/health" || path === "/api/health")) {
       const llm = Boolean((Deno.env.get("XAI_API_KEY") ?? "").trim());
+      const worker = workerUrl();
       return json({
         ok: true,
         dry_run: true,
         default_tenant: "demo",
         auth: { backend: "supabase", supabase_configured: true },
-        stack: "netlify-supabase",
+        stack: "netlify-supabase-worker",
+        worker_url: worker ? true : false,
         llm: {
           enabled: llm,
           provider: llm ? "xai" : null,
           model: llm ? Deno.env.get("MONNY_LLM_MODEL") ?? "grok-4.20-0309-non-reasoning" : null,
         },
-        planner: llm ? "grok-light" : "keyword-stub",
+        planner: worker ? "langgraph-worker" : llm ? "grok-light" : "keyword-stub",
       });
     }
 
@@ -653,6 +680,17 @@ Deno.serve(async (req) => {
           enabled: data.enabled,
         },
       });
+    }
+
+    // Prefer LangGraph worker when WORKER_URL is configured.
+    if (
+      (req.method === "GET" && path === "/api/approvals") ||
+      (req.method === "POST" && path.match(/^\/api\/approvals\/[^/]+\/decide$/)) ||
+      (req.method === "POST" && (path === "/api/runs" || path === "/api/chat")) ||
+      (req.method === "GET" && path.match(/^\/api\/runs\/[^/]+$/))
+    ) {
+      const proxied = await proxyWorker(req, path);
+      if (proxied) return proxied;
     }
 
     if (req.method === "GET" && path === "/api/approvals") {

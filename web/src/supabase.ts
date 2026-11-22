@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { loadStoredToken } from './auth'
 
 let client: SupabaseClient | null = null
 
@@ -25,6 +26,17 @@ export function functionsBaseUrl(): string {
   return `${url}/functions/v1/atrium-api`
 }
 
+function parseError(text: string, fallback: string): string {
+  if (!text) return fallback
+  try {
+    const parsed = JSON.parse(text) as { detail?: string }
+    if (typeof parsed.detail === 'string') return parsed.detail
+  } catch {
+    /* plain */
+  }
+  return text || fallback
+}
+
 export async function edgeFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const sb = getSupabase()
   const { data: sessionData } = await sb.auth.getSession()
@@ -41,14 +53,46 @@ export async function edgeFetch<T>(path: string, init?: RequestInit): Promise<T>
   })
   if (!res.ok) {
     const text = await res.text()
-    let detail = text || res.statusText
+    throw new Error(parseError(text, res.statusText))
+  }
+  if (res.status === 204) return undefined as T
+  return res.json() as Promise<T>
+}
+
+/** Call LangGraph worker (Cloud Run / local uvicorn) with Bearer session. */
+export async function workerFetch<T>(
+  baseUrl: string,
+  path: string,
+  init?: RequestInit,
+  tokenOverride?: string | null,
+): Promise<T> {
+  let token = tokenOverride ?? null
+  if (!token) {
     try {
-      const parsed = JSON.parse(text) as { detail?: string }
-      if (typeof parsed.detail === 'string') detail = parsed.detail
+      if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
+        const sb = getSupabase()
+        const { data } = await sb.auth.getSession()
+        token = data.session?.access_token ?? null
+      }
     } catch {
-      /* plain */
+      /* fixtures / no supabase client */
     }
-    throw new Error(detail)
+  }
+  if (!token) {
+    token = loadStoredToken()
+  }
+  const res = await fetch(`${baseUrl}${path}`, {
+    ...init,
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(init?.headers ?? {}),
+    },
+  })
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(parseError(text, res.statusText))
   }
   if (res.status === 204) return undefined as T
   return res.json() as Promise<T>

@@ -2,31 +2,69 @@
 
 Product brand **Atrium** (workspace marketing). Repo / Python package remain `monny`.
 
-Marketing deep agent for **spend** (Google Ads + Meta) and **SEO**, with HITL.  
-**Market-test deploy:** Netlify (SPA) + Supabase (Auth, Postgres/RLS, Edge Functions).  
-No API Docker/Cloud Run in the happy path (optional later if LangGraph load needs it).
+**Stack:** Netlify (SPA) + Supabase (Auth, Postgres/RLS, Edge) + **LangGraph worker** on Cloud Run (scale-to-zero) or local Ubuntu.
 
-Skills/reparti are **subscription entitlements**. Free vs paid = skills/limits — **full 3D office for everyone**.
+Skills/reparti are subscription entitlements. Free vs paid = skills/limits — **full 3D office for everyone**.
 
 ## Layout
 
 ```
 monny/
-  web/                # Vite + React (Agent + Admin) → Netlify
-  supabase/           # SQL migrations + Edge Function atrium-api
-  fixtures/           # Local demo data (SPA fixture runtime + legacy Python)
-  tenants/            # Sample YAML (seeded into Supabase tenants.config)
-  src/monny/          # Legacy Python/LangGraph (optional later / unit tests)
-  Dockerfile          # OPTIONAL later — not primary deploy
-  docker-compose.yml  # OPTIONAL later
-  netlify.toml        # Primary frontend deploy
-  tests/
+  web/                      # Vite SPA → Netlify
+  supabase/                 # SQL + Edge atrium-api (thin API / fallback stub)
+  src/monny/worker/         # LangGraph FastAPI worker (Cloud Run + Ubuntu)
+  src/monny/graph/          # LangGraph graph + planner
+  tenants/ fixtures/        # Portable demo config
+  Dockerfile                # Worker image (same for Cloud Run & compose)
+  docker-compose.yml        # Local worker parity
 ```
 
-## Product surfaces
+## Local Ubuntu (≤3 commands after clone + env)
 
-1. **Agent UI** (`/#agent`) — 3D office twin (all plans). Login: `agent` or `admin`.
-2. **Admin UI** (`/#admin`) — entitlements, tenant, knowledge, users. Login: `admin` only.
+```bash
+cp .env.example .env          # optional: XAI_API_KEY, SUPABASE_*
+python3 -m venv .venv && source .venv/bin/activate && pip install -e ".[dev]"
+uvicorn monny.worker.app:app --reload --host 127.0.0.1 --port 8000
+```
+
+Or Docker (same image as Cloud Run):
+
+```bash
+cp .env.example .env
+docker compose up --build
+```
+
+SPA fixtures (no worker needed for CI/UI):
+
+```bash
+cd web && npm install && npm run dev
+# login agent@demo / agent-demo
+```
+
+SPA against local worker:
+
+```bash
+cd web && VITE_WORKER_URL=http://127.0.0.1:8000 npm run dev
+```
+
+## Cloud Run deploy
+
+```bash
+gcloud builds submit --tag REGION-docker.pkg.dev/PROJECT/REPO/atrium-worker
+gcloud run deploy atrium-worker \
+  --image REGION-docker.pkg.dev/PROJECT/REPO/atrium-worker \
+  --region REGION \
+  --allow-unauthenticated \   # or require auth + IAM invoker for Edge/SPA
+  --set-env-vars "MONNY_DRY_RUN=1,MONNY_CORS_ORIGINS=https://YOUR.netlify.app" \
+  --set-secrets "XAI_API_KEY=XAI_API_KEY:latest,SUPABASE_URL=SUPABASE_URL:latest,SUPABASE_ANON_KEY=SUPABASE_ANON_KEY:latest,SUPABASE_JWT_SECRET=SUPABASE_JWT_SECRET:latest,SUPABASE_SERVICE_ROLE_KEY=SUPABASE_SERVICE_ROLE_KEY:latest"
+```
+
+Then set:
+
+- Netlify: `VITE_WORKER_URL=https://atrium-worker-….run.app` (+ `VITE_SUPABASE_*`)
+- Edge secret: `WORKER_URL` (same) so Edge can proxy if SPA goes through functions
+
+If `WORKER_URL` / `VITE_WORKER_URL` are unset → Edge keyword stub (CI/demo without GCP).
 
 ## Auth & roles
 
@@ -35,51 +73,16 @@ monny/
 | `agent` | Agent only |
 | `admin` | Admin + Agent |
 
-**CI / local without Supabase:** in-browser fixtures (`agent@demo` / `agent-demo`, `admin@demo` / `admin-demo`).
-
-**Production:** Supabase Auth + `public.profiles` RLS. Same project for free and paid.
-
-## Quick start (fixture SPA — no cloud)
-
-```bash
-cd web && npm install && npm run dev
-# http://127.0.0.1:5173 — login agent@demo / agent-demo
-```
-
-## Market-test deploy (Netlify + Supabase)
-
-1. Create a Supabase project; apply SQL in order:
-   - `supabase/migrations/20261121_profiles_rls.sql`
-   - `supabase/migrations/20261122_market_stack.sql`
-2. Deploy Edge Function:
-   ```bash
-   supabase functions deploy atrium-api
-   ```
-3. Set Supabase secrets (Edge):
-   - `SUPABASE_SERVICE_ROLE_KEY` (auto in hosted)
-   - Optional planner: `XAI_API_KEY`, `MONNY_LLM_MODEL`, `MONNY_LLM_BASE_URL`
-4. Netlify site (base `web`):
-   - `VITE_SUPABASE_URL`
-   - `VITE_SUPABASE_ANON_KEY`
-5. Bootstrap first admin:
-   ```sql
-   update public.profiles set role = 'admin' where email = 'you@example.com';
-   ```
-
-Details: [`supabase/README.md`](supabase/README.md).
-
-## Planner note
-
-Edge Function uses a **keyword stub** (+ optional short Grok call if `XAI_API_KEY` is set).  
-Full LangGraph on a container is **deferred** — product still supports login, office, entitlements, HITL for market test.
+Supabase Auth in production; fixture users for local/CI (`agent@demo` / `admin@demo`).
 
 ## Tests
 
 ```bash
-cd web && npm test && npm run build          # fixture runtime (no Supabase)
-python3 -m pytest                            # legacy Python unit tests still green
+cd web && npm test && npm run build
+python3 -m pytest
 ```
 
-## Optional later (not market-test path)
+## Docs
 
-`Dockerfile` / `docker-compose.yml` / FastAPI under `src/monny/api` remain in-repo for a future LangGraph container. Prefer Netlify + Supabase until then.
+- Worker plan: project `docs/agent-worker-cloudrun.md`
+- Stack: `supabase/README.md`, project `docs/stack-netlify-supabase.md`

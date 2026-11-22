@@ -1,9 +1,16 @@
 /** Atrium API client — Supabase Edge Functions, or in-browser fixtures for CI. */
 
 import { fixturesApi } from './fixturesBackend'
-import { isSupabaseRuntime } from './runtime'
-import { edgeFetch, getSupabase } from './supabase'
+import { hasWorker, isSupabaseRuntime, workerBaseUrl } from './runtime'
+import { edgeFetch, getSupabase, workerFetch } from './supabase'
 import type { AuthRole, AuthUser, LoginResult } from './auth'
+
+async function agentFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  const base = workerBaseUrl()
+  if (base) return workerFetch<T>(base, path, init)
+  if (isSupabaseRuntime()) return edgeFetch<T>(path, init)
+  throw new Error('Nessun backend agent (imposta VITE_WORKER_URL o Supabase)')
+}
 
 export type * from './apiTypes'
 export type { AuthBackendInfo } from './apiTypes'
@@ -45,21 +52,31 @@ async function profileFromSession(): Promise<AuthUser> {
 }
 
 export async function login(email: string, password: string): Promise<LoginResult> {
-  if (!isSupabaseRuntime()) return fixturesApi.login(email, password)
-  const sb = getSupabase()
-  const { data, error } = await sb.auth.signInWithPassword({
-    email: email.trim().toLowerCase(),
-    password,
-  })
-  if (error || !data.session) throw new Error(error?.message ?? 'Email o password non validi')
-  const user = await profileFromSession()
-  return {
-    token: data.session.access_token,
-    user,
-    expires_in: data.session.expires_in ?? 3600,
-    backend: 'supabase',
-    refresh_token: data.session.refresh_token,
+  // Prefer Supabase Auth when configured; else worker fixture login; else in-browser fixtures.
+  if (isSupabaseRuntime()) {
+    const sb = getSupabase()
+    const { data, error } = await sb.auth.signInWithPassword({
+      email: email.trim().toLowerCase(),
+      password,
+    })
+    if (error || !data.session) throw new Error(error?.message ?? 'Email o password non validi')
+    const user = await profileFromSession()
+    return {
+      token: data.session.access_token,
+      user,
+      expires_in: data.session.expires_in ?? 3600,
+      backend: 'supabase',
+      refresh_token: data.session.refresh_token,
+    }
   }
+  const base = workerBaseUrl()
+  if (base) {
+    return workerFetch<LoginResult>(base, '/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    })
+  }
+  return fixturesApi.login(email, password)
 }
 
 export async function signup(
@@ -106,24 +123,51 @@ export async function signup(
 }
 
 export async function logout() {
-  if (!isSupabaseRuntime()) return fixturesApi.logout()
-  const sb = getSupabase()
-  await sb.auth.signOut()
-  return { ok: true }
+  if (isSupabaseRuntime()) {
+    const sb = getSupabase()
+    await sb.auth.signOut()
+    return { ok: true }
+  }
+  const base = workerBaseUrl()
+  if (base) {
+    try {
+      await workerFetch(base, '/api/auth/logout', { method: 'POST' })
+    } catch {
+      /* ignore */
+    }
+    return { ok: true }
+  }
+  return fixturesApi.logout()
 }
 
 export async function fetchMe(): Promise<AuthUser> {
-  if (!isSupabaseRuntime()) return fixturesApi.fetchMe()
-  return profileFromSession()
+  if (isSupabaseRuntime()) return profileFromSession()
+  const base = workerBaseUrl()
+  if (base) return workerFetch<AuthUser>(base, '/api/auth/me')
+  return fixturesApi.fetchMe()
 }
 
-export async function fetchHealth(): Promise<AuthBackendInfo & { stack?: string }> {
-  if (!isSupabaseRuntime()) return fixturesApi.fetchHealth()
-  try {
-    return await edgeFetch('/api/health')
-  } catch {
-    return { ok: true, auth: { backend: 'supabase', supabase_configured: true }, stack: 'netlify-supabase' }
+export async function fetchHealth(): Promise<AuthBackendInfo & { stack?: string; service?: string }> {
+  const base = workerBaseUrl()
+  if (base) {
+    try {
+      return await workerFetch(base, '/api/health')
+    } catch {
+      /* fall through */
+    }
   }
+  if (isSupabaseRuntime()) {
+    try {
+      return await edgeFetch('/api/health')
+    } catch {
+      return {
+        ok: true,
+        auth: { backend: 'supabase', supabase_configured: true },
+        stack: 'netlify-supabase',
+      }
+    }
+  }
+  return fixturesApi.fetchHealth()
 }
 
 export function listAuthUsers(tenantId?: string) {
@@ -160,8 +204,8 @@ export function chat(body: {
   goal?: string
   thread_id?: string
 }) {
-  if (!isSupabaseRuntime()) return fixturesApi.chat(body)
-  return edgeFetch<ChatResponse>('/api/chat', { method: 'POST', body: JSON.stringify(body) })
+  if (!hasWorker() && !isSupabaseRuntime()) return fixturesApi.chat(body)
+  return agentFetch<ChatResponse>('/api/chat', { method: 'POST', body: JSON.stringify(body) })
 }
 
 export function startRun(body: {
@@ -170,22 +214,22 @@ export function startRun(body: {
   goal?: string
   thread_id?: string
 }) {
-  if (!isSupabaseRuntime()) return fixturesApi.startRun(body)
-  return edgeFetch<AgentRun>('/api/runs', { method: 'POST', body: JSON.stringify(body) })
+  if (!hasWorker() && !isSupabaseRuntime()) return fixturesApi.startRun(body)
+  return agentFetch<AgentRun>('/api/runs', { method: 'POST', body: JSON.stringify(body) })
 }
 
 export function getRun(runId: string) {
-  if (!isSupabaseRuntime()) return fixturesApi.getRun(runId)
-  return edgeFetch<AgentRun>(`/api/runs/${runId}`)
+  if (!hasWorker() && !isSupabaseRuntime()) return fixturesApi.getRun(runId)
+  return agentFetch<AgentRun>(`/api/runs/${runId}`)
 }
 
 export function listApprovals(tenant_id?: string, status = 'pending') {
-  if (!isSupabaseRuntime()) return fixturesApi.listApprovals(tenant_id, status)
+  if (!hasWorker() && !isSupabaseRuntime()) return fixturesApi.listApprovals(tenant_id, status)
   const params = new URLSearchParams()
   if (tenant_id) params.set('tenant_id', tenant_id)
   if (status) params.set('status', status)
   const q = params.toString() ? `?${params}` : ''
-  return edgeFetch<Approval[]>(`/api/approvals${q}`)
+  return agentFetch<Approval[]>(`/api/approvals${q}`)
 }
 
 export function decideApproval(
@@ -194,8 +238,10 @@ export function decideApproval(
   note?: string,
   delegateTo?: string,
 ) {
-  if (!isSupabaseRuntime()) return fixturesApi.decideApproval(id, decision, note, delegateTo)
-  return edgeFetch<Approval>(`/api/approvals/${id}/decide`, {
+  if (!hasWorker() && !isSupabaseRuntime()) {
+    return fixturesApi.decideApproval(id, decision, note, delegateTo)
+  }
+  return agentFetch<Approval>(`/api/approvals/${id}/decide`, {
     method: 'POST',
     body: JSON.stringify({
       decision,

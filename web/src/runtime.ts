@@ -14,3 +14,14 @@ export function runtimeMode(): RuntimeMode {
 export function isSupabaseRuntime(): boolean {
   return runtimeMode() === 'supabase'
 }
+
+/** LangGraph worker (Cloud Run or local uvicorn). Empty → Edge stub / fixtures. */
+export function workerBaseUrl(): string | null {
+  const raw = (import.meta.env.VITE_WORKER_URL as string | undefined)?.trim()
+  if (!raw) return null
+  return raw.replace(/\/$/, '')
+}
+
+export function hasWorker(): boolean {
+  return Boolean(workerBaseUrl())
+}

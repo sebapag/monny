@@ -1,9 +1,9 @@
-# OPTIONAL LATER — not the market-test deploy path.
-# Primary stack is Netlify (web/) + Supabase (Auth/DB/Edge Functions).
-# Keep this image only if/when full LangGraph needs a container again.
+# Atrium LangGraph worker — Cloud Run + local Ubuntu (same image).
+# Primary product surface: Netlify + Supabase; this worker owns real agent runs.
 #
-# Build: docker build -t monny-api .
-# Run:   docker run --rm -p 8000:8000 -e MONNY_DRY_RUN=1 monny-api
+# Build: docker build -t atrium-worker .
+# Run:   docker run --rm -p 8000:8000 -e MONNY_DRY_RUN=1 atrium-worker
+# Local: uvicorn monny.worker.app:app --reload --host 127.0.0.1 --port 8000
 
 FROM python:3.12-slim AS builder
 
@@ -34,7 +34,6 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# Non-root user
 RUN useradd --create-home --uid 10001 --shell /usr/sbin/nologin monny \
     && mkdir -p /app/data \
     && chown -R monny:monny /app
@@ -50,4 +49,4 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"
 
-CMD ["uvicorn", "monny.api.app:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "monny.worker.app:app", "--host", "0.0.0.0", "--port", "8000"]
