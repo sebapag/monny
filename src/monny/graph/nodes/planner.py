@@ -61,6 +61,28 @@ def _stub_infer_plan_raw(goal: str, message: str) -> list[str]:
         k in text
         for k in ("controlling", "budget vs", "kpi snapshot", "costi anomali", "cost alert")
     )
+    wants_spend_deep = any(
+        k in text
+        for k in (
+            "spend deep",
+            "ottimizzazione deep",
+            "optimize spend deep",
+            "deep roas",
+            "live optimize ads",
+            "packaging report roas",
+        )
+    )
+    wants_seo_deep = any(
+        k in text
+        for k in (
+            "seo deep",
+            "content brief",
+            "brief content",
+            "deep seo",
+            "seo report pack",
+            "packaging report seo",
+        )
+    )
     wants_spend = any(
         k in text
         for k in (
@@ -92,6 +114,12 @@ def _stub_infer_plan_raw(goal: str, message: str) -> list[str]:
     )
 
     stub_only = False
+    if wants_spend_deep:
+        plan.append("spend_deep_optimize")
+        stub_only = True
+    if wants_seo_deep:
+        plan.append("seo_deep_content")
+        stub_only = True
     if wants_promo:
         plan.append("shopify_promo")
         stub_only = True

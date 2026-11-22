@@ -14,6 +14,7 @@ from monny.graph.state import AgentState
 from monny.skills import (
     dept_stubs,
     lead_warming,
+    plus_hooks,
     reporting,
     seo_audit,
     shopify_promo,
@@ -112,6 +113,15 @@ def skills_runner_node(state: AgentState) -> dict:
             result = lead_warming.run(tenant)
             findings.append(result)
             timeline.done(run_id, "lead_warming", result.get("summary") or "Stub")
+        elif skill_name in plus_hooks.ALL_PLUS_SKILLS:
+            timeline.start(run_id, "knowledge", "Consulto playbook Plus…")
+            _pause_for_presence()
+            timeline.done(run_id, "knowledge", "Know-how Plus pronto")
+            timeline.start(run_id, skill_name, f"Skill Plus {skill_name}…")
+            _pause_for_presence()
+            result = plus_hooks.run(skill_name, tenant)
+            findings.append(result)
+            timeline.done(run_id, skill_name, result.get("summary") or "Plus stub")
         elif skill_name in dept_stubs.ALL_STUB_SKILLS:
             label = dept_stubs.STUB_META[skill_name]["entity_name"]
             timeline.start(run_id, skill_name, f"Stub {label}…")

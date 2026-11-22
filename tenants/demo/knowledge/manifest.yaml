@@ -17,6 +17,30 @@ sources:
     path: spend-guidelines.md
     tags: [spend, ads, brand]
     enabled: true
+  - id: ads-base-playbook
+    title: Playbook Ads base (Free)
+    type: markdown
+    path: playbooks/ads-base.md
+    tags: [spend, ads, playbook, free]
+    enabled: true
+  - id: ads-deep-playbook
+    title: Playbook Ads deep (Plus)
+    type: markdown
+    path: playbooks/ads-deep.md
+    tags: [spend, ads, playbook, plus, optimize]
+    enabled: true
+  - id: seo-base-playbook
+    title: Playbook SEO base (Free)
+    type: markdown
+    path: playbooks/seo-base.md
+    tags: [seo, site, playbook, free]
+    enabled: true
+  - id: seo-deep-playbook
+    title: Playbook SEO deep (Plus)
+    type: markdown
+    path: playbooks/seo-deep.md
+    tags: [seo, content, playbook, plus]
+    enabled: true
 index:
   backend: local_stub
   embedding: stub_hash

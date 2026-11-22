@@ -46,8 +46,10 @@ from monny.knowledge import list_sources, load_manifest, retrieve, set_source_en
 from monny.config.entitlements import (
     ENTITLEMENT_LABELS_IT,
     blocked_entitlements_for_text,
+    blocked_plus_skills_for_text,
     entitlement_summary,
 )
+from monny.config.skill_catalog import catalog_summary, get_skill
 from monny.config.loader import (
     list_tenant_ids,
     load_tenant,
@@ -254,6 +256,20 @@ def create_app() -> FastAPI:
     def _refuse_disabled_skills(cfg: TenantConfig, goal: str, message: str) -> None:
         """Refuse when every skill implied by the text is disabled on the plan."""
         text = f"{goal} {message}"
+        plus_blocked = blocked_plus_skills_for_text(cfg, text)
+        if plus_blocked:
+            labels = []
+            for sid in plus_blocked:
+                skill = get_skill(sid)
+                labels.append(skill.label_it if skill else sid)
+            detail = (
+                "Skill Plus non inclusa nel piano Free: "
+                + ", ".join(labels)
+                + ". Passa a Plus in Admin → Attivazione piano / reparti "
+                "(o abilita override Admin)."
+            )
+            raise HTTPException(status_code=403, detail=detail)
+
         blocked = blocked_entitlements_for_text(cfg, text)
         if not blocked:
             return
@@ -472,6 +488,11 @@ def create_app() -> FastAPI:
 
         out = ApprovalOut(**item.__dict__, apply_result=apply_result)
         return out
+
+    @app.get("/api/skills/catalog")
+    def skills_catalog(_user: UserDep) -> dict[str, Any]:
+        """Portable skill catalog with free/plus tier + knowhow linkage."""
+        return {"skills": catalog_summary()}
 
     @app.get("/api/tenants")
     def tenants(_user: UserDep) -> list[dict[str, Any]]:

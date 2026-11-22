@@ -68,7 +68,9 @@ import {
 import {
   assertGoalAllowed,
   effectiveOfficeMode,
+  goalPlusSkill,
   isDeptEnabled,
+  isPlusEntitled,
   lockedHintIt,
   skillsFromConfig,
 } from './entitlements'
@@ -1056,6 +1058,13 @@ function App() {
 
   const entitlementSkills = skillsFromConfig(tenantDetail?.config)
   const officeMode = effectiveOfficeMode(tenantDetail?.config)
+  const plusOk = isPlusEntitled(tenantDetail?.config)
+  /** Agent only surfaces actions whose skills are allowed (dept + free/plus). */
+  const allowedDeptActions = (actions: { label: string; goal: string }[]) =>
+    actions.filter((a) => {
+      if (goalPlusSkill(a.goal) && !plusOk) return false
+      return assertGoalAllowed(a.goal, entitlementSkills, tenantDetail?.config) == null
+    })
 
   const sendInDept = async (dept: DeptId, override?: string) => {
     const text = (override ?? draft).trim()
@@ -1064,7 +1073,7 @@ function App() {
       setError(lockedHintIt(dept))
       return
     }
-    const blocked = assertGoalAllowed(text, entitlementSkills)
+    const blocked = assertGoalAllowed(text, entitlementSkills, tenantDetail?.config)
     if (blocked) {
       setError(blocked)
       return
@@ -1184,7 +1193,7 @@ function App() {
   /** Start a run while staying on the office twin so room lights update live. */
   const runFromOffice = async (goal: string) => {
     if (!goal.trim() || busy) return
-    const blocked = assertGoalAllowed(goal, entitlementSkills)
+    const blocked = assertGoalAllowed(goal, entitlementSkills, tenantDetail?.config)
     if (blocked) {
       setError(blocked)
       return
@@ -1534,9 +1543,9 @@ function App() {
                 <div className="dept-body layout-split">
                   <section className="panel console-panel">
                     <h2>Attività del reparto</h2>
-                    {activeDept.actions.length > 0 && (
+                    {allowedDeptActions(activeDept.actions).length > 0 && (
                       <div className="quick-actions">
-                        {activeDept.actions.map((a) => (
+                        {allowedDeptActions(activeDept.actions).map((a) => (
                           <button
                             key={a.goal}
                             type="button"
@@ -1557,15 +1566,21 @@ function App() {
                         <h3>Questo reparto</h3>
                         <p className="status-line" style={{ marginBottom: '0.75rem' }}>
                           {activeDept.blurb} Avvia un’azione qui sotto: vedrai solo le skill di
-                          questo reparto.
+                          questo reparto
+                          {plusOk ? '' : ' (skill Plus nascoste sul piano Free)'}.
                         </p>
-                        {activeDept.actions[0] && (
+                        {allowedDeptActions(activeDept.actions)[0] && (
                           <button
                             type="button"
                             className="btn btn-primary"
-                            onClick={() => void sendInDept(activeDept.id, activeDept.actions[0].goal)}
+                            onClick={() =>
+                              void sendInDept(
+                                activeDept.id,
+                                allowedDeptActions(activeDept.actions)[0].goal,
+                              )
+                            }
                           >
-                            {activeDept.actions[0].label}
+                            {allowedDeptActions(activeDept.actions)[0].label}
                           </button>
                         )}
                       </div>

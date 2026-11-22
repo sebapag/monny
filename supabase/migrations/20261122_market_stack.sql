@@ -291,7 +291,8 @@ values (
       "search_console": { "site_url": "https://www.demo-shop.example/", "secret_ref": "GSC_DEMO" }
     },
     "subscription": {
-      "plan": "growth",
+      "plan": "plus",
+      "plus_override": false,
       "skills": {
         "spend": true, "seo": true, "shopify": false, "leads": false,
         "operations": true, "design": true, "it": true, "controlling": false

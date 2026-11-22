@@ -56,9 +56,19 @@ export const DEPARTMENTS: DeptDef[] = [
     name: 'Spend pubblicitario',
     blurb: 'Google Ads e Meta: controlla la spesa e le campagne poco efficaci.',
     tint: 'sky',
-    skills: ['knowledge', 'spend_google', 'spend_meta', 'reporting'],
+    skills: [
+      'knowledge',
+      'spend_google',
+      'spend_meta',
+      'spend_deep_optimize',
+      'reporting',
+    ],
     actions: [
       { label: 'Controlla le ads', goal: 'report spend ultimi 7 giorni' },
+      {
+        label: 'Ottimizza spend (Plus)',
+        goal: 'spend deep optimize packaging report roas',
+      },
     ],
     placeholder: 'Es. Controlla le ads degli ultimi 7 giorni…',
   },
@@ -67,8 +77,14 @@ export const DEPARTMENTS: DeptDef[] = [
     name: 'SEO',
     blurb: 'Title, meta e H1 delle pagine prioritarie del sito.',
     tint: 'mint',
-    skills: ['seo_crawler', 'seo_audit'],
-    actions: [{ label: 'Controlla SEO', goal: 'seo audit of priority pages' }],
+    skills: ['seo_crawler', 'seo_audit', 'seo_deep_content'],
+    actions: [
+      { label: 'Controlla SEO', goal: 'seo audit of priority pages' },
+      {
+        label: 'SEO deep content (Plus)',
+        goal: 'seo deep content brief packaging report seo',
+      },
+    ],
     placeholder: 'Es. Controlla SEO delle pagine prioritarie…',
   },
   {

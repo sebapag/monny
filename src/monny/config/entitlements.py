@@ -1,41 +1,32 @@
-"""Subscription skill entitlements — portable across any hyperscaler."""
+"""Subscription skill entitlements — portable across any hyperscaler.
+
+Free vs plus gates skill *capabilities* (catalog tier), not the 3D office.
+Department toggles (subscription.skills) still enable/disable whole families.
+"""
 
 from __future__ import annotations
 
 from typing import Iterable
 
 from monny.config.models import SubscriptionSkills, TenantConfig
+from monny.config.skill_catalog import (
+    SKILL_CATALOG,
+    catalog_summary,
+    get_skill,
+    skill_to_entitlement_map,
+)
 
 # Graph skill id → subscription skill key (Leadership/HITL always allowed).
-SKILL_TO_ENTITLEMENT: dict[str, str] = {
-    "spend_google": "spend",
-    "spend_meta": "spend",
-    "seo_audit": "seo",
-    "seo_crawler": "seo",
-    "seo_apply": "seo",
-    "shopify_promo": "shopify",
-    "lead_warming": "leads",
-    "ops_orders": "operations",
-    "ops_inventory": "operations",
-    "ops_shipping": "operations",
-    "design_assets": "design",
-    "design_ads": "design",
-    "design_brand": "design",
-    "it_integrations": "it",
-    "it_access": "it",
-    "it_monitoring": "it",
-    "ctrl_budget": "controlling",
-    "ctrl_kpi": "controlling",
-    "ctrl_costs": "controlling",
-}
+SKILL_TO_ENTITLEMENT: dict[str, str] = skill_to_entitlement_map()
 
-# Always available (not gated by subscription.skills).
+# Always available (not gated by subscription.skills / tier).
 ALWAYS_ALLOWED = frozenset(
     {
         "planner",
         "hitl",
         "reporting",
         "shopify_read",  # light shop context for any enabled skill run
+        "knowledge",
     }
 )
 
@@ -60,9 +51,31 @@ OFFICE_MODE_LABELS_IT: dict[str, str] = {
     "light": "Leggera",
 }
 
+PLAN_LABELS_IT: dict[str, str] = {
+    "free": "Free",
+    "plus": "Plus",
+}
+
+
+def normalize_plan(plan: str | None) -> str:
+    """Map legacy starter/growth/scale → free|plus."""
+    key = (plan or "free").strip().lower()
+    if key in ("free", "starter"):
+        return "free"
+    if key in ("plus", "growth", "scale"):
+        return "plus"
+    return "free"
+
 
 def skills_enabled(tenant: TenantConfig) -> SubscriptionSkills:
     return tenant.subscription.skills
+
+
+def is_plus_entitled(tenant: TenantConfig) -> bool:
+    """Plus skills when plan is plus, or Admin plus_override."""
+    if bool(getattr(tenant.subscription, "plus_override", False)):
+        return True
+    return normalize_plan(tenant.subscription.plan) == "plus"
 
 
 def is_skill_allowed(tenant: TenantConfig, skill_name: str) -> bool:
@@ -71,7 +84,15 @@ def is_skill_allowed(tenant: TenantConfig, skill_name: str) -> bool:
     key = SKILL_TO_ENTITLEMENT.get(skill_name)
     if key is None:
         return False
-    return bool(getattr(tenant.subscription.skills, key, False))
+    if not bool(getattr(tenant.subscription.skills, key, False)):
+        return False
+    catalog = get_skill(skill_name)
+    if catalog is None:
+        # Unknown but mapped (e.g. seo_apply) — dept toggle is enough.
+        return True
+    if catalog.tier == "plus" and not is_plus_entitled(tenant):
+        return False
+    return True
 
 
 def is_office_view_entitled(tenant: TenantConfig) -> bool:
@@ -91,7 +112,7 @@ def effective_office_mode(tenant: TenantConfig) -> str:
 
 
 def filter_plan(tenant: TenantConfig, plan: Iterable[str]) -> list[str]:
-    """Drop disabled skills; keep reporting / always-allowed steps."""
+    """Drop disabled / plus-gated skills; keep reporting / always-allowed steps."""
     return [s for s in plan if is_skill_allowed(tenant, s)]
 
 
@@ -147,11 +168,53 @@ def blocked_entitlements_for_text(tenant: TenantConfig, text: str) -> list[str]:
     return blocked
 
 
+def blocked_plus_skills_for_text(tenant: TenantConfig, text: str) -> list[str]:
+    """
+    When text clearly asks for a plus-only deep skill and tenant is not plus-entitled.
+    """
+    if is_plus_entitled(tenant):
+        return []
+    lowered = text.lower()
+    blocked: list[str] = []
+    plus_hints = {
+        "spend_deep_optimize": (
+            "spend deep",
+            "ottimizzazione deep",
+            "optimize spend deep",
+            "deep roas",
+            "live optimize ads",
+            "packaging report roas",
+        ),
+        "seo_deep_content": (
+            "seo deep",
+            "content brief",
+            "brief content",
+            "deep seo",
+            "seo report pack",
+            "packaging report seo",
+        ),
+    }
+    for skill_id, words in plus_hints.items():
+        if any(w in lowered for w in words):
+            if not is_skill_allowed(tenant, skill_id):
+                blocked.append(skill_id)
+    return blocked
+
+
 def entitlement_summary(tenant: TenantConfig) -> dict:
     skills = tenant.subscription.skills
     features = tenant.subscription.features
+    plan = normalize_plan(tenant.subscription.plan)
+    plus = is_plus_entitled(tenant)
+    allowed_skills = [
+        s.id
+        for s in SKILL_CATALOG.values()
+        if is_skill_allowed(tenant, s.id)
+    ]
     return {
-        "plan": tenant.subscription.plan,
+        "plan": plan,
+        "plus_entitled": plus,
+        "plus_override": bool(getattr(tenant.subscription, "plus_override", False)),
         "skills": skills.model_dump(),
         "features": features.model_dump(),
         "office_mode": effective_office_mode(tenant),
@@ -161,4 +224,7 @@ def entitlement_summary(tenant: TenantConfig) -> dict:
         "labels_it": ENTITLEMENT_LABELS_IT,
         "feature_labels_it": FEATURE_LABELS_IT,
         "office_mode_labels_it": OFFICE_MODE_LABELS_IT,
+        "plan_labels_it": PLAN_LABELS_IT,
+        "skill_catalog": catalog_summary(),
+        "allowed_skill_ids": allowed_skills,
     }

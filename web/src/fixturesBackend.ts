@@ -71,7 +71,8 @@ const DEMO_CONFIG: TenantConfig = {
     },
   },
   subscription: {
-    plan: 'growth',
+    plan: 'plus',
+    plus_override: false,
     skills: {
       spend: true,
       seo: true,
@@ -279,7 +280,7 @@ export const fixturesApi = {
       secrets_configured: 0,
       pending_approvals: pending,
       subscription: {
-        plan: t.subscription?.plan ?? 'growth',
+        plan: t.subscription?.plan ?? 'plus',
         skills: t.subscription?.skills ?? DEMO_CONFIG.subscription!.skills,
         features: { office_view: true },
         office_mode: t.subscription?.office_mode ?? 'full',
@@ -301,7 +302,7 @@ export const fixturesApi = {
       ].filter((s) => s.secret_ref),
       path: `fixtures:tenants/${tenantId}`,
       subscription: {
-        plan: cfg.subscription?.plan ?? 'growth',
+        plan: cfg.subscription?.plan ?? 'plus',
         skills: cfg.subscription!.skills,
         features: { office_view: true },
         office_mode: cfg.subscription?.office_mode ?? 'full',

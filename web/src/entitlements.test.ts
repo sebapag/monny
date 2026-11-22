@@ -3,7 +3,10 @@ import {
   assertGoalAllowed,
   effectiveOfficeMode,
   featuresFromConfig,
+  isCatalogSkillAllowed,
   isDeptEnabled,
+  isPlusEntitled,
+  normalizePlan,
   skillsFromConfig,
 } from './entitlements'
 import type { TenantConfig } from './api'
@@ -30,7 +33,8 @@ function stubConfig(partial: Partial<TenantConfig['subscription']>): TenantConfi
       seo: { auto_apply: false, max_urls_per_run: 50 },
     },
     subscription: {
-      plan: 'growth',
+      plan: 'plus',
+      plus_override: false,
       skills: {
         spend: true,
         seo: true,
@@ -49,7 +53,7 @@ function stubConfig(partial: Partial<TenantConfig['subscription']>): TenantConfi
 }
 
 describe('entitlements', () => {
-  it('defaults demo-like growth plan', () => {
+  it('defaults demo-like growth/plus plan skills', () => {
     const skills = skillsFromConfig(null)
     expect(skills.spend).toBe(true)
     expect(skills.seo).toBe(true)
@@ -59,6 +63,13 @@ describe('entitlements', () => {
     expect(skills.design).toBe(false)
     expect(skills.it).toBe(false)
     expect(skills.controlling).toBe(false)
+  })
+
+  it('normalizes legacy plans to free|plus', () => {
+    expect(normalizePlan('starter')).toBe('free')
+    expect(normalizePlan('growth')).toBe('plus')
+    expect(normalizePlan('scale')).toBe('plus')
+    expect(normalizePlan('free')).toBe('free')
   })
 
   it('leadership always enabled; locked depts respect flags', () => {
@@ -98,6 +109,26 @@ describe('entitlements', () => {
     expect(assertGoalAllowed('lead warming sequence', skills)).toMatch(/non attivo/)
     expect(assertGoalAllowed('stato ordini fulfillment', skills)).toMatch(/Operations/)
     expect(assertGoalAllowed('accessi e credenziali da completare', skills)).toMatch(/IT/)
+  })
+
+  it('gates plus deep skills by plan / override', () => {
+    const free = stubConfig({ plan: 'free', plus_override: false })
+    expect(isPlusEntitled(free)).toBe(false)
+    expect(isCatalogSkillAllowed('spend_google', free)).toBe(true)
+    expect(isCatalogSkillAllowed('spend_deep_optimize', free)).toBe(false)
+    expect(
+      assertGoalAllowed('spend deep optimize packaging report roas', free.subscription!.skills, free),
+    ).toMatch(/Plus/)
+
+    const override = stubConfig({ plan: 'free', plus_override: true })
+    expect(isCatalogSkillAllowed('spend_deep_optimize', override)).toBe(true)
+    expect(
+      assertGoalAllowed(
+        'spend deep optimize packaging report roas',
+        override.subscription!.skills,
+        override,
+      ),
+    ).toBeNull()
   })
 
   it('office mode is available to everyone; default full 3D', () => {

@@ -1769,6 +1769,53 @@ a {
   color: var(--brand-navy);
 }
 
+.skill-toggle-block {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.skill-tier-list {
+  list-style: none;
+  margin: 0 0 0.35rem 1.75rem;
+  padding: 0;
+  display: grid;
+  gap: 0.2rem;
+  font-size: 0.85rem;
+  color: var(--slate);
+}
+
+.skill-tier-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem;
+}
+
+.tier-pill {
+  display: inline-block;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 0.12rem 0.4rem;
+  border-radius: 4px;
+  border: 1px solid var(--hairline);
+  background: var(--surface);
+  color: var(--charcoal);
+}
+
+.tier-pill.tier-plus {
+  background: var(--tint-lavender);
+  border-color: #c9b8ef;
+  color: var(--primary-deep);
+}
+
+.tier-pill.tier-free {
+  background: var(--tint-mint);
+  border-color: #b5dfc4;
+  color: #0f6b3a;
+}
+
 .floor-room.is-locked {
   filter: grayscale(0.55) brightness(0.92);
   opacity: 0.78;

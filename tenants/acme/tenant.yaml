@@ -49,7 +49,8 @@ integrations:
     site_url: https://www.acme.example/
     secret_ref: GSC_ACME
 subscription:
-  plan: starter
+  plan: free
+  plus_override: false
   skills:
     spend: true
     seo: false

@@ -147,11 +147,34 @@ export type SubscriptionFeatures = {
 
 export type OfficeMode = 'auto' | 'full' | 'light'
 
+/** Product plans: free (signup) | plus (paid). Legacy starter→free, growth/scale→plus. */
+export type ProductPlan = 'free' | 'plus'
+
+export type SkillTier = 'free' | 'plus'
+
+export type SkillCatalogEntry = {
+  id: string
+  department: string
+  tier: SkillTier
+  label_it: string
+  blurb_it: string
+  entitlement: string
+  knowhow: {
+    playbook: string | null
+    knowledge_tags: string[]
+    knowledge_paths: string[]
+    decision_rights_key: string | null
+  }
+  extension_hook: boolean
+}
+
 export type SubscriptionConfig = {
-  plan: 'starter' | 'growth' | 'scale'
+  plan: ProductPlan | 'starter' | 'growth' | 'scale'
   skills: SubscriptionSkills
   features?: SubscriptionFeatures
   office_mode?: OfficeMode
+  /** Admin unlocks plus-tier skills without changing plan label (Stripe stub). */
+  plus_override?: boolean
 }
 
 /** Always-visible monthly spend (Admin). Ads billed by Google/Meta; Atrium separate. */
@@ -165,6 +188,8 @@ export type BillingConfig = {
 
 export type SubscriptionSummary = {
   plan: string
+  plus_entitled?: boolean
+  plus_override?: boolean
   skills: SubscriptionSkills
   features?: SubscriptionFeatures
   office_mode?: OfficeMode
@@ -174,6 +199,9 @@ export type SubscriptionSummary = {
   labels_it?: Record<string, string>
   feature_labels_it?: Record<string, string>
   office_mode_labels_it?: Record<string, string>
+  plan_labels_it?: Record<string, string>
+  skill_catalog?: SkillCatalogEntry[]
+  allowed_skill_ids?: string[]
 }
 
 export type TenantListItem = {
