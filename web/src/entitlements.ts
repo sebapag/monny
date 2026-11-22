@@ -18,7 +18,8 @@ export const DEFAULT_SKILLS: SubscriptionSkills = {
 }
 
 export const DEFAULT_FEATURES: SubscriptionFeatures = {
-  office_view: false,
+  // Market rule: full 3D office for everyone; free vs paid = skills/limits only.
+  office_view: true,
 }
 
 /** Merge known defaults so Admin / PUT never drop new entitlement keys. */
@@ -39,13 +40,11 @@ export function featuresFromConfig(cfg?: TenantConfig | null): SubscriptionFeatu
   }
 }
 
-/** Without office_view entitlement, preference is ignored → auto. */
+/** Office mode preference — 3D available to all plans (not a paid gate). */
 export function effectiveOfficeMode(cfg?: TenantConfig | null): OfficeMode {
-  const features = featuresFromConfig(cfg)
-  if (!features.office_view) return 'auto'
   const mode = cfg?.subscription?.office_mode
   if (mode === 'full' || mode === 'light' || mode === 'auto') return mode
-  return 'auto'
+  return 'full'
 }
 
 export function officeModePreference(cfg?: TenantConfig | null): OfficeMode {

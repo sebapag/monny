@@ -100,21 +100,16 @@ describe('entitlements', () => {
     expect(assertGoalAllowed('accessi e credenziali da completare', skills)).toMatch(/IT/)
   })
 
-  it('office_view gates mode choice; default is auto', () => {
-    expect(featuresFromConfig(null).office_view).toBe(false)
-    expect(effectiveOfficeMode(null)).toBe('auto')
+  it('office mode is available to everyone; default full 3D', () => {
+    expect(featuresFromConfig(null).office_view).toBe(true)
+    expect(effectiveOfficeMode(null)).toBe('full')
 
-    const locked = stubConfig({
+    // office_view flag no longer gates the preference (market rule).
+    const preferred = stubConfig({
       features: { office_view: false },
-      office_mode: 'full',
-    })
-    expect(effectiveOfficeMode(locked)).toBe('auto')
-
-    const entitled = stubConfig({
-      features: { office_view: true },
       office_mode: 'light',
     })
-    expect(effectiveOfficeMode(entitled)).toBe('light')
+    expect(effectiveOfficeMode(preferred)).toBe('light')
     expect(effectiveOfficeMode(stubConfig({ features: { office_view: true }, office_mode: 'full' }))).toBe(
       'full',
     )

@@ -1,0 +1,18 @@
+# Supabase local / linked project config (market-test stack).
+# Deploy functions: `supabase functions deploy atrium-api --no-verify-jwt` is NOT recommended;
+# keep JWT verification on and pass the user access token from the SPA.
+
+[project]
+id = "atrium"
+
+[api]
+enabled = true
+
+[db]
+major_version = 15
+
+[auth]
+enabled = true
+
+[functions.atrium-api]
+verify_jwt = true

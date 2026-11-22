@@ -40,4 +40,5 @@ jobs:
       - run: npm run test
       - run: npm run build
         env:
-          VITE_API_BASE_URL: ""
+          # Fixture runtime when Supabase env unset (market-test CI).
+          VITE_ATRIUM_RUNTIME: fixtures
