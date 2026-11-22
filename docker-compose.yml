@@ -1,11 +1,9 @@
-# Local stack aligned with the production API image.
-# Usage:
-#   docker compose up --build
-#   API:  http://127.0.0.1:8000/health
-#   Web:  http://127.0.0.1:5173  (optional profile)
+# OPTIONAL LATER — market-test path is Netlify + Supabase (no API container).
+# Prefer: cd web && npm run dev  (fixture runtime) or VITE_SUPABASE_* against cloud.
 #
-# Frontend against a remote API (Cloud Run): set VITE_API_BASE_URL and run web locally
-# or deploy web on Netlify — see netlify.toml / README.
+# Legacy local API image (if you still need FastAPI/LangGraph container):
+#   docker compose up --build
+#
 
 services:
   api:

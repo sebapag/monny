@@ -1,74 +1,67 @@
-# Supabase Auth for Atrium
+# Supabase — Atrium market-test backend
 
-Supabase holds **Auth users** and **role/tenant profiles** with RLS.  
-The **LangGraph / FastAPI agent** continues to run as a portable container (Cloud Run, Compose, etc.). Do not replace agent hosting with Supabase Edge Functions.
+Primary backend for Atrium: **Auth + Postgres/RLS + Edge Functions**.  
+Frontend: **Netlify**. Same Supabase project for free and paid (differentiate on skills/limits; 3D office for all).
 
-## 1. Create a project
+The FastAPI/Docker API is **not** required for market test.
 
-1. Create a project at [supabase.com](https://supabase.com).
-2. Open **Project Settings → API** and copy:
-   - Project URL → `SUPABASE_URL`
-   - `anon` `public` key → `SUPABASE_ANON_KEY`
-   - `service_role` key → `SUPABASE_SERVICE_ROLE_KEY` (**server only**, never in the SPA or Netlify `VITE_*`)
-3. Open **Project Settings → API → JWT Settings** and copy **JWT Secret** → `SUPABASE_JWT_SECRET`
+## 1. Migrations
 
-## 2. Apply the schema
+In the SQL editor (or `supabase db push`), apply in order:
 
-Run the SQL in [`migrations/20261121_profiles_rls.sql`](migrations/20261121_profiles_rls.sql) in the Supabase **SQL Editor** (or `supabase db push` if you use the CLI).
+1. [`migrations/20261121_profiles_rls.sql`](migrations/20261121_profiles_rls.sql) — `profiles` + Auth trigger  
+2. [`migrations/20261122_market_stack.sql`](migrations/20261122_market_stack.sql) — tenants, approvals, runs, knowledge, audit, artifacts + demo seed
 
-This creates `public.profiles` (`agent` | `admin`), RLS policies, and a trigger that inserts a profile on Auth signup (default role `agent`).
-
-## 3. Configure Auth
-
-In **Authentication → Providers → Email**:
-
-- Enable Email provider.
-- For local demos you may disable “Confirm email”; for production leave confirmation on (signup returns an empty token until confirmed).
-
-Optional: create the first Admin in **Authentication → Users** (or via Admin UI after one service-role bootstrap), then set `profiles.role = 'admin'` in the Table Editor or with:
-
-```sql
-update public.profiles
-set role = 'admin'
-where email = 'you@example.com';
-```
-
-## 4. Wire the API container
-
-On the FastAPI / Cloud Run service (not the static Netlify site):
+## 2. Edge Function `atrium-api`
 
 ```bash
-SUPABASE_URL=https://YOUR_PROJECT.supabase.co
-SUPABASE_ANON_KEY=...
-SUPABASE_SERVICE_ROLE_KEY=...
-SUPABASE_JWT_SECRET=...
-MONNY_AUTH_BACKEND=auto   # or supabase
+supabase functions deploy atrium-api
 ```
 
-Leave these unset for local/CI: the API falls back to `fixtures/auth/users.json`.
+Routes (Bearer = user access token):
 
-`GET /api/health` reports `auth.backend` as `supabase` or `fixtures`.
+| Path | Notes |
+|------|--------|
+| `GET /api/health` | Public-ish via function; stack metadata |
+| `GET /api/auth/me` | Profile |
+| `GET/POST /api/auth/users`, `PATCH .../{id}` | Admin user mgmt (service role) |
+| `GET/PUT /api/tenants…` | Tenant config (admin write) |
+| `GET/POST /api/approvals…` | HITL |
+| `POST /api/runs`, `GET /api/runs/{id}` | Planner stub + timeline |
+| Knowledge / audit / artifacts | As before |
 
-## 5. API surface
+Planner: keyword stub; optional Grok if `XAI_API_KEY` secret is set.  
+**TODO:** full LangGraph container when needed.
 
-| Route | Who | Notes |
-|-------|-----|--------|
-| `POST /api/auth/login` | public | Supabase password grant or fixture JWT |
-| `POST /api/auth/signup` | public | Supabase only → role `agent` |
-| `POST /api/auth/logout` | session | Clears cookie; best-effort Supabase logout |
-| `GET /api/auth/me` | user | Live profile role |
-| `GET /api/auth/users` | admin | List profiles (fixtures or Supabase) |
-| `POST /api/auth/users` | admin | Create user (service role) |
-| `PATCH /api/auth/users/{id}` | admin | Change role / display name |
+## 3. Secrets
 
-Admin UI → **Utenti e ruoli** uses these endpoints.
+### Netlify (build / browser)
 
-## Secrets checklist
+| Name | Purpose |
+|------|---------|
+| `VITE_SUPABASE_URL` | Project URL |
+| `VITE_SUPABASE_ANON_KEY` | Anon key (RLS enforced) |
 
-| Secret | Where | Purpose |
-|--------|--------|---------|
-| `SUPABASE_URL` | API container / `.env` | Project URL |
-| `SUPABASE_ANON_KEY` | API container | Login / signup / read own profile |
-| `SUPABASE_SERVICE_ROLE_KEY` | API container only | Create users, list/update roles (bypasses RLS) |
-| `SUPABASE_JWT_SECRET` | API container | Verify access tokens |
-| `MONNY_AUTH_SECRET` | API (fixtures mode) | HMAC for local demo JWTs |
+### Supabase Edge / dashboard
+
+| Name | Purpose |
+|------|---------|
+| `SUPABASE_SERVICE_ROLE_KEY` | Admin user create / bypass RLS in function |
+| `XAI_API_KEY` | Optional short planner |
+| `MONNY_LLM_MODEL` / `MONNY_LLM_BASE_URL` | Optional |
+
+Never put `service_role` in Netlify `VITE_*`.
+
+## 4. First admin
+
+Sign up via the SPA (role `agent`), then:
+
+```sql
+update public.profiles set role = 'admin' where email = 'you@example.com';
+```
+
+Or create via Admin «Utenti e ruoli» once one admin exists.
+
+## 5. Local / CI without Supabase
+
+Omit `VITE_SUPABASE_*` → SPA uses in-browser fixture backend (`agent@demo` / `admin@demo`).

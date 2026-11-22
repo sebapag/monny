@@ -1,4 +1,7 @@
-# Monny API — portable multi-stage image (Cloud Run / App Runner / Azure Container Apps).
+# OPTIONAL LATER — not the market-test deploy path.
+# Primary stack is Netlify (web/) + Supabase (Auth/DB/Edge Functions).
+# Keep this image only if/when full LangGraph needs a container again.
+#
 # Build: docker build -t monny-api .
 # Run:   docker run --rm -p 8000:8000 -e MONNY_DRY_RUN=1 monny-api
 

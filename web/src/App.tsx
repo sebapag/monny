@@ -44,6 +44,7 @@ import {
   loadStoredUser,
   persistSession,
 } from './auth'
+import { isSupabaseRuntime } from './runtime'
 import { LoginScreen } from './LoginScreen'
 import { ApprovalPathActions, type DecideHandler } from './ApprovalPaths'
 import {
@@ -70,7 +71,6 @@ import type { OfficeMode } from './api'
 import {
   assertGoalAllowed,
   effectiveOfficeMode,
-  featuresFromConfig,
   isDeptEnabled,
   lockedHintIt,
   mergeSkills,
@@ -899,10 +899,10 @@ function AdminForm({
               plan: e.target.value as 'starter' | 'growth' | 'scale',
               skills: mergeSkills(cfg.subscription?.skills),
               features: {
-                office_view: false,
+                office_view: true,
                 ...(cfg.subscription?.features ?? {}),
               },
-              office_mode: cfg.subscription?.office_mode ?? 'auto',
+              office_mode: cfg.subscription?.office_mode ?? 'full',
             })
           }
         >
@@ -935,10 +935,10 @@ function AdminForm({
                     plan: cfg.subscription?.plan ?? 'growth',
                     skills: { ...skills, [key]: e.target.checked },
                     features: {
-                      office_view: false,
+                      office_view: true,
                       ...(cfg.subscription?.features ?? {}),
                     },
-                    office_mode: cfg.subscription?.office_mode ?? 'auto',
+                    office_mode: cfg.subscription?.office_mode ?? 'full',
                   })
                 }
               />
@@ -950,72 +950,41 @@ function AdminForm({
           )
         })}
         <p className="status-line" style={{ marginTop: '0.35rem' }}>
-          Leadership / decisioni: sempre attivo
+          Leadership / decisioni: sempre attivo. Free vs paid = skill/limiti, non la grafica 3D.
         </p>
       </div>
 
       <div className="section-title">Vista ufficio</div>
       <FieldHelp>
-        Opzione a pagamento: scegli se l’home Agent mostra la vista completa 3D, la
-        vista leggera (2D), o lascia che Atrium scelga in automatico in base al browser.
-        Senza questa opzione resta sempre la modalità automatica.
+        L’ufficio 3D è incluso per tutti i piani. Qui scegli solo la presentazione
+        preferita: completa (3D), leggera (2D) o automatica in base al browser.
       </FieldHelp>
       {(() => {
-        const features = {
-          office_view: false,
-          ...(cfg.subscription?.features ?? {}),
-        }
-        const officeMode = (cfg.subscription?.office_mode ?? 'auto') as OfficeMode
-        const entitled = Boolean(features.office_view)
+        const officeMode = (cfg.subscription?.office_mode ?? 'full') as OfficeMode
         return (
           <div className="skill-toggles office-view-toggles">
-            <label className="check-row skill-toggle">
-              <input
-                type="checkbox"
-                checked={entitled}
-                onChange={(e) =>
-                  set('subscription', {
-                    plan: cfg.subscription?.plan ?? 'growth',
-                    skills: mergeSkills(cfg.subscription?.skills),
-                    features: { ...features, office_view: e.target.checked },
-                    office_mode: e.target.checked ? officeMode : 'auto',
-                  })
-                }
-              />
-              <span>
-                <strong>Modalità vista ufficio</strong>
-                <span className="muted">
-                  {' '}
-                  — Sblocca la scelta Completa / Leggera / Automatica
-                </span>
-              </span>
-            </label>
             <div className="field" style={{ marginTop: '0.35rem' }}>
               <label htmlFor="office-mode-select">Presentazione ufficio</label>
               <select
                 id="office-mode-select"
                 data-testid="office-mode-select"
-                disabled={!entitled}
-                value={entitled ? officeMode : 'auto'}
+                value={officeMode}
                 onChange={(e) =>
                   set('subscription', {
                     plan: cfg.subscription?.plan ?? 'growth',
                     skills: mergeSkills(cfg.subscription?.skills),
-                    features,
+                    features: {
+                      ...(cfg.subscription?.features ?? {}),
+                      office_view: true,
+                    },
                     office_mode: e.target.value as OfficeMode,
                   })
                 }
               >
-                <option value="auto">Automatica (consigliata)</option>
+                <option value="auto">Automatica</option>
                 <option value="full">Completa (3D)</option>
                 <option value="light">Leggera</option>
               </select>
-              {!entitled && (
-                <p className="status-line" style={{ marginTop: '0.35rem' }}>
-                  Opzione non attiva: resta Automatica. Attivala qui per venderla come
-                  extra frontend.
-                </p>
-              )}
             </div>
           </div>
         )
@@ -1235,7 +1204,7 @@ function App() {
   const [authReady, setAuthReady] = useState(() => !loadStoredToken())
   const [loginBusy, setLoginBusy] = useState(false)
   const [loginError, setLoginError] = useState<string | null>(null)
-  const [supabaseAuth, setSupabaseAuth] = useState(false)
+  const [supabaseAuth, setSupabaseAuth] = useState(() => isSupabaseRuntime())
   const [tenants, setTenants] = useState<TenantListItem[]>([])
   const [tenantId, setTenantId] = useState(
     () => localStorage.getItem(TENANT_KEY) || 'demo',
@@ -1277,6 +1246,10 @@ function App() {
   }, [])
 
   useEffect(() => {
+    if (isSupabaseRuntime()) {
+      setSupabaseAuth(true)
+      return
+    }
     fetchHealth()
       .then((h) => setSupabaseAuth(h.auth?.backend === 'supabase'))
       .catch(() => setSupabaseAuth(false))
@@ -1474,7 +1447,6 @@ function App() {
   }
 
   const entitlementSkills = skillsFromConfig(tenantDetail?.config)
-  const officeFeatures = featuresFromConfig(tenantDetail?.config)
   const officeMode = effectiveOfficeMode(tenantDetail?.config)
 
   const sendInDept = async (dept: DeptId, override?: string) => {
@@ -1724,7 +1696,7 @@ function App() {
         intended={intendedRole}
         busy={loginBusy}
         error={loginError}
-        allowSignup={supabaseAuth}
+        allowSignup
         onSubmit={handleLogin}
         onSignup={handleSignup}
       />
@@ -1867,7 +1839,7 @@ function App() {
               pending={deptCounts}
               enabled={entitlementSkills}
               officeMode={officeMode}
-              officeViewEntitled={officeFeatures.office_view}
+              officeViewEntitled={true}
               statusLine={liveRun?.status_line}
               busy={busy}
               tenantId={tenantId}
