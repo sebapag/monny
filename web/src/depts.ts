@@ -1,4 +1,11 @@
 import type { Approval, TimelineStep } from './api'
+import {
+  hashForAdmin,
+  parseAdminPath,
+  type AdminSectionId,
+} from './adminNav'
+
+export type { AdminSectionId }
 
 /** Corporate departments — each skill family lives in one isolated panel. */
 
@@ -202,12 +209,15 @@ export function filterSteps(steps: TimelineStep[], dept: DeptId): TimelineStep[]
 export type RouteState =
   | { mode: 'piano' }
   | { mode: 'dept'; dept: DeptId }
-  | { mode: 'admin' }
+  | { mode: 'admin'; section?: AdminSectionId | null }
 
 export function parseHash(hash: string): RouteState {
   const raw = hash.replace(/^#/, '')
-  if (!raw || raw === 'agent' || raw === 'piano') return { mode: 'piano' }
-  if (raw === 'admin') return { mode: 'admin' }
+  if (!raw || raw === 'agent' || raw === 'piano' || raw === '/agent') {
+    return { mode: 'piano' }
+  }
+  const admin = parseAdminPath(raw)
+  if (admin) return { mode: 'admin', section: admin.section }
   const deptMatch = raw.match(/^dept=([a-z_]+)$/)
   if (deptMatch) {
     const id = deptMatch[1] as DeptId
@@ -217,7 +227,7 @@ export function parseHash(hash: string): RouteState {
 }
 
 export function hashFor(route: RouteState): string {
-  if (route.mode === 'admin') return '#admin'
+  if (route.mode === 'admin') return hashForAdmin(route.section ?? null)
   if (route.mode === 'dept') return `#dept=${route.dept}`
   return '#agent'
 }
