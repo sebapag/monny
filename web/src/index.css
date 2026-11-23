@@ -59,11 +59,11 @@
 
   --shadow-soft: 0 1px 2px rgba(15, 15, 15, 0.04), 0 4px 16px rgba(15, 15, 15, 0.04);
   /*
-    Brand target: Graphik (Commercial Type — licensed separately; not bundled).
-    Legal stand-in: DM Sans (OFL geometric neo-grotesque) + Plus Jakarta Sans.
+    Professional / Graphik-track: IBM Plex Sans (OFL) — tighter corporate feel.
+    Graphik (Commercial Type) not bundled. Fallback: system-ui only (not Inter/Roboto/Arial).
   */
-  --font: 'DM Sans', 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
-  --font-display: 'DM Sans', 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
+  --font: 'IBM Plex Sans', system-ui, sans-serif;
+  --font-display: 'IBM Plex Sans', system-ui, sans-serif;
   --input-h: 44px;
   --office-sky: #d9ebf7;
   --office-oak: #d8c3a3;

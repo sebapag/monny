@@ -7,7 +7,7 @@ const MEDIA =
   '/cursor/stores/bc-01a1b4ca-a8a5-7df5-9ade-47d767568dd5/media/ui-office3d'
 
 test.describe('Brand lockup typography', () => {
-  test('Agent home brand lockup uses DM Sans Graphik stand-in', async ({ page }) => {
+  test('Agent home brand lockup uses IBM Plex Sans', async ({ page }) => {
     fs.mkdirSync(MEDIA, { recursive: true })
 
     await page.goto('/#/agent')
@@ -22,8 +22,8 @@ test.describe('Brand lockup typography', () => {
     await expect(mark).toContainText('Atrium')
     await expect(page.locator('.office-brand-sub').first()).toContainText(/Workspace marketing/i)
 
-    // Wait for webfont so the lockup screenshot shows DM Sans metrics
-    await page.waitForFunction(() => document.fonts.check('700 24px "DM Sans"'), null, {
+    // Wait for webfont so the lockup screenshot shows IBM Plex Sans metrics
+    await page.waitForFunction(() => document.fonts.check('700 24px "IBM Plex Sans"'), null, {
       timeout: 15_000,
     })
     await page.waitForTimeout(400)
@@ -38,7 +38,8 @@ test.describe('Brand lockup typography', () => {
     await nav.screenshot({ path: path.join(MEDIA, 'brand-lockup-nav.png') })
 
     const family = await mark.evaluate((el) => getComputedStyle(el).fontFamily)
-    expect(family.toLowerCase()).toContain('dm sans')
+    expect(family.toLowerCase()).toContain('ibm plex sans')
+    expect(family.toLowerCase()).not.toMatch(/inter|roboto|arial|dm sans/)
     expect(fs.existsSync(path.join(MEDIA, 'brand-lockup.png'))).toBe(true)
   })
 })
