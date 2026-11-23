@@ -71,10 +71,13 @@ class AgentRun:
 SKILL_LABELS: dict[str, str] = {
     "planner": "Pianificazione",
     "shopify_read": "Lettura Shopify",
+    "knowledge": "Conoscenza aziendale",
     "spend_google": "Spend · Google Ads",
     "spend_meta": "Spend · Meta",
+    "spend_deep_optimize": "Spend deep · ottimizzazione",
     "seo_audit": "Audit SEO",
     "seo_crawler": "Crawl pagine",
+    "seo_deep_content": "SEO deep · content & report",
     "shopify_promo": "Promo Shopify (stub)",
     "lead_warming": "Lead warming (stub)",
     "ops_orders": "Stato ordini",

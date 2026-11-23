@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class SecretRef(BaseModel):
@@ -124,12 +124,48 @@ class SubscriptionFeatures(BaseModel):
     office_view: bool = True
 
 
+# Product plans: free (signup default) | plus (paid). Legacy aliases normalized.
+ProductPlan = Literal["free", "plus"]
+_LEGACY_PLAN_MAP: dict[str, ProductPlan] = {
+    "free": "free",
+    "plus": "plus",
+    "starter": "free",
+    "growth": "plus",
+    "scale": "plus",
+}
+
+
 class SubscriptionConfig(BaseModel):
-    plan: Literal["starter", "growth", "scale"] = "growth"
+    """
+    Product subscription.
+
+    Defaults:
+    - plan free (signup); Admin can set plus (Stripe stub).
+    - plus_override: Admin unlocks plus-tier skills without changing plan label.
+    """
+
+    plan: ProductPlan = "free"
     skills: SubscriptionSkills = Field(default_factory=SubscriptionSkills)
     features: SubscriptionFeatures = Field(default_factory=SubscriptionFeatures)
     # Presentation preference — full 3D default for all plans.
     office_mode: Literal["auto", "full", "light"] = "full"
+    # Admin override: treat tenant as plus-entitled for skill tier gates.
+    plus_override: bool = False
+
+    @field_validator("plan", mode="before")
+    @classmethod
+    def _normalize_plan(cls, value: Any) -> str:
+        if value is None or value == "":
+            return "free"
+        key = str(value).strip().lower()
+        return _LEGACY_PLAN_MAP.get(key, key if key in ("free", "plus") else "free")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce_legacy(cls, data: Any) -> Any:
+        if isinstance(data, dict) and "plan" in data:
+            data = {**data, "plan": cls._normalize_plan(data.get("plan"))}
+        return data
 
 
 class BillingConfig(BaseModel):

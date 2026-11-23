@@ -42,7 +42,7 @@ def _demo_with_skills(**flags: bool) -> TenantConfig:
 
 def test_demo_seed_subscription_defaults():
     cfg = load_tenant("demo", ROOT / "tenants")
-    assert cfg.subscription.plan == "growth"
+    assert cfg.subscription.plan == "plus"
     assert cfg.subscription.skills.spend is True
     assert cfg.subscription.skills.seo is True
     assert cfg.subscription.skills.shopify is False
@@ -114,7 +114,8 @@ def test_api_refuses_disabled_skill_goal(tmp_path, monkeypatch):
     detail = client.get("/api/tenants/demo", headers=admin).json()
     cfg = detail["config"]
     cfg["subscription"] = {
-        "plan": "growth",
+        "plan": "plus",
+        "plus_override": False,
         "skills": {
             "spend": True,
             "seo": True,

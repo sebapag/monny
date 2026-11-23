@@ -17,7 +17,9 @@ ALLOWED_SKILLS: frozenset[str] = frozenset(
     {
         "spend_google",
         "spend_meta",
+        "spend_deep_optimize",
         "seo_audit",
+        "seo_deep_content",
         "shopify_promo",
         "lead_warming",
         "ops_orders",
@@ -39,8 +41,9 @@ ALLOWED_SKILLS: frozenset[str] = frozenset(
 SYSTEM_PROMPT = """You are Atrium's planner. Choose skills for a marketing / ops run.
 Reply with ONLY a JSON object, no markdown, no explanation, no chain-of-thought:
 {"skills":["skill_id",...]}
-Allowed skill_id values: spend_google, spend_meta, seo_audit, shopify_promo, lead_warming, ops_orders, ops_inventory, ops_shipping, design_assets, design_ads, design_brand, it_integrations, it_access, it_monitoring, ctrl_budget, ctrl_kpi, ctrl_costs, reporting.
-Rules: pick the minimum useful skills for the goal; always include reporting last; never invent ids."""
+Allowed skill_id values: spend_google, spend_meta, spend_deep_optimize, seo_audit, seo_deep_content, shopify_promo, lead_warming, ops_orders, ops_inventory, ops_shipping, design_assets, design_ads, design_brand, it_integrations, it_access, it_monitoring, ctrl_budget, ctrl_kpi, ctrl_costs, reporting.
+Rules: pick the minimum useful skills for the goal; always include reporting last; never invent ids.
+Use spend_deep_optimize / seo_deep_content only for Plus deep requests (deep ROAS packaging, content brief, report pack)."""
 
 
 @dataclass(frozen=True)

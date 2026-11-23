@@ -20,7 +20,12 @@ import {
   adminSectionById,
   type AdminSectionId,
 } from './adminNav'
-import { mergeSkills } from './entitlements'
+import {
+  isPlusEntitled,
+  mergeSkills,
+  normalizePlan,
+} from './entitlements'
+import { skillsForDepartment, type SkillDef } from './skillCatalog'
 
 function FieldHelp({ children }: { children: string }) {
   return <p className="field-help">{children}</p>
@@ -473,13 +478,20 @@ export function AdminWorkspace({
 
             {section === 'plan' && (
               <div className="form-grid" data-testid="admin-plan-skills">
+                <FieldHelp>
+                  Piano prodotto Free o Plus (Stripe stub: imposta qui). Leadership resta sempre
+                  disponibile. I reparti spenti non partono nell’agent; le skill Plus richiedono
+                  piano Plus (o override Admin). Ufficio 3D per tutti.
+                </FieldHelp>
                 <div className="field">
                   <label>Piano</label>
                   <select
-                    value={cfg.subscription?.plan ?? 'growth'}
+                    data-testid="plan-select"
+                    value={normalizePlan(cfg.subscription?.plan)}
                     onChange={(e) =>
                       set('subscription', {
-                        plan: e.target.value as 'starter' | 'growth' | 'scale',
+                        plan: e.target.value as 'free' | 'plus',
+                        plus_override: Boolean(cfg.subscription?.plus_override),
                         skills: mergeSkills(cfg.subscription?.skills),
                         features: {
                           office_view: true,
@@ -489,11 +501,36 @@ export function AdminWorkspace({
                       })
                     }
                   >
-                    <option value="starter">Starter</option>
-                    <option value="growth">Growth</option>
-                    <option value="scale">Scale</option>
+                    <option value="free">Free</option>
+                    <option value="plus">Plus</option>
                   </select>
                 </div>
+                <label className="check-row skill-toggle" style={{ marginBottom: '0.75rem' }}>
+                  <input
+                    type="checkbox"
+                    data-testid="plus-override"
+                    checked={Boolean(cfg.subscription?.plus_override)}
+                    onChange={(e) =>
+                      set('subscription', {
+                        plan: normalizePlan(cfg.subscription?.plan),
+                        plus_override: e.target.checked,
+                        skills: mergeSkills(cfg.subscription?.skills),
+                        features: {
+                          office_view: true,
+                          ...(cfg.subscription?.features ?? {}),
+                        },
+                        office_mode: cfg.subscription?.office_mode ?? 'full',
+                      })
+                    }
+                  />
+                  <span>
+                    <strong>Override Plus (Admin)</strong>
+                    <span className="muted">
+                      {' '}
+                      — sblocca skill Plus senza cambiare il piano (utile finché Stripe è stub)
+                    </span>
+                  </span>
+                </label>
                 <div className="skill-toggles">
                   {(
                     [
@@ -508,33 +545,55 @@ export function AdminWorkspace({
                     ] as const
                   ).map(([key, title, hint]) => {
                     const skills = mergeSkills(cfg.subscription?.skills)
+                    const deptSkills = skillsForDepartment(key)
                     return (
-                      <label key={key} className="check-row skill-toggle">
-                        <input
-                          type="checkbox"
-                          checked={Boolean(skills[key])}
-                          onChange={(e) =>
-                            set('subscription', {
-                              plan: cfg.subscription?.plan ?? 'growth',
-                              skills: { ...skills, [key]: e.target.checked },
-                              features: {
-                                office_view: true,
-                                ...(cfg.subscription?.features ?? {}),
-                              },
-                              office_mode: cfg.subscription?.office_mode ?? 'full',
-                            })
-                          }
-                        />
-                        <span>
-                          <strong>{title}</strong>
-                          <span className="muted"> — {hint}</span>
-                        </span>
-                      </label>
+                      <div key={key} className="skill-toggle-block">
+                        <label className="check-row skill-toggle">
+                          <input
+                            type="checkbox"
+                            checked={Boolean(skills[key])}
+                            onChange={(e) =>
+                              set('subscription', {
+                                plan: normalizePlan(cfg.subscription?.plan),
+                                plus_override: Boolean(cfg.subscription?.plus_override),
+                                skills: { ...skills, [key]: e.target.checked },
+                                features: {
+                                  office_view: true,
+                                  ...(cfg.subscription?.features ?? {}),
+                                },
+                                office_mode: cfg.subscription?.office_mode ?? 'full',
+                              })
+                            }
+                          />
+                          <span>
+                            <strong>{title}</strong>
+                            <span className="muted"> — {hint}</span>
+                          </span>
+                        </label>
+                        {deptSkills.length > 0 && (
+                          <ul className="skill-tier-list" data-testid={`skill-tiers-${key}`}>
+                            {deptSkills.map((s: SkillDef) => (
+                              <li key={s.id}>
+                                <span className={`tier-pill tier-${s.tier}`}>
+                                  {s.tier === 'plus' ? 'Plus' : 'Free'}
+                                </span>
+                                <span>{s.label_it}</span>
+                                {s.knowhow.playbook && (
+                                  <span className="muted"> · {s.knowhow.playbook}</span>
+                                )}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
                     )
                   })}
                   <p className="status-line" style={{ marginTop: '0.35rem' }}>
-                    Leadership / decisioni: sempre attivo. Free vs paid = skill e limiti, non la
-                    grafica 3D.
+                    Leadership / decisioni: sempre attivo. Free vs Plus = capacità skill / know-how,
+                    non la grafica 3D.
+                    {isPlusEntitled(cfg)
+                      ? ' Piano corrente: Plus attivo.'
+                      : ' Piano corrente: Free.'}
                   </p>
                 </div>
               </div>
@@ -552,7 +611,8 @@ export function AdminWorkspace({
                       value={officeMode}
                       onChange={(e) =>
                         set('subscription', {
-                          plan: cfg.subscription?.plan ?? 'growth',
+                          plan: normalizePlan(cfg.subscription?.plan),
+                          plus_override: Boolean(cfg.subscription?.plus_override),
                           skills: mergeSkills(cfg.subscription?.skills),
                           features: {
                             ...(cfg.subscription?.features ?? {}),

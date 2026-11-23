@@ -1,10 +1,12 @@
 import type {
   OfficeMode,
+  ProductPlan,
   SubscriptionFeatures,
   SubscriptionSkills,
   TenantConfig,
 } from './api'
 import type { DeptId } from './depts'
+import { getCatalogSkill, SKILL_CATALOG, type SkillDef } from './skillCatalog'
 
 export const DEFAULT_SKILLS: SubscriptionSkills = {
   spend: true,
@@ -29,6 +31,13 @@ export function mergeSkills(
   return { ...DEFAULT_SKILLS, ...(partial ?? {}) }
 }
 
+export function normalizePlan(plan?: string | null): ProductPlan {
+  const key = (plan || 'free').trim().toLowerCase()
+  if (key === 'free' || key === 'starter') return 'free'
+  if (key === 'plus' || key === 'growth' || key === 'scale') return 'plus'
+  return 'free'
+}
+
 export function skillsFromConfig(cfg?: TenantConfig | null): SubscriptionSkills {
   return mergeSkills(cfg?.subscription?.skills)
 }
@@ -38,6 +47,11 @@ export function featuresFromConfig(cfg?: TenantConfig | null): SubscriptionFeatu
     ...DEFAULT_FEATURES,
     ...(cfg?.subscription?.features ?? {}),
   }
+}
+
+export function isPlusEntitled(cfg?: TenantConfig | null): boolean {
+  if (cfg?.subscription?.plus_override) return true
+  return normalizePlan(cfg?.subscription?.plan) === 'plus'
 }
 
 /** Office mode preference — 3D available to all plans (not a paid gate). */
@@ -67,6 +81,28 @@ export function isDeptEnabled(dept: DeptId, skills: SubscriptionSkills): boolean
   return Boolean(skills[key])
 }
 
+export function isCatalogSkillAllowed(
+  skillId: string,
+  cfg?: TenantConfig | null,
+): boolean {
+  const always = new Set(['planner', 'hitl', 'reporting', 'shopify_read', 'knowledge'])
+  if (always.has(skillId)) return true
+  const catalog = getCatalogSkill(skillId)
+  const skills = skillsFromConfig(cfg)
+  if (catalog) {
+    if (!skills[catalog.entitlement]) return false
+    if (catalog.tier === 'plus' && !isPlusEntitled(cfg)) return false
+    return true
+  }
+  // Fallback: treat as dept entitlement via id prefix heuristics — unknown = deny.
+  return false
+}
+
+/** Skills the Agent may activate for this tenant (dept on + tier ok). */
+export function allowedCatalogSkills(cfg?: TenantConfig | null): SkillDef[] {
+  return SKILL_CATALOG.filter((s) => isCatalogSkillAllowed(s.id, cfg))
+}
+
 export function lockedHintIt(dept: DeptId): string {
   const names: Record<string, string> = {
     spend: 'Spend pubblicitario',
@@ -80,6 +116,13 @@ export function lockedHintIt(dept: DeptId): string {
   }
   const name = names[dept] ?? 'Questo reparto'
   return `${name} non è nel piano attivo. Attivalo in Admin → Attivazione piano / reparti.`
+}
+
+export function plusLockedHintIt(skillLabel: string): string {
+  return (
+    `${skillLabel} è una skill Plus. Passa a Plus in Admin → Attivazione piano / reparti ` +
+    `(o abilita override Admin).`
+  )
 }
 
 /** Best-effort: which entitlement a free-text goal needs (null = generic / leadership). */
@@ -102,10 +145,38 @@ export function goalEntitlement(goal: string): keyof SubscriptionSkills | null {
   return null
 }
 
+/** Detect explicit plus-deep skill intent in free text. */
+export function goalPlusSkill(goal: string): string | null {
+  const text = goal.toLowerCase()
+  if (
+    /(spend deep|ottimizzazione deep|optimize spend deep|deep roas|live optimize ads|packaging report roas)/.test(
+      text,
+    )
+  ) {
+    return 'spend_deep_optimize'
+  }
+  if (
+    /(seo deep|content brief|brief content|deep seo|seo report pack|packaging report seo)/.test(
+      text,
+    )
+  ) {
+    return 'seo_deep_content'
+  }
+  return null
+}
+
 export function assertGoalAllowed(
   goal: string,
   skills: SubscriptionSkills,
+  cfg?: TenantConfig | null,
 ): string | null {
+  const plusSkill = goalPlusSkill(goal)
+  if (plusSkill && cfg !== undefined) {
+    if (!isCatalogSkillAllowed(plusSkill, cfg)) {
+      const label = getCatalogSkill(plusSkill)?.label_it ?? plusSkill
+      if (!isPlusEntitled(cfg)) return plusLockedHintIt(label)
+    }
+  }
   const key = goalEntitlement(goal)
   if (!key) return null
   if (skills[key]) return null

@@ -57,7 +57,9 @@ integrations:
     site_url: https://www.demo-shop.example/
     secret_ref: GSC_DEMO
 subscription:
-  plan: growth
+  # Product plans: free | plus (legacy growth/scale → plus). Demo seeds Plus.
+  plan: plus
+  plus_override: false
   skills:
     spend: true
     seo: true
