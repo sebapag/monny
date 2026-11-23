@@ -154,6 +154,15 @@ export type SubscriptionConfig = {
   office_mode?: OfficeMode
 }
 
+/** Always-visible monthly spend (Admin). Ads billed by Google/Meta; Atrium separate. */
+export type BillingConfig = {
+  currency: 'EUR'
+  renews_on_day: number
+  atrium_price_eur: number
+  ads_monthly_budget_eur: number
+  ads_spent_this_month_eur: number
+}
+
 export type SubscriptionSummary = {
   plan: string
   skills: SubscriptionSkills
@@ -211,6 +220,7 @@ export type TenantConfig = {
     search_console?: { site_url: string; secret_ref: string } | null
   }
   subscription?: SubscriptionConfig
+  billing?: BillingConfig
 }
 
 export type TenantDetail = {

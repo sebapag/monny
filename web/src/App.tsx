@@ -2,8 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   type AgentRun,
   type Approval,
-  type DecisionAutonomy,
-  type DecisionRights,
   type KnowledgeSource,
   type Report,
   type SeoChange,
@@ -67,15 +65,14 @@ import {
   reportPopupTitle,
   skillLabel,
 } from './labels'
-import type { OfficeMode } from './api'
 import {
   assertGoalAllowed,
   effectiveOfficeMode,
   isDeptEnabled,
   lockedHintIt,
-  mergeSkills,
   skillsFromConfig,
 } from './entitlements'
+import { AdminWorkspace } from './AdminWorkspace'
 import {
   LIGHT_LINGER_MS,
   litDeptsFromAgentRun,
@@ -741,395 +738,6 @@ function KnowledgeAdminPanel({
   )
 }
 
-function AdminForm({
-  detail,
-  onSave,
-  busy,
-}: {
-  detail: TenantDetail
-  onSave: (config: TenantConfig) => Promise<void>
-  busy: boolean
-}) {
-  const [cfg, setCfg] = useState<TenantConfig>(detail.config)
-  useEffect(() => setCfg(detail.config), [detail])
-
-  const set = <K extends keyof TenantConfig>(key: K, value: TenantConfig[K]) =>
-    setCfg((c) => ({ ...c, [key]: value }))
-
-  const secretStatus = (ref: string) =>
-    detail.secrets.find((s) => s.secret_ref === ref)?.configured
-
-  return (
-    <div className="form-grid">
-      <div className="field">
-        <label>Nome del negozio</label>
-        <input
-          value={cfg.display_name}
-          onChange={(e) => set('display_name', e.target.value)}
-        />
-        <FieldHelp>Come compare Atrium nell’header e nei report.</FieldHelp>
-      </div>
-
-      <div className="section-title">Negozio Shopify</div>
-      <div className="field-row">
-        <div className="field">
-          <label>Dominio negozio</label>
-          <input
-            value={cfg.shopify.shop_domain}
-            onChange={(e) =>
-              set('shopify', { ...cfg.shopify, shop_domain: e.target.value })
-            }
-          />
-          <FieldHelp>Es. mio-negozio.myshopify.com</FieldHelp>
-        </div>
-        <div className="field">
-          <label>Versione API</label>
-          <input
-            value={cfg.shopify.api_version}
-            onChange={(e) =>
-              set('shopify', { ...cfg.shopify, api_version: e.target.value })
-            }
-          />
-        </div>
-      </div>
-      <div className="secret-status-row">
-        <span>Accesso Shopify</span>
-        <span className={`pill ${secretStatus(cfg.shopify.auth.secret_ref) ? 'ok' : 'miss'}`}>
-          {secretStatus(cfg.shopify.auth.secret_ref) ? 'Configurato' : 'Mancante'}
-        </span>
-      </div>
-
-      <div className="section-title">Account Google Ads</div>
-      <div className="field">
-        <label>ID cliente Google Ads</label>
-        <input
-          value={cfg.ads.google?.customer_id ?? ''}
-          onChange={(e) =>
-            set('ads', {
-              ...cfg.ads,
-              google: {
-                customer_id: e.target.value,
-                login_customer_id: cfg.ads.google?.login_customer_id ?? null,
-                secret_ref: cfg.ads.google?.secret_ref ?? 'GOOGLE_ADS_DEMO',
-              },
-            })
-          }
-        />
-      </div>
-      <div className="secret-status-row">
-        <span>Credenziali Google Ads</span>
-        <span
-          className={`pill ${secretStatus(cfg.ads.google?.secret_ref || '') ? 'ok' : 'miss'}`}
-        >
-          {secretStatus(cfg.ads.google?.secret_ref || '') ? 'Configurato' : 'Mancante'}
-        </span>
-      </div>
-
-      <div className="section-title">Account Meta Ads</div>
-      <div className="field">
-        <label>ID account pubblicitario</label>
-        <input
-          value={cfg.ads.meta?.ad_account_id ?? ''}
-          onChange={(e) =>
-            set('ads', {
-              ...cfg.ads,
-              meta: {
-                ad_account_id: e.target.value,
-                secret_ref: cfg.ads.meta?.secret_ref ?? 'META_ADS_DEMO',
-              },
-            })
-          }
-        />
-      </div>
-      <div className="secret-status-row">
-        <span>Credenziali Meta</span>
-        <span
-          className={`pill ${secretStatus(cfg.ads.meta?.secret_ref || '') ? 'ok' : 'miss'}`}
-        >
-          {secretStatus(cfg.ads.meta?.secret_ref || '') ? 'Configurato' : 'Mancante'}
-        </span>
-      </div>
-
-      <div className="section-title">Sito e SEO</div>
-      <div className="field-row">
-        <div className="field">
-          <label>Indirizzo del sito</label>
-          <input
-            value={cfg.site.base_url}
-            onChange={(e) => set('site', { ...cfg.site, base_url: e.target.value })}
-          />
-        </div>
-        <div className="field">
-          <label>Sitemap (opzionale)</label>
-          <input
-            value={cfg.site.sitemap_url ?? ''}
-            onChange={(e) => set('site', { ...cfg.site, sitemap_url: e.target.value })}
-          />
-        </div>
-      </div>
-      <div className="field">
-        <label>Pagine da controllare per prime (una per riga)</label>
-        <textarea
-          rows={4}
-          value={(cfg.site.priority_urls ?? []).join('\n')}
-          onChange={(e) =>
-            set('site', {
-              ...cfg.site,
-              priority_urls: e.target.value
-                .split('\n')
-                .map((l) => l.trim())
-                .filter(Boolean),
-            })
-          }
-        />
-      </div>
-
-      <div className="section-title">Attivazione piano / reparti</div>
-      <FieldHelp>
-        Scegli i reparti inclusi nella sottoscrizione. Leadership (decisioni HITL) resta
-        sempre disponibile. I reparti spenti non partono nell’agent e restano chiusi
-        nell’ufficio.
-      </FieldHelp>
-      <div className="field">
-        <label>Piano</label>
-        <select
-          value={cfg.subscription?.plan ?? 'growth'}
-          onChange={(e) =>
-            set('subscription', {
-              plan: e.target.value as 'starter' | 'growth' | 'scale',
-              skills: mergeSkills(cfg.subscription?.skills),
-              features: {
-                office_view: true,
-                ...(cfg.subscription?.features ?? {}),
-              },
-              office_mode: cfg.subscription?.office_mode ?? 'full',
-            })
-          }
-        >
-          <option value="starter">Starter</option>
-          <option value="growth">Growth</option>
-          <option value="scale">Scale</option>
-        </select>
-      </div>
-      <div className="skill-toggles">
-        {(
-          [
-            ['spend', 'Spend pubblicitario', 'Google Ads e Meta'],
-            ['seo', 'SEO', 'Title, meta e H1'],
-            ['shopify', 'Negozio Shopify', 'Promo e anteprime negozio'],
-            ['leads', 'Lead', 'Sequenze di lead warming'],
-            ['operations', 'Operations', 'Ordini, giacenze, spedizioni'],
-            ['design', 'Graphic Designer', 'Asset, creatività ads, brand kit'],
-            ['it', 'IT', 'Integrazioni, accessi, monitoring'],
-            ['controlling', 'Controlling', 'Budget, KPI, costi anomali'],
-          ] as const
-        ).map(([key, title, hint]) => {
-          const skills = mergeSkills(cfg.subscription?.skills)
-          return (
-            <label key={key} className="check-row skill-toggle">
-              <input
-                type="checkbox"
-                checked={Boolean(skills[key])}
-                onChange={(e) =>
-                  set('subscription', {
-                    plan: cfg.subscription?.plan ?? 'growth',
-                    skills: { ...skills, [key]: e.target.checked },
-                    features: {
-                      office_view: true,
-                      ...(cfg.subscription?.features ?? {}),
-                    },
-                    office_mode: cfg.subscription?.office_mode ?? 'full',
-                  })
-                }
-              />
-              <span>
-                <strong>{title}</strong>
-                <span className="muted"> — {hint}</span>
-              </span>
-            </label>
-          )
-        })}
-        <p className="status-line" style={{ marginTop: '0.35rem' }}>
-          Leadership / decisioni: sempre attivo. Free vs paid = skill/limiti, non la grafica 3D.
-        </p>
-      </div>
-
-      <div className="section-title">Vista ufficio</div>
-      <FieldHelp>
-        L’ufficio 3D è incluso per tutti i piani. Qui scegli solo la presentazione
-        preferita: completa (3D), leggera (2D) o automatica in base al browser.
-      </FieldHelp>
-      {(() => {
-        const officeMode = (cfg.subscription?.office_mode ?? 'full') as OfficeMode
-        return (
-          <div className="skill-toggles office-view-toggles">
-            <div className="field" style={{ marginTop: '0.35rem' }}>
-              <label htmlFor="office-mode-select">Presentazione ufficio</label>
-              <select
-                id="office-mode-select"
-                data-testid="office-mode-select"
-                value={officeMode}
-                onChange={(e) =>
-                  set('subscription', {
-                    plan: cfg.subscription?.plan ?? 'growth',
-                    skills: mergeSkills(cfg.subscription?.skills),
-                    features: {
-                      ...(cfg.subscription?.features ?? {}),
-                      office_view: true,
-                    },
-                    office_mode: e.target.value as OfficeMode,
-                  })
-                }
-              >
-                <option value="auto">Automatica</option>
-                <option value="full">Completa (3D)</option>
-                <option value="light">Leggera</option>
-              </select>
-            </div>
-          </div>
-        )
-      })()}
-
-      <div className="section-title">Regole di sicurezza</div>
-      <label className="check-row">
-        <input
-          type="checkbox"
-          checked={cfg.policy.hitl_default}
-          onChange={(e) =>
-            set('policy', { ...cfg.policy, hitl_default: e.target.checked })
-          }
-        />
-        Chiedi sempre conferma prima di applicare cambiamenti
-      </label>
-
-      <div className="section-title">Diritti decisionali per reparto</div>
-      <FieldHelp>
-        Cosa può fare ogni skill senza passare da Leadership. «Sempre chiedi» rispetta
-        anche il flag sopra; «Entro policy» applica solo se auto_apply è attivo;
-        «L’agente risolve» salta l’HITL per quella famiglia.
-      </FieldHelp>
-      <div className="decision-rights-grid">
-        {(
-          [
-            ['spend', 'Spend pubblicitario'],
-            ['seo', 'SEO'],
-            ['shopify', 'Negozio Shopify'],
-            ['leads', 'Lead'],
-            ['operations', 'Operations'],
-            ['design', 'Graphic Designer'],
-            ['it', 'IT'],
-            ['controlling', 'Controlling'],
-          ] as const
-        ).map(([key, title]) => {
-          const rights: DecisionRights = {
-            spend: 'always_ask',
-            seo: 'always_ask',
-            shopify: 'always_ask',
-            leads: 'always_ask',
-            operations: 'always_ask',
-            design: 'always_ask',
-            it: 'always_ask',
-            controlling: 'always_ask',
-            ...(cfg.policy.decision_rights ?? {}),
-          }
-          const value = rights[key]
-          return (
-            <div className="field" key={key}>
-              <label htmlFor={`decision-right-${key}`}>{title}</label>
-              <select
-                id={`decision-right-${key}`}
-                data-testid={`decision-right-${key}`}
-                value={value}
-                onChange={(e) =>
-                  set('policy', {
-                    ...cfg.policy,
-                    decision_rights: {
-                      ...rights,
-                      [key]: e.target.value as DecisionAutonomy,
-                    },
-                  })
-                }
-              >
-                <option value="always_ask">Sempre chiedi</option>
-                <option value="within_policy">Entro policy</option>
-                <option value="agent_resolves">L’agente risolve</option>
-              </select>
-            </div>
-          )
-        })}
-      </div>
-
-      <div className="field-row">
-        <div className="field">
-          <label>ROAS minimo accettabile</label>
-          <input
-            type="number"
-            step="0.1"
-            value={cfg.policy.spend.thresholds.min_roas}
-            onChange={(e) =>
-              set('policy', {
-                ...cfg.policy,
-                spend: {
-                  ...cfg.policy.spend,
-                  thresholds: {
-                    ...cfg.policy.spend.thresholds,
-                    min_roas: Number(e.target.value),
-                  },
-                },
-              })
-            }
-          />
-        </div>
-        <div className="field">
-          <label>CPA massimo accettabile</label>
-          <input
-            type="number"
-            step="0.1"
-            value={cfg.policy.spend.thresholds.max_cpa}
-            onChange={(e) =>
-              set('policy', {
-                ...cfg.policy,
-                spend: {
-                  ...cfg.policy.spend,
-                  thresholds: {
-                    ...cfg.policy.spend.thresholds,
-                    max_cpa: Number(e.target.value),
-                  },
-                },
-              })
-            }
-          />
-        </div>
-        <div className="field">
-          <label>Taglio budget max %</label>
-          <input
-            type="number"
-            value={cfg.policy.spend.max_budget_delta_pct}
-            onChange={(e) =>
-              set('policy', {
-                ...cfg.policy,
-                spend: {
-                  ...cfg.policy.spend,
-                  max_budget_delta_pct: Number(e.target.value),
-                },
-              })
-            }
-          />
-        </div>
-      </div>
-
-      <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center' }}>
-        <button className="btn btn-primary" disabled={busy} onClick={() => void onSave(cfg)}>
-          {busy ? 'Salvataggio…' : 'Salva configurazione'}
-        </button>
-        <span className="status-line">
-          Salvato in {detail.path.split('/').slice(-2).join('/')}
-        </span>
-      </div>
-    </div>
-  )
-}
-
 function mergeOfficeLights(
   runLights: Record<DeptId, RoomLightState>,
   pendingTotal: number,
@@ -1780,58 +1388,41 @@ function App() {
 
       <main className="page">
         {route.mode === 'admin' ? (
-          <>
-            <section className="page-intro">
-              <div>
-                <h1>Admin</h1>
-                <p>
-                  Impostazioni di <strong>{tenantLabel}</strong>. Solo ciò che serve per
-                  collegare negozio e ads.
-                </p>
-              </div>
-            </section>
-            <section className="panel">
-              <h2>I tuoi negozi</h2>
-              <div className="tenant-chips">
-                {tenants.map((t) => (
-                  <button
-                    key={t.tenant_id}
-                    type="button"
-                    className={`tenant-chip ${t.tenant_id === tenantId ? 'active' : ''}`}
-                    onClick={() => switchTenant(t.tenant_id)}
-                  >
-                    <strong>{t.display_name}</strong>
-                    <span className="meta">
-                      {(t.secrets_configured ?? 0) > 0 ? 'Accessi ok' : 'Accessi da completare'}
-                      {t.pending_approvals ? ` · ${t.pending_approvals} da decidere` : ''}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </section>
-            <section className="panel">
-              <h2>Configurazione · {tenantLabel}</h2>
-              {tenantDetail && (
-                <AdminForm detail={tenantDetail} onSave={saveConfig} busy={busy} />
-              )}
-              {saveNote && <p className="status-line">{saveNote}</p>}
-              {error && <p className="error">{error}</p>}
-            </section>
-            <section className="panel">
-              <h2>Conoscenza aziendale</h2>
-              <KnowledgeAdminPanel tenantId={tenantId} busy={busy} />
-            </section>
-            <section className="panel">
-              <h2>Utenti e ruoli</h2>
-              <p className="muted">
-                Agent non apre Admin. Admin può usare entrambe le superfici.
-                {supabaseAuth
-                  ? ' Backend: Supabase Auth + Postgres.'
-                  : ' Modalità demo locale (fixture); attiva Supabase per gestire utenti.'}
-              </p>
-              <UsersAdminPanel tenantId={tenantId} busy={busy} supabaseAuth={supabaseAuth} />
-            </section>
-          </>
+          tenantDetail ? (
+            <AdminWorkspace
+              detail={tenantDetail}
+              onSave={saveConfig}
+              busy={busy}
+              section={route.section ?? null}
+              onNavigateSection={(next) =>
+                navigate({ mode: 'admin', section: next })
+              }
+              tenants={tenants}
+              tenantId={tenantId}
+              onSwitchTenant={switchTenant}
+              tenantLabel={tenantLabel}
+              knowledgePanel={<KnowledgeAdminPanel tenantId={tenantId} busy={busy} />}
+              usersPanel={
+                <>
+                  <p className="muted">
+                    Agent non apre Admin. Admin può usare entrambe le superfici.
+                    {supabaseAuth
+                      ? ' Backend: Supabase Auth + Postgres.'
+                      : ' Modalità demo locale (fixture); attiva Supabase per gestire utenti.'}
+                  </p>
+                  <UsersAdminPanel
+                    tenantId={tenantId}
+                    busy={busy}
+                    supabaseAuth={supabaseAuth}
+                  />
+                </>
+              }
+              saveNote={saveNote}
+              error={error}
+            />
+          ) : (
+            <p className="status-line">Caricamento Admin…</p>
+          )
         ) : route.mode === 'piano' ? (
           <>
             <OfficeTwin

@@ -85,6 +85,13 @@ const DEMO_CONFIG: TenantConfig = {
     features: { office_view: true },
     office_mode: 'full',
   },
+  billing: {
+    currency: 'EUR',
+    renews_on_day: 1,
+    atrium_price_eur: 79,
+    ads_monthly_budget_eur: 2500,
+    ads_spent_this_month_eur: 2015.5,
+  },
 }
 
 function uid(prefix: string): string {
