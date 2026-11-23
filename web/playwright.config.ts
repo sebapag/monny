@@ -56,5 +56,13 @@ export default defineConfig({
         viewport: { width: 1280, height: 900 },
       },
     },
+    {
+      name: 'desktop-brand-lockup',
+      testMatch: /brand-lockup\.spec\.ts/,
+      use: {
+        browserName: 'chromium',
+        viewport: { width: 1280, height: 800 },
+      },
+    },
   ],
 })
