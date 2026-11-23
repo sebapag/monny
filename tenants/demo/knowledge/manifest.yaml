@@ -3,13 +3,13 @@ sources:
     title: Tono di voce
     type: markdown
     path: brand-voice.md
-    tags: [brand, copy, spend, seo]
+    tags: [brand, copy, spend, seo, design, leads]
     enabled: true
   - id: product-faq
     title: FAQ prodotti
     type: markdown
     path: product-faq.md
-    tags: [commerce, support]
+    tags: [commerce, support, shopify]
     enabled: true
   - id: spend-guidelines
     title: Linee guida spend
@@ -40,6 +40,84 @@ sources:
     type: markdown
     path: playbooks/seo-deep.md
     tags: [seo, content, playbook, plus]
+    enabled: true
+  - id: commerce-base-playbook
+    title: Playbook Commerce base (Free)
+    type: markdown
+    path: playbooks/commerce-base.md
+    tags: [commerce, shopify, playbook, free]
+    enabled: true
+  - id: commerce-deep-playbook
+    title: Playbook Commerce deep (Plus)
+    type: markdown
+    path: playbooks/commerce-deep.md
+    tags: [commerce, shopify, playbook, plus, merch]
+    enabled: true
+  - id: leads-base-playbook
+    title: Playbook Lead base (Free)
+    type: markdown
+    path: playbooks/leads-base.md
+    tags: [leads, crm, playbook, free]
+    enabled: true
+  - id: leads-deep-playbook
+    title: Playbook Lead deep (Plus)
+    type: markdown
+    path: playbooks/leads-deep.md
+    tags: [leads, crm, playbook, plus, nurture]
+    enabled: true
+  - id: ops-base-playbook
+    title: Playbook Operations base (Free)
+    type: markdown
+    path: playbooks/ops-base.md
+    tags: [operations, fulfillment, playbook, free]
+    enabled: true
+  - id: ops-deep-playbook
+    title: Playbook Operations deep (Plus)
+    type: markdown
+    path: playbooks/ops-deep.md
+    tags: [operations, fulfillment, playbook, plus, sla]
+    enabled: true
+  - id: design-base-playbook
+    title: Playbook Design base (Free)
+    type: markdown
+    path: playbooks/design-base.md
+    tags: [design, brand, creative, playbook, free]
+    enabled: true
+  - id: design-deep-playbook
+    title: Playbook Design deep (Plus)
+    type: markdown
+    path: playbooks/design-deep.md
+    tags: [design, brand, playbook, plus, campaign]
+    enabled: true
+  - id: it-base-playbook
+    title: Playbook IT base (Free)
+    type: markdown
+    path: playbooks/it-base.md
+    tags: [it, integrations, playbook, free]
+    enabled: true
+  - id: it-deep-playbook
+    title: Playbook IT deep (Plus)
+    type: markdown
+    path: playbooks/it-deep.md
+    tags: [it, integrations, playbook, plus, reliability]
+    enabled: true
+  - id: controlling-base-playbook
+    title: Playbook Controlling base (Free)
+    type: markdown
+    path: playbooks/controlling-base.md
+    tags: [controlling, budget, kpi, playbook, free]
+    enabled: true
+  - id: controlling-deep-playbook
+    title: Playbook Controlling deep (Plus)
+    type: markdown
+    path: playbooks/controlling-deep.md
+    tags: [controlling, budget, playbook, plus, forecast]
+    enabled: true
+  - id: leadership-hitl-playbook
+    title: Playbook Leadership / HITL
+    type: markdown
+    path: playbooks/leadership-hitl.md
+    tags: [leadership, hitl, governance, playbook]
     enabled: true
 index:
   backend: local_stub

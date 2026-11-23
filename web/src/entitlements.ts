@@ -162,6 +162,24 @@ export function goalPlusSkill(goal: string): string | null {
   ) {
     return 'seo_deep_content'
   }
+  if (/(commerce deep|shopify deep|merchandising deep|merch calendar|deep merch)/.test(text)) {
+    return 'shopify_deep_merch'
+  }
+  if (/(leads deep|lead deep|nurture deep|deep nurture|lead scoring)/.test(text)) {
+    return 'leads_deep_nurture'
+  }
+  if (/(ops deep|operations deep|sla deep|deep sla|otif)/.test(text)) {
+    return 'ops_deep_sla'
+  }
+  if (/(design deep|campaign kit|deep campaign|creative score)/.test(text)) {
+    return 'design_deep_campaign'
+  }
+  if (/(it deep|reliability deep|deep reliability|incident runbook)/.test(text)) {
+    return 'it_deep_reliability'
+  }
+  if (/(controlling deep|ctrl deep|forecast deep|deep forecast|scenario stretch)/.test(text)) {
+    return 'ctrl_deep_forecast'
+  }
   return null
 }
 

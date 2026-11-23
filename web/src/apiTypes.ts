@@ -164,6 +164,9 @@ export type SkillCatalogEntry = {
     knowledge_tags: string[]
     knowledge_paths: string[]
     decision_rights_key: string | null
+    metrics?: string[]
+    hitl_prompts?: string[]
+    decision_rights_hint?: string | null
   }
   extension_hook: boolean
 }

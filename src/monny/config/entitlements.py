@@ -193,6 +193,46 @@ def blocked_plus_skills_for_text(tenant: TenantConfig, text: str) -> list[str]:
             "seo report pack",
             "packaging report seo",
         ),
+        "shopify_deep_merch": (
+            "commerce deep",
+            "shopify deep",
+            "merchandising deep",
+            "merch calendar",
+            "deep merch",
+        ),
+        "leads_deep_nurture": (
+            "leads deep",
+            "lead deep",
+            "nurture deep",
+            "deep nurture",
+            "lead scoring",
+        ),
+        "ops_deep_sla": (
+            "ops deep",
+            "operations deep",
+            "sla deep",
+            "deep sla",
+            "otif",
+        ),
+        "design_deep_campaign": (
+            "design deep",
+            "campaign kit",
+            "deep campaign",
+            "creative score",
+        ),
+        "it_deep_reliability": (
+            "it deep",
+            "reliability deep",
+            "deep reliability",
+            "incident runbook",
+        ),
+        "ctrl_deep_forecast": (
+            "controlling deep",
+            "ctrl deep",
+            "forecast deep",
+            "deep forecast",
+            "scenario stretch",
+        ),
     }
     for skill_id, words in plus_hints.items():
         if any(w in lowered for w in words):

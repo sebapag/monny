@@ -10,40 +10,20 @@ from typing import Any, Literal
 import httpx
 
 from monny.config.settings import Settings, get_settings
+from monny.config.skill_catalog import SKILL_CATALOG
 from monny.llm.client import chat_completion, llm_configured
 
 # Skills the planner may return (reporting is always appended if missing).
-ALLOWED_SKILLS: frozenset[str] = frozenset(
-    {
-        "spend_google",
-        "spend_meta",
-        "spend_deep_optimize",
-        "seo_audit",
-        "seo_deep_content",
-        "shopify_promo",
-        "lead_warming",
-        "ops_orders",
-        "ops_inventory",
-        "ops_shipping",
-        "design_assets",
-        "design_ads",
-        "design_brand",
-        "it_integrations",
-        "it_access",
-        "it_monitoring",
-        "ctrl_budget",
-        "ctrl_kpi",
-        "ctrl_costs",
-        "reporting",
-    }
-)
+ALLOWED_SKILLS: frozenset[str] = frozenset(set(SKILL_CATALOG) | {"reporting"})
 
-SYSTEM_PROMPT = """You are Atrium's planner. Choose skills for a marketing / ops run.
+_ALLOWED_CSV = ", ".join(sorted(ALLOWED_SKILLS))
+
+SYSTEM_PROMPT = f"""You are Atrium's planner. Choose skills for a marketing / ops run.
 Reply with ONLY a JSON object, no markdown, no explanation, no chain-of-thought:
-{"skills":["skill_id",...]}
-Allowed skill_id values: spend_google, spend_meta, spend_deep_optimize, seo_audit, seo_deep_content, shopify_promo, lead_warming, ops_orders, ops_inventory, ops_shipping, design_assets, design_ads, design_brand, it_integrations, it_access, it_monitoring, ctrl_budget, ctrl_kpi, ctrl_costs, reporting.
+{{"skills":["skill_id",...]}}
+Allowed skill_id values: {_ALLOWED_CSV}.
 Rules: pick the minimum useful skills for the goal; always include reporting last; never invent ids.
-Use spend_deep_optimize / seo_deep_content only for Plus deep requests (deep ROAS packaging, content brief, report pack)."""
+Use *_deep_* Plus skills only for explicit deep / packaging / forecast / SLA / nurture / merch requests."""
 
 
 @dataclass(frozen=True)

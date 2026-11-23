@@ -15,9 +15,29 @@ SKILL_LABELS_IT = {
     "shopify_read": "Lettura negozio",
     "spend_google": "Google Ads",
     "spend_meta": "Meta Ads",
+    "spend_deep_optimize": "Spend deep",
     "seo_audit": "Audit SEO",
+    "seo_deep_content": "SEO deep",
     "shopify_promo": "Promo Shopify",
+    "shopify_deep_merch": "Commerce deep",
     "lead_warming": "Lead warming",
+    "leads_deep_nurture": "Lead deep",
+    "ops_orders": "Stato ordini",
+    "ops_inventory": "Giacenze",
+    "ops_shipping": "Spedizioni",
+    "ops_deep_sla": "Operations deep",
+    "design_assets": "Asset creativi",
+    "design_ads": "Creatività ads",
+    "design_brand": "Brand kit",
+    "design_deep_campaign": "Design deep",
+    "it_integrations": "Integrazioni",
+    "it_access": "Accessi",
+    "it_monitoring": "Monitoring",
+    "it_deep_reliability": "IT deep",
+    "ctrl_budget": "Budget vs spend",
+    "ctrl_kpi": "KPI snapshot",
+    "ctrl_costs": "Costi anomali",
+    "ctrl_deep_forecast": "Controlling deep",
 }
 
 
@@ -174,6 +194,30 @@ def run(findings: list[dict[str, Any]], goal: str) -> dict[str, Any]:
         lines.append("## Dettaglio skill")
         lines.append("")
         lines.extend(section_notes)
+        lines.append("")
+
+    knowhow_notes: list[str] = []
+    for item in findings:
+        skill = item.get("skill")
+        if skill == "reporting":
+            continue
+        kh = item.get("knowhow") or {}
+        playbook = kh.get("playbook")
+        if not playbook:
+            continue
+        title = kh.get("playbook_title") or playbook
+        metrics = kh.get("metrics") or []
+        metric_bit = f" · metriche: {', '.join(metrics[:3])}" if metrics else ""
+        knowhow_notes.append(
+            f"- **{_skill_label(skill)}**: `{playbook}`"
+            f"{' — ' + title if title != playbook else ''}"
+            f"{metric_bit}"
+        )
+    if knowhow_notes:
+        lines.append("## Know-how consultato")
+        lines.append("")
+        lines.extend(knowhow_notes)
+        lines.append("")
 
     markdown = "\n".join(lines).strip()
 
@@ -187,4 +231,5 @@ def run(findings: list[dict[str, Any]], goal: str) -> dict[str, Any]:
         "seo_change_set": seo_change_set,
         "seo_findings": seo_findings,
         "shopify": shopify,
+        "knowhow_notes": knowhow_notes,
     }

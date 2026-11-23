@@ -6,140 +6,164 @@ surfaces company process even while side effects stay proposal-only.
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
 from monny.config.models import TenantConfig
-from monny.config.settings import get_settings
 from monny.config.skill_catalog import get_skill
-from monny.knowledge import retrieve
+from monny.skills.knowhow import load_knowhow
 
 PHASE = "plus_extension"
 
+# skill_id → interfaces reserved for live adapters + Italian summary
+_PLUS_META: dict[str, dict[str, Any]] = {
+    "spend_deep_optimize": {
+        "channel": "google",
+        "entity_name": "Ottimizzazione spend deep",
+        "action_type": "phase2_stub",
+        "interfaces": [
+            "deep_roas_packaging",
+            "live_adapter_optimize",
+            "advanced_decision_rights",
+        ],
+        "summary": "Spend deep (Plus): know-how caricato; ottimizzazione live in anteprima.",
+        "reason_prefix": "Plus: packaging report ROAS + hook adapter live.",
+    },
+    "seo_deep_content": {
+        "channel": "seo",
+        "entity_name": "SEO deep content & report",
+        "action_type": "seo_apply_changeset",
+        "interfaces": [
+            "content_brief",
+            "seo_report_packaging",
+            "cms_live_apply_hook",
+        ],
+        "summary": "SEO deep (Plus): know-how caricato; brief/report in anteprima.",
+        "reason_prefix": "Plus: brief content + packaging report SEO. Hook CMS/live apply riservato.",
+    },
+    "shopify_deep_merch": {
+        "channel": "shopify",
+        "entity_name": "Commerce deep merchandising",
+        "action_type": "phase2_stub",
+        "interfaces": [
+            "merch_calendar",
+            "promo_report_packaging",
+            "shopify_price_rule_live",
+        ],
+        "summary": "Commerce deep (Plus): piano merch e report in anteprima.",
+        "reason_prefix": "Plus: calendario merch + anti-stacking. Nessuna price rule reale.",
+    },
+    "leads_deep_nurture": {
+        "channel": "leads",
+        "entity_name": "Lead deep nurture",
+        "action_type": "phase3_stub",
+        "interfaces": [
+            "lead_scoring",
+            "nurture_branching",
+            "crm_sequence_live",
+        ],
+        "summary": "Lead deep (Plus): scoring/branching in anteprima.",
+        "reason_prefix": "Plus: scoring + branching nurture. Nessun invio CRM reale.",
+    },
+    "ops_deep_sla": {
+        "channel": "operations",
+        "entity_name": "Operations deep SLA",
+        "action_type": "phase2_stub",
+        "interfaces": [
+            "sla_matrix",
+            "ops_report_packaging",
+            "wms_exception_live",
+        ],
+        "summary": "Operations deep (Plus): SLA/OTIF in anteprima.",
+        "reason_prefix": "Plus: matrice SLA + report OTIF. Nessuna write WMS.",
+    },
+    "design_deep_campaign": {
+        "channel": "design",
+        "entity_name": "Design deep campaign kit",
+        "action_type": "phase2_stub",
+        "interfaces": [
+            "format_matrix",
+            "creative_score",
+            "dam_publish_live",
+        ],
+        "summary": "Design deep (Plus): campaign kit e score in anteprima.",
+        "reason_prefix": "Plus: matrice formati + score creatività. Nessun publish DAM.",
+    },
+    "it_deep_reliability": {
+        "channel": "it",
+        "entity_name": "IT deep reliability",
+        "action_type": "phase2_stub",
+        "interfaces": [
+            "reliability_score",
+            "incident_runbook",
+            "remediation_live",
+        ],
+        "summary": "IT deep (Plus): reliability score e runbook in anteprima.",
+        "reason_prefix": "Plus: reliability score + runbook. Nessuna remediation live.",
+    },
+    "ctrl_deep_forecast": {
+        "channel": "controlling",
+        "entity_name": "Controlling deep forecast",
+        "action_type": "phase2_stub",
+        "interfaces": [
+            "spend_forecast",
+            "scenario_pack",
+            "finance_export_live",
+        ],
+        "summary": "Controlling deep (Plus): forecast e scenari in anteprima.",
+        "reason_prefix": "Plus: forecast + scenario pack. Nessun export finance live.",
+    },
+}
 
-def _knowhow_payload(tenant: TenantConfig, skill_id: str) -> dict[str, Any]:
+
+def _run_plus(skill_id: str, tenant: TenantConfig) -> dict[str, Any]:
+    meta = _PLUS_META[skill_id]
+    knowhow = load_knowhow(tenant, skill_id)
     skill = get_skill(skill_id)
-    if skill is None:
-        return {}
-    kh = skill.knowhow
-    settings = get_settings()
-    tenants_root = Path(settings.monny_tenants_dir)
-    chunks: list[dict[str, Any]] = []
-    try:
-        retrieved = retrieve(
-            tenant.tenant_id,
-            skill.label_it,
-            tags=list(kh.knowledge_tags) or None,
-            limit=4,
-            root=tenants_root,
-        )
-        chunks = [c.to_dict() for c in retrieved]
-    except Exception:  # noqa: BLE001 — dry-run / missing knowledge is OK
-        chunks = []
-    playbook_excerpt = ""
-    if kh.playbook:
-        path = tenants_root / tenant.tenant_id / "knowledge" / kh.playbook
-        if path.exists():
-            playbook_excerpt = path.read_text(encoding="utf-8")[:1200]
-    return {
-        "playbook": kh.playbook,
-        "knowledge_tags": list(kh.knowledge_tags),
-        "knowledge_paths": list(kh.knowledge_paths),
-        "chunks": chunks,
-        "playbook_excerpt": playbook_excerpt,
-    }
-
-
-def run_spend_deep_optimize(tenant: TenantConfig, **_kwargs: Any) -> dict[str, Any]:
-    knowhow = _knowhow_payload(tenant, "spend_deep_optimize")
+    playbook = knowhow.get("playbook") or "n/d"
     proposals = [
         {
-            "action_type": "phase2_stub",
-            "channel": "google",
+            "action_type": meta["action_type"],
+            "channel": meta["channel"],
             "entity_type": "skill",
-            "entity_id": "spend_deep_optimize",
-            "entity_name": "Ottimizzazione spend deep",
+            "entity_id": skill_id,
+            "entity_name": meta["entity_name"],
             "reason": (
-                "Plus: packaging report ROAS + hook adapter live. "
-                f"Playbook: {knowhow.get('playbook') or 'n/d'}. "
+                f"{meta['reason_prefix']} "
+                f"Playbook: {playbook}. "
                 "Nessuna modifica reale finché l’adapter live non è collegato."
             ),
             "requires_approval": True,
             "phase": PHASE,
             "stub": True,
-            "interfaces": [
-                "deep_roas_packaging",
-                "live_adapter_optimize",
-                "advanced_decision_rights",
-            ],
+            "interfaces": meta["interfaces"],
             "knowhow": knowhow,
-        }
-    ]
-    return {
-        "skill": "spend_deep_optimize",
-        "status": "plus_extension_stub",
-        "phase": PHASE,
-        "summary": (
-            "Spend deep (Plus): know-how caricato; ottimizzazione live in anteprima."
-        ),
-        "knowhow": knowhow,
-        "interfaces": proposals[0]["interfaces"],
-        "proposals": proposals,
-    }
-
-
-def run_seo_deep_content(tenant: TenantConfig, **_kwargs: Any) -> dict[str, Any]:
-    knowhow = _knowhow_payload(tenant, "seo_deep_content")
-    proposals = [
-        {
-            "action_type": "seo_apply_changeset",
-            "channel": "seo",
-            "entity_type": "skill",
-            "entity_id": "seo_deep_content",
-            "entity_name": "SEO deep content & report",
-            "reason": (
-                "Plus: brief content + packaging report SEO. "
-                f"Playbook: {knowhow.get('playbook') or 'n/d'}. "
-                "Hook CMS/live apply riservato — nessuna modifica reale."
+            "metrics": list((skill.knowhow.metrics if skill else ()) or knowhow.get("metrics") or []),
+            "hitl_prompts": list(
+                (skill.knowhow.hitl_prompts if skill else ()) or knowhow.get("hitl_prompts") or []
             ),
-            "requires_approval": True,
-            "phase": PHASE,
-            "stub": True,
-            "interfaces": [
-                "content_brief",
-                "seo_report_packaging",
-                "cms_live_apply_hook",
-            ],
-            "knowhow": knowhow,
         }
     ]
     return {
-        "skill": "seo_deep_content",
+        "skill": skill_id,
         "status": "plus_extension_stub",
         "phase": PHASE,
-        "summary": (
-            "SEO deep (Plus): know-how caricato; brief/report in anteprima."
-        ),
+        "summary": meta["summary"],
         "knowhow": knowhow,
-        "interfaces": proposals[0]["interfaces"],
+        "interfaces": meta["interfaces"],
         "proposals": proposals,
     }
 
 
-PLUS_RUNNERS: dict[str, Any] = {
-    "spend_deep_optimize": run_spend_deep_optimize,
-    "seo_deep_content": run_seo_deep_content,
-}
+PLUS_RUNNERS: dict[str, Any] = {sid: (lambda t, sid=sid, **_: _run_plus(sid, t)) for sid in _PLUS_META}
 
-ALL_PLUS_SKILLS = frozenset(PLUS_RUNNERS)
+ALL_PLUS_SKILLS = frozenset(_PLUS_META)
 
 
 def run(skill_name: str, tenant: TenantConfig, **kwargs: Any) -> dict[str, Any]:
-    runner = PLUS_RUNNERS.get(skill_name)
-    if runner is None:
+    if skill_name not in _PLUS_META:
         return {
             "skill": skill_name,
             "status": "skipped",
             "summary": "Plus skill non registrata.",
         }
-    return runner(tenant, **kwargs)
+    return _run_plus(skill_name, tenant)

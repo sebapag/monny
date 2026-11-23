@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from monny.config.models import TenantConfig
+from monny.skills.knowhow import with_knowhow
 
 ENABLED = True  # routable when asked; still a no-op apply
 PHASE = 3
@@ -18,10 +19,10 @@ def run(tenant: TenantConfig | None = None, **_kwargs: Any) -> dict[str, Any]:
             "channel": "lead_warming",
             "entity_type": "skill",
             "entity_id": "lead_warming",
-            "entity_name": "Lead warming (phase 3)",
+            "entity_name": "Lead warming",
             "reason": (
-                f"Phase 3 stub for {label}: would ingest/score leads and draft sequences. "
-                "No CRM or messaging side effects in this phase."
+                f"Anteprima sequenza warming per {label}: ingest/score/touch. "
+                "Nessun invio CRM in questa fase."
             ),
             "requires_approval": True,
             "phase": PHASE,
@@ -29,14 +30,15 @@ def run(tenant: TenantConfig | None = None, **_kwargs: Any) -> dict[str, Any]:
             "interfaces": ["ingest_lead", "score", "message_sequence"],
         }
     ]
-    return {
+    result: dict[str, Any] = {
         "skill": "lead_warming",
         "status": "phase3_stub",
         "phase": PHASE,
-        "summary": (
-            "Lead warming is a phase-3 stub — proposal only, no real side effects."
-        ),
+        "summary": "Lead warming in anteprima — proposal only, nessun invio reale.",
         "note": "Interfaces reserved: ingest_lead, score, message_sequence.",
         "interfaces": ["ingest_lead", "score", "message_sequence"],
         "proposals": proposals,
     }
+    if tenant is not None:
+        result = with_knowhow(result, tenant, "lead_warming")
+    return result
