@@ -1,7 +1,7 @@
-"""Phase-2 department skill stubs — Operations, Design, IT, Controlling.
+"""Phase-2 department skill stubs — Operations, Design, IT, Controlling (+ commerce/leads free).
 
-Activatable entitlements; proposal-only (no side effects). Italian UI labels live
-in web/src/labels.ts and storage/runs.py SKILL_LABELS.
+Activatable entitlements; proposal-only (no side effects). Each run attaches
+tenant playbook know-how so LangGraph findings cite company process.
 """
 
 from __future__ import annotations
@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import Any
 
 from monny.config.models import TenantConfig
+from monny.skills.knowhow import with_knowhow
 
 PHASE = 2
 
@@ -129,7 +130,7 @@ def run(skill_name: str, tenant: TenantConfig | None = None, **_kwargs: Any) -> 
             "interfaces": meta["interfaces"],
         }
     ]
-    return {
+    result: dict[str, Any] = {
         "skill": skill_name,
         "status": "phase2_stub",
         "phase": PHASE,
@@ -138,3 +139,6 @@ def run(skill_name: str, tenant: TenantConfig | None = None, **_kwargs: Any) -> 
         "interfaces": meta["interfaces"],
         "proposals": proposals,
     }
+    if tenant is not None:
+        result = with_knowhow(result, tenant, skill_name)
+    return result

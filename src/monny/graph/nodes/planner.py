@@ -83,6 +83,64 @@ def _stub_infer_plan_raw(goal: str, message: str) -> list[str]:
             "packaging report seo",
         )
     )
+    wants_commerce_deep = any(
+        k in text
+        for k in (
+            "commerce deep",
+            "shopify deep",
+            "merchandising deep",
+            "merch calendar",
+            "deep merch",
+        )
+    )
+    wants_leads_deep = any(
+        k in text
+        for k in (
+            "leads deep",
+            "lead deep",
+            "nurture deep",
+            "deep nurture",
+            "lead scoring",
+        )
+    )
+    wants_ops_deep = any(
+        k in text
+        for k in (
+            "ops deep",
+            "operations deep",
+            "sla deep",
+            "deep sla",
+            "otif",
+        )
+    )
+    wants_design_deep = any(
+        k in text
+        for k in (
+            "design deep",
+            "campaign kit",
+            "deep campaign",
+            "creative score",
+        )
+    )
+    wants_it_deep = any(
+        k in text
+        for k in (
+            "it deep",
+            "reliability deep",
+            "deep reliability",
+            "incident runbook",
+        )
+    )
+    wants_ctrl_deep = any(
+        k in text
+        for k in (
+            "controlling deep",
+            "ctrl deep",
+            "forecast deep",
+            "deep forecast",
+            "scenario stretch",
+        )
+    )
     wants_spend = any(
         k in text
         for k in (
@@ -120,13 +178,31 @@ def _stub_infer_plan_raw(goal: str, message: str) -> list[str]:
     if wants_seo_deep:
         plan.append("seo_deep_content")
         stub_only = True
-    if wants_promo:
+    if wants_commerce_deep:
+        plan.append("shopify_deep_merch")
+        stub_only = True
+    if wants_leads_deep:
+        plan.append("leads_deep_nurture")
+        stub_only = True
+    if wants_ops_deep:
+        plan.append("ops_deep_sla")
+        stub_only = True
+    if wants_design_deep:
+        plan.append("design_deep_campaign")
+        stub_only = True
+    if wants_it_deep:
+        plan.append("it_deep_reliability")
+        stub_only = True
+    if wants_ctrl_deep:
+        plan.append("ctrl_deep_forecast")
+        stub_only = True
+    if wants_promo and not wants_commerce_deep:
         plan.append("shopify_promo")
         stub_only = True
-    if wants_leads:
+    if wants_leads and not wants_leads_deep:
         plan.append("lead_warming")
         stub_only = True
-    if wants_ops:
+    if wants_ops and not wants_ops_deep:
         if "giacenz" in text or "inventory" in text or "stock" in text:
             plan.append("ops_inventory")
         elif "spedizion" in text or "shipping" in text or "ritard" in text:
@@ -134,7 +210,7 @@ def _stub_infer_plan_raw(goal: str, message: str) -> list[str]:
         else:
             plan.append("ops_orders")
         stub_only = True
-    if wants_design:
+    if wants_design and not wants_design_deep:
         if "brand" in text:
             plan.append("design_brand")
         elif "asset" in text:
@@ -144,7 +220,7 @@ def _stub_infer_plan_raw(goal: str, message: str) -> list[str]:
         else:
             plan.append("design_assets")
         stub_only = True
-    if wants_it:
+    if wants_it and not wants_it_deep:
         if "accessi" in text or "credenzial" in text:
             plan.append("it_access")
         elif "uptime" in text or "monitor" in text or "runtime" in text or "errori" in text:
@@ -152,7 +228,7 @@ def _stub_infer_plan_raw(goal: str, message: str) -> list[str]:
         else:
             plan.append("it_integrations")
         stub_only = True
-    if wants_ctrl:
+    if wants_ctrl and not wants_ctrl_deep:
         if "kpi" in text:
             plan.append("ctrl_kpi")
         elif "cost" in text or "anomali" in text:

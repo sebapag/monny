@@ -9,6 +9,7 @@ from monny.adapters import shopify as shopify_adapter
 from monny.config.entitlements import is_skill_allowed
 from monny.config.loader import load_tenant
 from monny.config.settings import get_settings
+from monny.config.skill_catalog import get_skill
 from monny.graph import timeline
 from monny.graph.state import AgentState
 from monny.skills import (
@@ -21,6 +22,7 @@ from monny.skills import (
     spend_google,
     spend_meta,
 )
+from monny.skills.knowhow import with_knowhow
 from monny.storage.artifacts import artifact_dir, write_json_artifact
 from monny.storage.audit import append_audit
 
@@ -28,6 +30,22 @@ from monny.storage.audit import append_audit
 def _pause_for_presence() -> None:
     """Yield so the UI can poll a running step (presence, not a silent wait)."""
     time.sleep(1.4)
+
+
+def _consult_playbook(run_id: str | None, skill_name: str) -> None:
+    """Timeline presence: company know-how before the skill body runs."""
+    skill = get_skill(skill_name)
+    if skill is None or not skill.knowhow.playbook:
+        return
+    title = skill.label_it
+    tier = "Plus" if skill.tier == "plus" else "Free"
+    timeline.start(
+        run_id,
+        "knowledge",
+        f"Consulto playbook {tier}: {skill.knowhow.playbook}…",
+    )
+    _pause_for_presence()
+    timeline.done(run_id, "knowledge", f"Know-how {title} pronto")
 
 
 def skills_runner_node(state: AgentState) -> dict:
@@ -72,10 +90,9 @@ def skills_runner_node(state: AgentState) -> dict:
             )
             continue
 
+        _consult_playbook(run_id, skill_name)
+
         if skill_name == "spend_google":
-            timeline.start(run_id, "knowledge", "Consulto la knowledge aziendale…")
-            _pause_for_presence()
-            timeline.done(run_id, "knowledge", "Contesto pronto")
             timeline.start(run_id, "spend_google", "Analizzo campagne Google Ads…")
             _pause_for_presence()
             result = spend_google.run(tenant, dry_run=dry_run, fixtures_dir=fixtures_dir)
@@ -102,21 +119,18 @@ def skills_runner_node(state: AgentState) -> dict:
             )
             timeline.done(run_id, "seo_audit", result.get("summary") or "Completato")
         elif skill_name == "shopify_promo":
-            timeline.start(run_id, "shopify_promo", "Stub promo Shopify (fase 2)…")
+            timeline.start(run_id, "shopify_promo", "Promo Shopify (anteprima)…")
             _pause_for_presence()
             result = shopify_promo.run(tenant)
             findings.append(result)
             timeline.done(run_id, "shopify_promo", result.get("summary") or "Stub")
         elif skill_name == "lead_warming":
-            timeline.start(run_id, "lead_warming", "Stub lead warming (fase 3)…")
+            timeline.start(run_id, "lead_warming", "Lead warming (anteprima)…")
             _pause_for_presence()
             result = lead_warming.run(tenant)
             findings.append(result)
             timeline.done(run_id, "lead_warming", result.get("summary") or "Stub")
         elif skill_name in plus_hooks.ALL_PLUS_SKILLS:
-            timeline.start(run_id, "knowledge", "Consulto playbook Plus…")
-            _pause_for_presence()
-            timeline.done(run_id, "knowledge", "Know-how Plus pronto")
             timeline.start(run_id, skill_name, f"Skill Plus {skill_name}…")
             _pause_for_presence()
             result = plus_hooks.run(skill_name, tenant)
@@ -124,15 +138,37 @@ def skills_runner_node(state: AgentState) -> dict:
             timeline.done(run_id, skill_name, result.get("summary") or "Plus stub")
         elif skill_name in dept_stubs.ALL_STUB_SKILLS:
             label = dept_stubs.STUB_META[skill_name]["entity_name"]
-            timeline.start(run_id, skill_name, f"Stub {label}…")
+            timeline.start(run_id, skill_name, f"{label}…")
             _pause_for_presence()
             result = dept_stubs.run(skill_name, tenant)
             findings.append(result)
             timeline.done(run_id, skill_name, result.get("summary") or "Stub")
         else:
-            findings.append(
-                {"skill": skill_name, "summary": "Skill not registered in MVP.", "status": "skipped"}
-            )
+            # Unknown catalog id still gets know-how attach if defined.
+            skill = get_skill(skill_name)
+            if skill is not None:
+                timeline.start(run_id, skill_name, f"{skill.label_it}…")
+                _pause_for_presence()
+                result = with_knowhow(
+                    {
+                        "skill": skill_name,
+                        "status": "catalog_only",
+                        "summary": f"{skill.label_it}: know-how caricato (runner dedicato assente).",
+                        "proposals": [],
+                    },
+                    tenant,
+                    skill_name,
+                )
+                findings.append(result)
+                timeline.done(run_id, skill_name, result.get("summary") or "Know-how")
+            else:
+                findings.append(
+                    {
+                        "skill": skill_name,
+                        "summary": "Skill not registered in MVP.",
+                        "status": "skipped",
+                    }
+                )
 
     timeline.start(run_id, "reporting", "Compongo il report…")
     _pause_for_presence()
@@ -196,6 +232,11 @@ def skills_runner_node(state: AgentState) -> dict:
             "proposal_count": report.get("proposal_count", 0),
             "shopify_mode": shop.get("mode"),
             "run_id": run_id,
+            "knowhow_skills": [
+                f.get("skill")
+                for f in findings
+                if isinstance(f, dict) and f.get("knowhow")
+            ],
         },
     )
 

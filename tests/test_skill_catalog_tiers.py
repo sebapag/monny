@@ -58,17 +58,40 @@ def test_demo_seed_is_plus_with_knowhow_playbooks():
     cfg = load_tenant("demo", ROOT / "tenants")
     assert normalize_plan(cfg.subscription.plan) == "plus"
     assert cfg.subscription.plus_override is False
-    ads = ROOT / "tenants/demo/knowledge/playbooks/ads-base.md"
-    ads_deep = ROOT / "tenants/demo/knowledge/playbooks/ads-deep.md"
-    seo = ROOT / "tenants/demo/knowledge/playbooks/seo-base.md"
-    seo_deep = ROOT / "tenants/demo/knowledge/playbooks/seo-deep.md"
-    assert ads.exists() and ads_deep.exists()
-    assert seo.exists() and seo_deep.exists()
+    playbooks = ROOT / "tenants/demo/knowledge/playbooks"
+    expected = [
+        "ads-base.md",
+        "ads-deep.md",
+        "seo-base.md",
+        "seo-deep.md",
+        "commerce-base.md",
+        "commerce-deep.md",
+        "leads-base.md",
+        "leads-deep.md",
+        "ops-base.md",
+        "ops-deep.md",
+        "design-base.md",
+        "design-deep.md",
+        "it-base.md",
+        "it-deep.md",
+        "controlling-base.md",
+        "controlling-deep.md",
+        "leadership-hitl.md",
+    ]
+    for name in expected:
+        path = playbooks / name
+        assert path.exists(), name
+        body = path.read_text(encoding="utf-8")
+        assert len(body) > 400, f"{name} too short for production know-how"
+        assert "## Processo" in body or "## Decision rights" in body
     spend = get_skill("spend_google")
     assert spend is not None and spend.tier == "free"
     assert spend.knowhow.playbook == "playbooks/ads-base.md"
+    assert spend.knowhow.metrics
+    assert spend.knowhow.hitl_prompts
     deep = get_skill("spend_deep_optimize")
     assert deep is not None and deep.tier == "plus" and deep.extension_hook
+    assert len(deep.knowhow.metrics) > len(spend.knowhow.metrics)
 
 
 def test_acme_seed_is_free():
@@ -158,7 +181,48 @@ def test_plus_hooks_attach_knowhow(tmp_path, monkeypatch):
     assert result["skill"] == "spend_deep_optimize"
     assert result["knowhow"]["playbook"] == "playbooks/ads-deep.md"
     assert "playbook_excerpt" in result["knowhow"]
+    assert result["knowhow"]["excerpt_chars"] > 1800
+    # Plus deep exceeds free excerpt budget
+    from monny.skills.knowhow import load_knowhow
+
+    free_kh = load_knowhow(cfg, "spend_google")
+    assert free_kh["excerpt_chars"] <= 1800
+    assert result["knowhow"]["excerpt_chars"] > free_kh["excerpt_chars"]
     get_settings.cache_clear()
+
+
+def test_dept_stub_and_free_skills_attach_knowhow(tmp_path, monkeypatch):
+    monkeypatch.setenv("MONNY_TENANTS_DIR", str(ROOT / "tenants"))
+    monkeypatch.setenv("MONNY_DATA_DIR", str(tmp_path / "data"))
+    get_settings.cache_clear()
+    cfg = load_tenant("demo", ROOT / "tenants")
+    from monny.skills import dept_stubs, spend_google
+
+    fixtures = ROOT / "fixtures" / "spend"
+    google = spend_google.run(cfg, dry_run=True, fixtures_dir=fixtures)
+    assert google["knowhow"]["playbook"] == "playbooks/ads-base.md"
+    assert google["knowhow"]["metrics"]
+
+    ops = dept_stubs.run("ops_orders", cfg)
+    assert ops["knowhow"]["playbook"] == "playbooks/ops-base.md"
+    assert ops["proposals"][0]["knowhow"]["playbook"]
+
+    merch = plus_hooks.run("shopify_deep_merch", cfg)
+    assert merch["knowhow"]["playbook"] == "playbooks/commerce-deep.md"
+    get_settings.cache_clear()
+
+
+def test_every_catalog_skill_has_playbook_and_hitl():
+    for sid, skill in SKILL_CATALOG.items():
+        kh = skill.knowhow
+        assert kh.playbook, sid
+        assert kh.decision_rights_key, sid
+        assert kh.metrics, sid
+        assert kh.hitl_prompts, sid
+        assert kh.decision_rights_hint, sid
+        assert kh.knowledge_tags, sid
+        path = ROOT / "tenants/demo/knowledge" / kh.playbook
+        assert path.exists(), f"{sid} missing {kh.playbook}"
 
 
 def test_api_refuses_plus_skill_on_free(tmp_path, monkeypatch):
@@ -213,11 +277,42 @@ def test_api_refuses_plus_skill_on_free(tmp_path, monkeypatch):
     get_settings.cache_clear()
 
 
-def test_catalog_lists_mvp_ads_seo():
-    spend = list_skills(department="spend")
-    seo = list_skills(department="seo")
-    assert any(s.tier == "free" for s in spend)
-    assert any(s.tier == "plus" for s in spend)
-    assert any(s.tier == "free" for s in seo)
-    assert any(s.tier == "plus" for s in seo)
-    assert len(SKILL_CATALOG) >= 6
+def test_catalog_lists_all_departments_free_and_plus():
+    depts = {
+        "spend",
+        "seo",
+        "shopify",
+        "leads",
+        "operations",
+        "design",
+        "it",
+        "controlling",
+    }
+    for dept in depts:
+        skills = list_skills(department=dept)
+        assert any(s.tier == "free" for s in skills), dept
+        assert any(s.tier == "plus" for s in skills), dept
+    assert len(SKILL_CATALOG) >= 20
+    assert "ops_deep_sla" in SKILL_CATALOG
+    assert "ctrl_deep_forecast" in SKILL_CATALOG
+
+
+def test_planner_routes_new_plus_deeps():
+    plus = _with_plan(
+        "plus",
+        spend=True,
+        seo=True,
+        shopify=True,
+        leads=True,
+        operations=True,
+        design=True,
+        it=True,
+        controlling=True,
+    )
+    assert "shopify_deep_merch" in _infer_plan(
+        "commerce deep merchandising merch calendar", "", tenant=plus
+    )
+    assert "ops_deep_sla" in _infer_plan("operations deep sla otif", "", tenant=plus)
+    assert "ctrl_deep_forecast" in _infer_plan(
+        "controlling deep forecast scenario stretch", "", tenant=plus
+    )

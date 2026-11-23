@@ -8,6 +8,7 @@ from urllib.parse import urlparse
 from monny.adapters.live_mode import use_live
 from monny.config.models import TenantConfig
 from monny.config.settings import get_settings
+from monny.skills.knowhow import with_knowhow
 from monny.subagents import seo_crawler
 
 
@@ -158,7 +159,7 @@ def run(
             }
         )
 
-    return {
+    result = {
         "skill": "seo_audit",
         "mode": "dry_run" if dry_run else "live",
         "summary": (
@@ -179,3 +180,4 @@ def run(
         "proposals": proposals,
         "requires_approval": bool(changes),
     }
+    return with_knowhow(result, tenant, "seo_audit")

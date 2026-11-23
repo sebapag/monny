@@ -573,13 +573,32 @@ export function AdminWorkspace({
                         {deptSkills.length > 0 && (
                           <ul className="skill-tier-list" data-testid={`skill-tiers-${key}`}>
                             {deptSkills.map((s: SkillDef) => (
-                              <li key={s.id}>
-                                <span className={`tier-pill tier-${s.tier}`}>
-                                  {s.tier === 'plus' ? 'Plus' : 'Free'}
-                                </span>
-                                <span>{s.label_it}</span>
-                                {s.knowhow.playbook && (
-                                  <span className="muted"> · {s.knowhow.playbook}</span>
+                              <li key={s.id} className="skill-tier-item">
+                                <div className="skill-tier-row">
+                                  <span className={`tier-pill tier-${s.tier}`}>
+                                    {s.tier === 'plus' ? 'Plus' : 'Free'}
+                                  </span>
+                                  <span className="skill-tier-label">{s.label_it}</span>
+                                  {s.knowhow.playbook && (
+                                    <span className="muted"> · {s.knowhow.playbook}</span>
+                                  )}
+                                </div>
+                                <p className="skill-tier-blurb muted">{s.blurb_it}</p>
+                                {s.knowhow.decision_rights_hint && (
+                                  <p className="skill-tier-rights muted">
+                                    Decision rights: {s.knowhow.decision_rights_hint}
+                                  </p>
+                                )}
+                                {s.knowhow.metrics.length > 0 && (
+                                  <p className="skill-tier-metrics muted">
+                                    Metriche: {s.knowhow.metrics.slice(0, 3).join(' · ')}
+                                    {s.knowhow.metrics.length > 3 ? '…' : ''}
+                                  </p>
+                                )}
+                                {s.knowhow.hitl_prompts.length > 0 && (
+                                  <p className="skill-tier-hitl muted">
+                                    HITL: «{s.knowhow.hitl_prompts[0]}»
+                                  </p>
                                 )}
                               </li>
                             ))}
