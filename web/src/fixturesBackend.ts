@@ -11,6 +11,8 @@ import type {
   KnowledgeRetrieveResult,
   KnowledgeSource,
   Report,
+  ShopifyConnectorStatus,
+  ShopifyOAuthStartResult,
   TenantConfig,
   TenantDetail,
   TenantListItem,
@@ -26,6 +28,41 @@ type Store = {
   knowledge: Record<string, KnowledgeSource & { body: string }>
   audit: Array<{ ts: string; tenant_id: string; event: string; payload?: Record<string, unknown> }>
   artifacts: Record<string, Record<string, unknown>>
+  /** Portable secret store mirror (OAuth tokens). */
+  secrets: Record<string, Record<string, string>>
+}
+
+const SHOPIFY_SCOPES = [
+  'read_products',
+  'write_products',
+  'read_orders',
+  'write_content',
+  'read_price_rules',
+  'write_price_rules',
+]
+
+function normalizeShopDomain(raw: string): string {
+  let shop = raw.trim().toLowerCase().replace(/^https?:\/\//, '').split('/')[0] ?? ''
+  if (!shop.includes('.')) shop = `${shop}.myshopify.com`
+  return shop
+}
+
+function shopifyConnectorStatus(cfg: TenantConfig, secrets: Record<string, string>): ShopifyConnectorStatus {
+  const token = secrets[cfg.shopify.auth.secret_ref]
+  const connected = Boolean(cfg.shopify.connected && cfg.shopify.shop_domain && token)
+  return {
+    provider: 'shopify',
+    connected,
+    shop_domain: cfg.shopify.shop_domain,
+    shop_name: cfg.shopify.oauth?.shop_name ?? null,
+    scopes_granted: cfg.shopify.oauth?.scopes_granted ?? [],
+    scopes_expected: cfg.shopify.scopes_expected,
+    installed_at: cfg.shopify.oauth?.installed_at ?? null,
+    token_configured: Boolean(token),
+    oauth_mode: cfg.shopify.oauth?.mode ?? null,
+    partner_app_configured: false,
+    required_scopes: SHOPIFY_SCOPES,
+  }
 }
 
 const DEMO_CONFIG: TenantConfig = {
@@ -109,6 +146,7 @@ let store: Store | null = null
 function getStore(): Store {
   if (store) return store
   store = {
+    secrets: {},
     users: [
       {
         email: 'agent@demo',
@@ -295,14 +333,15 @@ export const fixturesApi = {
     requireSession()
     const cfg = getStore().tenants[tenantId]
     if (!cfg) throw new Error('Tenant non trovato')
-    const shopifyConnected = Boolean(cfg.shopify.connected && cfg.shopify.shop_domain)
+    const tenantSecrets = getStore().secrets[tenantId] ?? {}
+    const tokenOk = Boolean(tenantSecrets[cfg.shopify.auth.secret_ref])
     return {
       config: cfg,
       secrets: [
         {
           secret_ref: cfg.shopify.auth.secret_ref,
-          // Demo fixtures: treat token as present once Admin marks Shopify connected.
-          configured: shopifyConnected,
+          configured: tokenOk,
+          source: tokenOk ? 'store' : 'missing',
         },
         { secret_ref: cfg.ads.google?.secret_ref ?? '', configured: false },
         { secret_ref: cfg.ads.meta?.secret_ref ?? '', configured: false },
@@ -316,6 +355,7 @@ export const fixturesApi = {
         office_view: true,
         leadership: true,
       },
+      shopify_connector: shopifyConnectorStatus(cfg, tenantSecrets),
     }
   },
 
@@ -331,6 +371,76 @@ export const fixturesApi = {
       event: 'tenant_updated',
     })
     return { ok: true, path: `fixtures:tenants/${tenantId}` }
+  },
+
+  async getShopifyConnector(tenantId: string): Promise<ShopifyConnectorStatus> {
+    requireAdmin()
+    const cfg = getStore().tenants[tenantId]
+    if (!cfg) throw new Error('Tenant non trovato')
+    return shopifyConnectorStatus(cfg, getStore().secrets[tenantId] ?? {})
+  },
+
+  async startShopifyOAuth(tenantId: string, shopDomain: string): Promise<ShopifyOAuthStartResult> {
+    requireAdmin()
+    const cfg = getStore().tenants[tenantId]
+    if (!cfg) throw new Error('Tenant non trovato')
+    const shop = normalizeShopDomain(shopDomain)
+    const token = `shpat_atrium_mock_${shop.split('.')[0]}`
+    if (!getStore().secrets[tenantId]) getStore().secrets[tenantId] = {}
+    getStore().secrets[tenantId][cfg.shopify.auth.secret_ref] = token
+    const skills = { ...(cfg.subscription?.skills ?? DEMO_CONFIG.subscription!.skills), shopify: true }
+    cfg.shopify = {
+      ...cfg.shopify,
+      shop_domain: shop,
+      connected: true,
+      scopes_expected: [...SHOPIFY_SCOPES],
+      oauth: {
+        scopes_granted: [...SHOPIFY_SCOPES],
+        shop_name: shop.split('.')[0]?.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) ?? shop,
+        installed_at: now(),
+        mode: 'mock',
+      },
+    }
+    cfg.subscription = {
+      ...(cfg.subscription ?? DEMO_CONFIG.subscription!),
+      skills,
+      features: { office_view: true, ...(cfg.subscription?.features ?? {}) },
+    }
+    getStore().audit.unshift({
+      ts: now(),
+      tenant_id: tenantId,
+      event: 'shopify_oauth_connected',
+      payload: { shop_domain: shop, mode: 'mock' },
+    })
+    return {
+      authorize_url: '',
+      state: 'fixture-instant',
+      shop_domain: shop,
+      scopes: [...SHOPIFY_SCOPES],
+      mode: 'mock',
+      completed: true,
+      message_it:
+        'Installazione OAuth demo completata (fixture). Con SHOPIFY_API_KEY/SECRET il flusso apre Shopify reale.',
+    }
+  },
+
+  async disconnectShopify(tenantId: string) {
+    requireAdmin()
+    const cfg = getStore().tenants[tenantId]
+    if (!cfg) throw new Error('Tenant non trovato')
+    const bag = getStore().secrets[tenantId]
+    if (bag) delete bag[cfg.shopify.auth.secret_ref]
+    cfg.shopify = { ...cfg.shopify, connected: false, oauth: null }
+    getStore().audit.unshift({
+      ts: now(),
+      tenant_id: tenantId,
+      event: 'shopify_oauth_disconnect',
+    })
+    return {
+      ok: true,
+      connected: false,
+      message_it: 'Shopify disconnesso. Il token OAuth è stato rimosso.',
+    }
   },
 
   async listApprovals(tenant_id?: string, status = 'pending'): Promise<Approval[]> {

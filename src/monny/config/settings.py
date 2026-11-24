@@ -43,6 +43,13 @@ class Settings(BaseSettings):
     # Explicit kill-switch: force stub even if XAI_API_KEY is set (local recovery).
     monny_llm_enabled: bool = True
 
+    # Shopify Partner app (OAuth install). Empty → mock OAuth for local/CI.
+    shopify_api_key: str = ""
+    shopify_api_secret: str = ""
+    shopify_oauth_scopes: str = ""  # comma list; default REQUIRED_SCOPES in connector
+    monny_public_api_url: str = ""  # e.g. https://api.example.com — OAuth callback base
+    monny_public_app_url: str = ""  # e.g. https://app.example.com — SPA after connect
+
     @property
     def dry_run(self) -> bool:
         return self.monny_dry_run or not self.monny_live

@@ -11,6 +11,15 @@ class SecretRef(BaseModel):
     secret_ref: str
 
 
+class ShopifyOAuthMeta(BaseModel):
+    """Non-secret OAuth install metadata (token lives in secrets store / env)."""
+
+    scopes_granted: list[str] = Field(default_factory=list)
+    shop_name: str | None = None
+    installed_at: str | None = None
+    mode: Literal["live", "mock"] | None = None
+
+
 class ShopifyConfig(BaseModel):
     """Portable Shopify tenant settings — never hard-wire a single shop in code."""
 
@@ -18,9 +27,9 @@ class ShopifyConfig(BaseModel):
     api_version: str = "2025-10"
     auth: SecretRef
     scopes_expected: list[str] = Field(default_factory=list)
-    # Admin «Connettori commerce»: merchant marked this store as connected.
-    # Credentials stay in env via secret_ref; domain stays tenant YAML.
+    # True after successful OAuth install (or legacy connect). Token in secrets store.
     connected: bool = False
+    oauth: ShopifyOAuthMeta | None = None
 
 
 class GoogleAdsConfig(BaseModel):

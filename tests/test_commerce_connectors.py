@@ -28,16 +28,21 @@ def test_shopify_not_connected_cta(monkeypatch):
 def test_shopify_promo_uses_fixture_when_connected(tmp_path, monkeypatch):
     import shutil
 
+    from monny.config.secrets_store import set_secret
+
     tenants = tmp_path / "tenants"
     shutil.copytree(ROOT / "tenants" / "demo", tenants / "demo")
+    data = tmp_path / "data"
     cfg = load_tenant("demo", tenants)
     cfg.shopify.connected = True
     save_tenant(cfg, tenants)
 
     monkeypatch.setenv("MONNY_TENANTS_DIR", str(tenants))
+    monkeypatch.setenv("MONNY_DATA_DIR", str(data))
     monkeypatch.setenv("MONNY_LIVE", "0")
     monkeypatch.setenv("MONNY_DRY_RUN", "1")
     get_settings.cache_clear()
+    set_secret("demo", cfg.shopify.auth.secret_ref, "shpat_test_demo")
 
     tenant = load_tenant("demo", tenants)
     result = shopify_promo.run(tenant, dry_run=True)
@@ -62,14 +67,19 @@ def test_shopify_promo_uses_fixture_when_connected(tmp_path, monkeypatch):
 def test_ops_orders_reads_shopify_when_connected(tmp_path, monkeypatch):
     import shutil
 
+    from monny.config.secrets_store import set_secret
+
     tenants = tmp_path / "tenants"
     shutil.copytree(ROOT / "tenants" / "demo", tenants / "demo")
+    data = tmp_path / "data"
     cfg = load_tenant("demo", tenants)
     cfg.shopify.connected = True
     save_tenant(cfg, tenants)
     monkeypatch.setenv("MONNY_TENANTS_DIR", str(tenants))
+    monkeypatch.setenv("MONNY_DATA_DIR", str(data))
     monkeypatch.setenv("MONNY_LIVE", "0")
     get_settings.cache_clear()
+    set_secret("demo", cfg.shopify.auth.secret_ref, "shpat_test_demo")
 
     tenant = load_tenant("demo", tenants)
     result = dept_stubs.run("ops_orders", tenant, dry_run=True)
@@ -94,13 +104,18 @@ def test_ops_shipping_stays_proposal_only(monkeypatch):
     get_settings.cache_clear()
 
 
-def test_shopify_orders_portable_by_domain(monkeypatch):
+def test_shopify_orders_portable_by_domain(tmp_path, monkeypatch):
+    from monny.config.secrets_store import set_secret
+
     monkeypatch.setenv("MONNY_LIVE", "0")
+    monkeypatch.setenv("MONNY_DATA_DIR", str(tmp_path / "data"))
     get_settings.cache_clear()
     demo = load_tenant("demo", ROOT / "tenants")
     acme = load_tenant("acme", ROOT / "tenants")
     demo.shopify.connected = True
     acme.shopify.connected = True
+    set_secret("demo", demo.shopify.auth.secret_ref, "tok_demo")
+    set_secret("acme", acme.shopify.auth.secret_ref, "tok_acme")
     d = shopify.read_orders(demo, dry_run=True)
     a = shopify.read_orders(acme, dry_run=True)
     assert d["mode"] == "fixture" and a["mode"] == "fixture"

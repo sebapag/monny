@@ -57,6 +57,10 @@ def test_stub_skills_produce_proposals(tmp_path, monkeypatch):
     get_settings.cache_clear()
     get_graph.cache_clear()
 
+    from monny.config.secrets_store import set_secret
+
+    set_secret("demo", cfg.shopify.auth.secret_ref, "shpat_test_demo")
+
     result = run_agent(
         tenant_id="demo",
         goal="propose shopify promo discount and lead warming",

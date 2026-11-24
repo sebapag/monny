@@ -13,7 +13,7 @@ async function loginAs(page: Page, email: string, password: string) {
 }
 
 test.describe('Admin commerce connectors', () => {
-  test('Shopify enabled, other platforms greyed Prossimamente', async ({ page }) => {
+  test('Shopify OAuth connect UI; others greyed Prossimamente', async ({ page }) => {
     fs.mkdirSync(ADMIN_MEDIA, { recursive: true })
 
     await page.goto('/#admin')
@@ -23,12 +23,11 @@ test.describe('Admin commerce connectors', () => {
     await loginAs(page, 'admin@demo', 'admin-demo')
 
     await expect(page.getByTestId('admin-hub')).toBeVisible({ timeout: 20_000 })
-    await expect(page.getByTestId('admin-tile-connectors')).toBeVisible()
     await page.getByTestId('admin-tile-connectors').click()
 
     await expect(page.getByTestId('admin-commerce-connectors')).toBeVisible()
     await expect(page.getByTestId('connector-shopify')).toHaveAttribute('data-status', 'included')
-    await expect(page.getByTestId('connector-shopify-connect')).toBeVisible()
+    await expect(page.getByTestId('connector-shopify-connect')).toContainText(/Collega con Shopify/i)
     await expect(page.getByTestId('connector-magento')).toHaveAttribute('data-status', 'coming_soon')
     await expect(page.getByTestId('connector-soon-magento')).toContainText(/Prossimamente/i)
     await expect(page.getByTestId('connector-salesforce_commerce')).toHaveAttribute(
@@ -39,6 +38,16 @@ test.describe('Admin commerce connectors', () => {
       'data-status',
       'coming_soon',
     )
+
+    // Fixture OAuth completes in-browser (mock Partner install)
+    await page.getByTestId('connector-shopify-connect').click()
+    await expect(page.getByTestId('connector-shopify-status')).toContainText(/Collegato/i, {
+      timeout: 10_000,
+    })
+    await expect(page.getByTestId('connector-shopify-name')).toBeVisible()
+    await expect(page.getByTestId('connector-shopify-domain')).toContainText(/myshopify\.com/i)
+    await expect(page.getByTestId('connector-shopify-disconnect')).toBeVisible()
+    await expect(page.getByTestId('connector-shopify-reconnect')).toBeVisible()
 
     const out = path.join(ADMIN_MEDIA, 'commerce-connectors.png')
     await page.getByTestId('admin-commerce-connectors').screenshot({ path: out })

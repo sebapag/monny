@@ -11,6 +11,10 @@ describe('adminNav', () => {
       mode: 'admin',
       section: 'connectors',
     })
+    expect(parseAdminPath('admin/connectors?shopify=connected')).toEqual({
+      mode: 'admin',
+      section: 'connectors',
+    })
     expect(parseAdminPath('admin/nope')?.section).toBeNull()
     expect(parseAdminPath('agent')).toBeNull()
   })

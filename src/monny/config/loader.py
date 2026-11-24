@@ -48,15 +48,15 @@ def save_tenant(config: TenantConfig, root: Path | None = None) -> Path:
     return path
 
 
-def resolve_secret(secret_ref: str) -> str | None:
-    """Resolve a secret ref name from the environment. Returns None if unset."""
-    value = os.getenv(secret_ref)
-    if value is None or value.strip() == "":
-        return None
-    return value
+def resolve_secret(secret_ref: str, *, tenant_id: str | None = None) -> str | None:
+    """Resolve secret from env, then portable tenant secrets store."""
+    from monny.config.secrets_store import resolve_secret as store_resolve
+
+    return store_resolve(secret_ref, tenant_id=tenant_id)
 
 
-def secret_status(secret_ref: str) -> dict[str, str | bool]:
+def secret_status(secret_ref: str, *, tenant_id: str | None = None) -> dict[str, str | bool]:
     """Admin-safe status: whether a ref is set, never the raw value."""
-    present = resolve_secret(secret_ref) is not None
-    return {"secret_ref": secret_ref, "configured": present}
+    from monny.config.secrets_store import secret_status as store_status
+
+    return store_status(secret_ref, tenant_id=tenant_id)  # type: ignore[return-value]

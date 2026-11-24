@@ -3962,6 +3962,15 @@ a {
   border-color: color-mix(in srgb, #96bf48 35%, var(--hairline));
 }
 
+.connector-card.is-connected {
+  border-color: color-mix(in srgb, #96bf48 55%, var(--hairline));
+}
+
+.connector-connected-meta {
+  display: grid;
+  gap: 0.2rem;
+}
+
 .connector-card.is-soon {
   background: var(--surface-soft);
   opacity: 0.72;

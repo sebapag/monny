@@ -27,7 +27,10 @@ class ShopifyLiveClient:
 
     @classmethod
     def from_tenant(cls, tenant: TenantConfig) -> ShopifyLiveClient:
-        token = resolve_secret(tenant.shopify.auth.secret_ref)
+        token = resolve_secret(
+            tenant.shopify.auth.secret_ref,
+            tenant_id=tenant.tenant_id,
+        )
         if not token:
             raise ValueError(f"Secret not set: {tenant.shopify.auth.secret_ref}")
         return cls(
@@ -136,9 +139,11 @@ def load_fixture(shop_domain: str) -> dict[str, Any] | None:
 
 
 def is_connected(tenant: TenantConfig) -> bool:
-    """True when Admin marked Shopify connected and a shop domain is set (portable)."""
+    """True after OAuth install: connected flag + domain + access token in store/env."""
     shop = tenant.shopify
-    return bool(shop.connected and (shop.shop_domain or "").strip())
+    if not (shop.connected and (shop.shop_domain or "").strip()):
+        return False
+    return resolve_secret(shop.auth.secret_ref, tenant_id=tenant.tenant_id) is not None
 
 
 def connection_cta(tenant: TenantConfig) -> dict[str, Any]:
@@ -148,8 +153,8 @@ def connection_cta(tenant: TenantConfig) -> dict[str, Any]:
         "admin_section": "connectors",
         "admin_hash": "#admin/connectors",
         "message_it": (
-            "Shopify non è collegato. Apri Admin → Connettori commerce, inserisci il "
-            f"dominio del negozio e collega il token ({tenant.shopify.auth.secret_ref})."
+            "Shopify non è collegato. Apri Admin → Connettori commerce e avvia "
+            "«Collega con Shopify» (installazione OAuth dell’app Partner)."
         ),
     }
 
@@ -158,14 +163,15 @@ def read_shop(tenant: TenantConfig, *, dry_run: bool) -> dict[str, Any]:
     """Read shop + sample page metadata. Portable: fixture keyed by shop_domain."""
     shop = tenant.shopify
     secret_ref = shop.auth.secret_ref
+    auth_ok = resolve_secret(secret_ref, tenant_id=tenant.tenant_id) is not None
 
-    if not use_live(dry_run=dry_run, secret_ref=secret_ref):
+    if not use_live(dry_run=dry_run, secret_ref=secret_ref, tenant_id=tenant.tenant_id):
         fixture = load_fixture(shop.shop_domain)
         if fixture is None:
             return {
                 "mode": "fixture_missing",
                 "shop_domain": shop.shop_domain,
-                "auth_configured": resolve_secret(secret_ref) is not None,
+                "auth_configured": auth_ok,
                 "connected": is_connected(tenant),
                 "error": f"No fixture at fixtures/shopify/{shop.shop_domain}.json",
             }
@@ -175,7 +181,7 @@ def read_shop(tenant: TenantConfig, *, dry_run: bool) -> dict[str, Any]:
             "shop_domain": shop.shop_domain,
             "api_version": shop.api_version,
             "scopes_expected": shop.scopes_expected,
-            "auth_configured": resolve_secret(secret_ref) is not None,
+            "auth_configured": auth_ok,
             "connected": is_connected(tenant),
             "shop": fixture.get("shop"),
             "sample_page": pages[0] if pages else None,
@@ -256,7 +262,7 @@ def read_orders(tenant: TenantConfig, *, dry_run: bool, limit: int = 25) -> dict
         }
 
     secret_ref = shop.auth.secret_ref
-    if not use_live(dry_run=dry_run, secret_ref=secret_ref):
+    if not use_live(dry_run=dry_run, secret_ref=secret_ref, tenant_id=tenant.tenant_id):
         fixture = load_fixture(shop.shop_domain) or {}
         orders = list(fixture.get("orders") or [])[:limit]
         return {
@@ -303,7 +309,7 @@ def read_inventory(tenant: TenantConfig, *, dry_run: bool, limit: int = 25) -> d
         }
 
     secret_ref = shop.auth.secret_ref
-    if not use_live(dry_run=dry_run, secret_ref=secret_ref):
+    if not use_live(dry_run=dry_run, secret_ref=secret_ref, tenant_id=tenant.tenant_id):
         fixture = load_fixture(shop.shop_domain) or {}
         products = list(fixture.get("products") or [])[:limit]
         inventory = fixture.get("inventory") or _inventory_from_products(products)
@@ -352,7 +358,7 @@ def read_price_rules(tenant: TenantConfig, *, dry_run: bool, limit: int = 25) ->
         }
 
     secret_ref = shop.auth.secret_ref
-    if not use_live(dry_run=dry_run, secret_ref=secret_ref):
+    if not use_live(dry_run=dry_run, secret_ref=secret_ref, tenant_id=tenant.tenant_id):
         fixture = load_fixture(shop.shop_domain) or {}
         rules = list(fixture.get("price_rules") or [])[:limit]
         return {
@@ -397,7 +403,7 @@ def apply_price_rule(
             "note": "Collega Shopify in Admin → Connettori commerce prima di applicare promo.",
         }
     secret_ref = tenant.shopify.auth.secret_ref
-    if not use_live(dry_run=dry_run, secret_ref=secret_ref):
+    if not use_live(dry_run=dry_run, secret_ref=secret_ref, tenant_id=tenant.tenant_id):
         return {
             "status": "applied_stub",
             "mode": "fixture",

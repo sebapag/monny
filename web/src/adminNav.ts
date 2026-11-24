@@ -67,12 +67,12 @@ export function adminSectionById(id: AdminSectionId) {
   return ADMIN_SECTIONS.find((s) => s.id === id)!
 }
 
-/** Parse `#admin` or `#admin/spend` (also tolerates `#/admin/...`). */
+/** Parse `#admin` or `#admin/spend` (also tolerates `#/admin/...` and `?query`). */
 export function parseAdminPath(raw: string): {
   mode: 'admin'
   section: AdminSectionId | null
 } | null {
-  const cleaned = raw.replace(/^\/+/, '')
+  const cleaned = raw.replace(/^\/+/, '').split('?')[0] ?? ''
   if (cleaned === 'admin') return { mode: 'admin', section: null }
   const m = cleaned.match(/^admin\/([a-z_]+)$/)
   if (!m) return null

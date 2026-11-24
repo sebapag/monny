@@ -88,9 +88,14 @@ class TenantUpsert(BaseModel):
     config: dict[str, Any]
 
 
+class ShopifyOAuthStartRequest(BaseModel):
+    shop_domain: str
+
+
 class SecretStatus(BaseModel):
     secret_ref: str
     configured: bool
+    source: str | None = None
 
 
 class KnowledgeRetrieveRequest(BaseModel):

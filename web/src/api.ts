@@ -269,6 +269,38 @@ export function putTenant(tenantId: string, config: TenantConfig) {
   })
 }
 
+export function startShopifyOAuth(tenantId: string, shopDomain: string) {
+  if (!isSupabaseRuntime() && !hasWorker()) {
+    return fixturesApi.startShopifyOAuth(tenantId, shopDomain)
+  }
+  return agentFetch<import('./apiTypes').ShopifyOAuthStartResult>(
+    `/api/tenants/${tenantId}/connectors/shopify/oauth/start`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ shop_domain: shopDomain }),
+    },
+  )
+}
+
+export function disconnectShopify(tenantId: string) {
+  if (!isSupabaseRuntime() && !hasWorker()) {
+    return fixturesApi.disconnectShopify(tenantId)
+  }
+  return agentFetch<{ ok: boolean; connected: boolean; message_it?: string }>(
+    `/api/tenants/${tenantId}/connectors/shopify/disconnect`,
+    { method: 'POST', body: '{}' },
+  )
+}
+
+export function getShopifyConnector(tenantId: string) {
+  if (!isSupabaseRuntime() && !hasWorker()) {
+    return fixturesApi.getShopifyConnector(tenantId)
+  }
+  return agentFetch<import('./apiTypes').ShopifyConnectorStatus>(
+    `/api/tenants/${tenantId}/connectors/shopify`,
+  )
+}
+
 export function listTenantAudit(tenantId: string, limit = 80) {
   if (!isSupabaseRuntime()) return fixturesApi.listTenantAudit(tenantId)
   return edgeFetch<AuditEvent[]>(

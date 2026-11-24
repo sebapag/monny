@@ -23,7 +23,7 @@ export const COMMERCE_CONNECTORS: readonly CommerceConnectorDef[] = [
     id: 'shopify',
     name: 'Shopify',
     status: 'included',
-    blurb: 'Negozio portable: dominio + token nel tenant.',
+    blurb: 'OAuth Partner app: dominio + access token portable.',
     brand: '#96bf48',
     mark: 'M12 8h24l2 32H10L12 8zm6 6v18m6-18v18m6-18v18',
   },

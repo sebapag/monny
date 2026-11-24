@@ -225,8 +225,14 @@ export type TenantConfig = {
     api_version: string
     auth: { secret_ref: string }
     scopes_expected: string[]
-    /** Admin Connettori: merchant marked Shopify as connected (portable). */
+    /** True after OAuth install (token in secrets store). */
     connected?: boolean
+    oauth?: {
+      scopes_granted?: string[]
+      shop_name?: string | null
+      installed_at?: string | null
+      mode?: 'live' | 'mock' | null
+    } | null
   }
   ads: {
     google?: { customer_id: string; login_customer_id?: string | null; secret_ref: string } | null
@@ -256,11 +262,38 @@ export type TenantConfig = {
   billing?: BillingConfig
 }
 
+export type ShopifyConnectorStatus = {
+  provider: 'shopify'
+  connected: boolean
+  shop_domain: string
+  shop_name?: string | null
+  scopes_granted?: string[]
+  scopes_expected?: string[]
+  installed_at?: string | null
+  token_configured: boolean
+  oauth_mode?: 'live' | 'mock' | null
+  partner_app_configured?: boolean
+  required_scopes?: string[]
+}
+
+export type ShopifyOAuthStartResult = {
+  authorize_url: string
+  state: string
+  shop_domain: string
+  scopes: string[]
+  redirect_uri?: string
+  mode: 'live' | 'mock'
+  message_it?: string
+  /** Fixtures-only: OAuth completed in-browser without redirect. */
+  completed?: boolean
+}
+
 export type TenantDetail = {
   config: TenantConfig
-  secrets: { secret_ref: string; configured: boolean }[]
+  secrets: { secret_ref: string; configured: boolean; source?: string }[]
   path: string
   subscription?: SubscriptionSummary
+  shopify_connector?: ShopifyConnectorStatus
 }
 
 export type ArtifactList = {
