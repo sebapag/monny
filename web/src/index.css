@@ -3921,3 +3921,115 @@ a {
     animation: none;
   }
 }
+
+/* —— Admin commerce connectors —— */
+.connector-grid {
+  display: grid;
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+  gap: 0.85rem;
+  margin-top: 0.75rem;
+}
+
+@media (min-width: 720px) {
+  .connector-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1100px) {
+  .connector-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.connector-card {
+  display: grid;
+  gap: 0.65rem;
+  align-content: start;
+  padding: 1rem;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--hairline);
+  background: var(--canvas);
+  min-height: 11rem;
+}
+
+.connector-card.is-included {
+  background: linear-gradient(
+    165deg,
+    color-mix(in srgb, var(--tint-mint) 55%, var(--canvas)),
+    var(--canvas) 62%
+  );
+  border-color: color-mix(in srgb, #96bf48 35%, var(--hairline));
+}
+
+.connector-card.is-soon {
+  background: var(--surface-soft);
+  opacity: 0.72;
+  filter: grayscale(1);
+  pointer-events: none;
+  user-select: none;
+}
+
+.connector-logo {
+  width: 2.75rem;
+  height: 2.75rem;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-md);
+  color: var(--connector-brand, var(--brand-navy));
+  background: color-mix(in srgb, var(--connector-brand, var(--brand-navy)) 12%, var(--canvas));
+}
+
+.connector-card.is-soon .connector-logo {
+  color: var(--steel);
+  background: var(--tint-gray);
+}
+
+.connector-body {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.connector-name {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  color: var(--brand-navy);
+}
+
+.connector-blurb {
+  font-size: 0.82rem;
+  color: var(--slate);
+  line-height: 1.35;
+}
+
+.connector-soon {
+  margin-top: 0.25rem;
+  width: fit-content;
+  padding: 0.15rem 0.55rem;
+  border-radius: var(--radius-pill);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--steel);
+  background: var(--tint-gray);
+}
+
+.connector-actions {
+  display: grid;
+  gap: 0.55rem;
+  margin-top: 0.15rem;
+}
+
+.connector-cta-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.connector-disabled-btn {
+  justify-self: start;
+  opacity: 0.65;
+  cursor: not-allowed;
+}

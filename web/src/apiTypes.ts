@@ -225,6 +225,8 @@ export type TenantConfig = {
     api_version: string
     auth: { secret_ref: string }
     scopes_expected: string[]
+    /** Admin Connettori: merchant marked Shopify as connected (portable). */
+    connected?: boolean
   }
   ads: {
     google?: { customer_id: string; login_customer_id?: string | null; secret_ref: string } | null

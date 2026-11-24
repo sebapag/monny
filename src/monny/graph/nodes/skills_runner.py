@@ -119,30 +119,30 @@ def skills_runner_node(state: AgentState) -> dict:
             )
             timeline.done(run_id, "seo_audit", result.get("summary") or "Completato")
         elif skill_name == "shopify_promo":
-            timeline.start(run_id, "shopify_promo", "Promo Shopify (anteprima)…")
+            timeline.start(run_id, "shopify_promo", "Promo Shopify…")
             _pause_for_presence()
-            result = shopify_promo.run(tenant)
+            result = shopify_promo.run(tenant, dry_run=dry_run)
             findings.append(result)
-            timeline.done(run_id, "shopify_promo", result.get("summary") or "Stub")
+            timeline.done(run_id, "shopify_promo", result.get("summary") or "Completato")
         elif skill_name == "lead_warming":
-            timeline.start(run_id, "lead_warming", "Lead warming (anteprima)…")
+            timeline.start(run_id, "lead_warming", "Lead warming (proposta)…")
             _pause_for_presence()
             result = lead_warming.run(tenant)
             findings.append(result)
-            timeline.done(run_id, "lead_warming", result.get("summary") or "Stub")
+            timeline.done(run_id, "lead_warming", result.get("summary") or "Proposta")
         elif skill_name in plus_hooks.ALL_PLUS_SKILLS:
             timeline.start(run_id, skill_name, f"Skill Plus {skill_name}…")
             _pause_for_presence()
-            result = plus_hooks.run(skill_name, tenant)
+            result = plus_hooks.run(skill_name, tenant, dry_run=dry_run)
             findings.append(result)
-            timeline.done(run_id, skill_name, result.get("summary") or "Plus stub")
+            timeline.done(run_id, skill_name, result.get("summary") or "Plus")
         elif skill_name in dept_stubs.ALL_STUB_SKILLS:
             label = dept_stubs.STUB_META[skill_name]["entity_name"]
             timeline.start(run_id, skill_name, f"{label}…")
             _pause_for_presence()
-            result = dept_stubs.run(skill_name, tenant)
+            result = dept_stubs.run(skill_name, tenant, dry_run=dry_run)
             findings.append(result)
-            timeline.done(run_id, skill_name, result.get("summary") or "Stub")
+            timeline.done(run_id, skill_name, result.get("summary") or "Completato")
         else:
             # Unknown catalog id still gets know-how attach if defined.
             skill = get_skill(skill_name)

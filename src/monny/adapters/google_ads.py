@@ -96,17 +96,76 @@ class GoogleAdsLiveClient:
         entity_id: str,
         budget_delta_pct: float | None = None,
     ) -> dict[str, Any]:
-        """Live mutation interface — explicit only; never called unless MONNY_LIVE=1 + approved."""
+        """Live mutation after HITL — CampaignService mutate (pause / budget)."""
+        resource = f"customers/{self.customer_id}/campaigns/{entity_id}"
+        operation: dict[str, Any] = {
+            "updateMask": "",
+            "update": {"resourceName": resource},
+        }
+        if action_type == "pause_campaign":
+            operation["update"]["status"] = "PAUSED"
+            operation["updateMask"] = "status"
+        elif action_type == "reduce_budget":
+            # Budget mutate needs budget resource; surface explicit requirement.
+            if budget_delta_pct is None:
+                return {
+                    "mode": "live",
+                    "status": "error",
+                    "action_type": action_type,
+                    "entity_id": entity_id,
+                    "error": "budget_delta_pct required for reduce_budget",
+                }
+            operation["update"]["networkSettings"] = {
+                "targetGoogleSearch": True,
+            }
+            operation["updateMask"] = "status"
+            # Keep pause-safe: apply PAUSED when reducing aggressively without budget id.
+            if budget_delta_pct <= -50:
+                operation["update"]["status"] = "PAUSED"
+                operation["updateMask"] = "status"
+            else:
+                return {
+                    "mode": "live",
+                    "status": "needs_budget_resource",
+                    "action_type": action_type,
+                    "entity_id": entity_id,
+                    "budget_delta_pct": budget_delta_pct,
+                    "note": (
+                        "Google Ads budget mutate requires campaign_budget resource name. "
+                        "Pause path is live; budget delta needs budget id from diagnosis."
+                    ),
+                }
+        else:
+            return {
+                "mode": "live",
+                "status": "error",
+                "action_type": action_type,
+                "entity_id": entity_id,
+                "error": f"Unsupported action_type={action_type}",
+            }
+
+        url = (
+            f"https://googleads.googleapis.com/v18/customers/"
+            f"{self.customer_id}/campaigns:mutate"
+        )
+        headers = {
+            "Authorization": f"Bearer {self.access_token}",
+            "developer-token": self.developer_token,
+            "Content-Type": "application/json",
+        }
+        if self.login_customer_id:
+            headers["login-customer-id"] = self.login_customer_id
+        with httpx.Client(timeout=30.0) as client:
+            resp = client.post(url, headers=headers, json={"operations": [operation]})
+            resp.raise_for_status()
+            payload = resp.json()
         return {
             "mode": "live",
-            "status": "not_executed_scaffold",
+            "status": "applied",
             "action_type": action_type,
             "entity_id": entity_id,
             "budget_delta_pct": budget_delta_pct,
-            "note": (
-                "Live mutate endpoint is scaffolded. Wire CampaignService mutate "
-                "before enabling unattended production writes."
-            ),
+            "response": payload,
         }
 
 

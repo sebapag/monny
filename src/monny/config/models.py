@@ -12,10 +12,15 @@ class SecretRef(BaseModel):
 
 
 class ShopifyConfig(BaseModel):
+    """Portable Shopify tenant settings — never hard-wire a single shop in code."""
+
     shop_domain: str
     api_version: str = "2025-10"
     auth: SecretRef
     scopes_expected: list[str] = Field(default_factory=list)
+    # Admin «Connettori commerce»: merchant marked this store as connected.
+    # Credentials stay in env via secret_ref; domain stays tenant YAML.
+    connected: bool = False
 
 
 class GoogleAdsConfig(BaseModel):

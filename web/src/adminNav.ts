@@ -20,6 +20,12 @@ export const ADMIN_SECTIONS = [
     tint: 'lavender',
   },
   {
+    id: 'connectors',
+    title: 'Connettori commerce',
+    blurb: 'Shopify incluso; altri store in arrivo (grigio).',
+    tint: 'peach',
+  },
+  {
     id: 'plan',
     title: 'Piano e reparti',
     blurb: 'Quali reparti sono nel piano e partono nell’agent.',

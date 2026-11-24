@@ -36,6 +36,7 @@ const DEMO_CONFIG: TenantConfig = {
     api_version: '2025-10',
     auth: { secret_ref: 'SHOPIFY_TOKEN_DEMO' },
     scopes_expected: ['read_products', 'write_content', 'read_orders'],
+    connected: false,
   },
   ads: {
     google: { customer_id: '000-000-0000', login_customer_id: null, secret_ref: 'GOOGLE_ADS_DEMO' },
@@ -277,7 +278,7 @@ export const fixturesApi = {
     return Object.values(getStore().tenants).map((t) => ({
       tenant_id: t.tenant_id,
       display_name: t.display_name,
-      secrets_configured: 0,
+      secrets_configured: t.shopify.connected && t.shopify.shop_domain ? 1 : 0,
       pending_approvals: pending,
       subscription: {
         plan: t.subscription?.plan ?? 'plus',
@@ -294,11 +295,17 @@ export const fixturesApi = {
     requireSession()
     const cfg = getStore().tenants[tenantId]
     if (!cfg) throw new Error('Tenant non trovato')
+    const shopifyConnected = Boolean(cfg.shopify.connected && cfg.shopify.shop_domain)
     return {
       config: cfg,
       secrets: [
-        { secret_ref: cfg.shopify.auth.secret_ref, configured: false },
+        {
+          secret_ref: cfg.shopify.auth.secret_ref,
+          // Demo fixtures: treat token as present once Admin marks Shopify connected.
+          configured: shopifyConnected,
+        },
         { secret_ref: cfg.ads.google?.secret_ref ?? '', configured: false },
+        { secret_ref: cfg.ads.meta?.secret_ref ?? '', configured: false },
       ].filter((s) => s.secret_ref),
       path: `fixtures:tenants/${tenantId}`,
       subscription: {

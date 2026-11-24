@@ -15,5 +15,35 @@
       "body_summary": "Acme builds portable commerce tooling.",
       "updated_at": "2026-09-15T08:30:00Z"
     }
-  ]
+  ],
+  "orders": [
+    {
+      "id": 8001,
+      "name": "#A-201",
+      "financial_status": "paid",
+      "fulfillment_status": "unfulfilled",
+      "total_price": "210.00",
+      "currency": "EUR",
+      "created_at": "2026-11-19T10:00:00Z"
+    }
+  ],
+  "products": [
+    {
+      "id": 9101,
+      "title": "Acme Widget",
+      "handle": "acme-widget",
+      "variants": [{ "id": 11, "sku": "ACME-W-01", "inventory_quantity": 40 }]
+    }
+  ],
+  "inventory": [
+    {
+      "product_id": "9101",
+      "title": "Acme Widget",
+      "sku": "ACME-W-01",
+      "inventory_quantity": 40,
+      "low_stock": false,
+      "out_of_stock": false
+    }
+  ],
+  "price_rules": []
 }

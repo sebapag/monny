@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useState, type CSSProperties, type ReactNode } from 'react'
 import type {
   BillingConfig,
   DecisionAutonomy,
@@ -20,6 +20,10 @@ import {
   adminSectionById,
   type AdminSectionId,
 } from './adminNav'
+import {
+  COMMERCE_CONNECTORS,
+  isShopifyConnected,
+} from './commerceConnectors'
 import {
   isPlusEntitled,
   mergeSkills,
@@ -85,9 +89,37 @@ export function AdminWorkspace({
     section === 'spend' ||
     section === 'shop' ||
     section === 'ads' ||
+    section === 'connectors' ||
     section === 'plan' ||
     section === 'office' ||
     section === 'rules'
+
+  const shopifyLinked = isShopifyConnected(cfg.shopify)
+  const shopifySecretOk = Boolean(secretStatus(cfg.shopify.auth.secret_ref))
+
+  const connectShopify = () => {
+    const domain = (cfg.shopify.shop_domain || '').trim()
+    if (!domain) return
+    const skills = mergeSkills(cfg.subscription?.skills)
+    setCfg((c) => ({
+      ...c,
+      shopify: { ...c.shopify, connected: true, shop_domain: domain },
+      subscription: {
+        plan: normalizePlan(c.subscription?.plan),
+        plus_override: Boolean(c.subscription?.plus_override),
+        skills: { ...skills, shopify: true },
+        features: { office_view: true, ...(c.subscription?.features ?? {}) },
+        office_mode: c.subscription?.office_mode ?? 'full',
+      },
+    }))
+  }
+
+  const disconnectShopify = () => {
+    setCfg((c) => ({
+      ...c,
+      shopify: { ...c.shopify, connected: false },
+    }))
+  }
 
   const saveBar = needsConfigSave ? (
     <div className="admin-save-bar">
@@ -414,6 +446,132 @@ export function AdminWorkspace({
                       })
                     }
                   />
+                </div>
+              </div>
+            )}
+
+            {section === 'connectors' && (
+              <div className="admin-block" data-testid="admin-commerce-connectors">
+                <FieldHelp>
+                  Shopify è incluso: collega dominio e token del tenant (portable, mai un negozio
+                  fisso nel codice). Gli altri store restano «Prossimamente» — niente adapter finti.
+                </FieldHelp>
+                <div className="connector-grid" data-testid="connector-grid">
+                  {COMMERCE_CONNECTORS.map((provider) => {
+                    const included = provider.status === 'included'
+                    const isShopify = provider.id === 'shopify'
+                    return (
+                      <article
+                        key={provider.id}
+                        className={`connector-card${included ? ' is-included' : ' is-soon'}`}
+                        data-testid={`connector-${provider.id}`}
+                        data-status={provider.status}
+                        aria-disabled={!included}
+                      >
+                        <div
+                          className="connector-logo"
+                          style={
+                            included
+                              ? ({ '--connector-brand': provider.brand } as CSSProperties)
+                              : undefined
+                          }
+                          aria-hidden
+                        >
+                          <svg viewBox="0 0 48 48" width="40" height="40">
+                            <path
+                              d={provider.mark}
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2.4"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                          </svg>
+                        </div>
+                        <div className="connector-body">
+                          <strong className="connector-name">{provider.name}</strong>
+                          <span className="connector-blurb">{provider.blurb}</span>
+                          {!included ? (
+                            <span className="connector-soon" data-testid={`connector-soon-${provider.id}`}>
+                              Prossimamente
+                            </span>
+                          ) : null}
+                        </div>
+                        {isShopify ? (
+                          <div className="connector-actions">
+                            <div className="field">
+                              <label htmlFor="connector-shop-domain">Dominio negozio</label>
+                              <input
+                                id="connector-shop-domain"
+                                data-testid="connector-shop-domain"
+                                value={cfg.shopify.shop_domain}
+                                disabled={shopifyLinked}
+                                onChange={(e) =>
+                                  set('shopify', {
+                                    ...cfg.shopify,
+                                    shop_domain: e.target.value,
+                                  })
+                                }
+                                placeholder="mio-negozio.myshopify.com"
+                              />
+                            </div>
+                            <div className="secret-status-row">
+                              <span>Token ({cfg.shopify.auth.secret_ref})</span>
+                              <span className={`pill ${shopifySecretOk ? 'ok' : 'miss'}`}>
+                                {shopifySecretOk ? 'Configurato' : 'Mancante'}
+                              </span>
+                            </div>
+                            <div className="connector-cta-row">
+                              {shopifyLinked ? (
+                                <>
+                                  <span
+                                    className="pill ok"
+                                    data-testid="connector-shopify-status"
+                                  >
+                                    Collegato
+                                  </span>
+                                  <button
+                                    type="button"
+                                    className="btn btn-ghost"
+                                    data-testid="connector-shopify-disconnect"
+                                    disabled={busy}
+                                    onClick={disconnectShopify}
+                                  >
+                                    Disconnetti
+                                  </button>
+                                </>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className="btn btn-primary"
+                                  data-testid="connector-shopify-connect"
+                                  disabled={busy || !(cfg.shopify.shop_domain || '').trim()}
+                                  onClick={connectShopify}
+                                >
+                                  Collega
+                                </button>
+                              )}
+                            </div>
+                            <p className="field-help">
+                              Il token resta in env / secret manager con nome{' '}
+                              <code>{cfg.shopify.auth.secret_ref}</code>. Salva la sezione dopo
+                              Collega / Disconnetti.
+                            </p>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            className="btn connector-disabled-btn"
+                            disabled
+                            tabIndex={-1}
+                            aria-disabled="true"
+                          >
+                            Non disponibile
+                          </button>
+                        )}
+                      </article>
+                    )
+                  })}
                 </div>
               </div>
             )}
