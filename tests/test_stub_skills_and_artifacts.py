@@ -30,8 +30,10 @@ def test_stub_skills_produce_proposals(tmp_path, monkeypatch):
     tenants = tmp_path / "tenants"
     shutil.copytree(ROOT / "tenants" / "demo", tenants / "demo")
     cfg = load_tenant("demo", tenants)
+    shopify_cfg = cfg.shopify.model_copy(update={"connected": True})
     cfg = cfg.model_copy(
         update={
+            "shopify": shopify_cfg,
             "subscription": SubscriptionConfig(
                 plan="scale",
                 skills=SubscriptionSkills(
@@ -44,7 +46,7 @@ def test_stub_skills_produce_proposals(tmp_path, monkeypatch):
                     it=True,
                     controlling=True,
                 ),
-            )
+            ),
         }
     )
     save_tenant(cfg, tenants)
@@ -55,6 +57,10 @@ def test_stub_skills_produce_proposals(tmp_path, monkeypatch):
     get_settings.cache_clear()
     get_graph.cache_clear()
 
+    from monny.config.secrets_store import set_secret
+
+    set_secret("demo", cfg.shopify.auth.secret_ref, "shpat_test_demo")
+
     result = run_agent(
         tenant_id="demo",
         goal="propose shopify promo discount and lead warming",
@@ -62,11 +68,12 @@ def test_stub_skills_produce_proposals(tmp_path, monkeypatch):
         dry_run=True,
     )
     actions = {p.get("action_type") for p in result.get("pending_proposals") or []}
-    assert "phase2_stub" in actions
+    # Connected Shopify → real create_price_rule proposal; leads stay proposal-only.
+    assert "create_price_rule" in actions
     assert "phase3_stub" in actions
 
     noop = apply_approved(
-        {"action_type": "phase2_stub", "stub": True, "phase": 2, "channel": "shopify_promo"},
+        {"action_type": "phase2_stub", "stub": True, "phase": 2, "channel": "ops_shipping"},
         tenant_id="demo",
     )
     assert noop["status"] == "noop_stub"

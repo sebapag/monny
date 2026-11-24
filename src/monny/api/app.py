@@ -10,7 +10,7 @@ from typing import Annotated, Any
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import RedirectResponse, StreamingResponse
 
 from monny.api.schemas import (
     ApprovalDecision,
@@ -26,6 +26,7 @@ from monny.api.schemas import (
     RunOut,
     RunStartRequest,
     SecretStatus,
+    ShopifyOAuthStartRequest,
     SignupRequest,
     TenantUpsert,
     UpdateUserRequest,
@@ -501,7 +502,10 @@ def create_app() -> FastAPI:
         for tenant_id in list_tenant_ids(Path(settings.monny_tenants_dir)):
             cfg = load_tenant(tenant_id, Path(settings.monny_tenants_dir))
             refs = _collect_secret_refs(cfg)
-            secrets = [SecretStatus(**secret_status(r)).model_dump() for r in refs]
+            secrets = [
+                SecretStatus(**secret_status(r, tenant_id=tenant_id)).model_dump()
+                for r in refs
+            ]
             pending = store.list(tenant_id=tenant_id, status="pending")
             escalated = store.list(tenant_id=tenant_id, status="escalated")
             out.append(
@@ -527,9 +531,12 @@ def create_app() -> FastAPI:
         refs = _collect_secret_refs(cfg)
         return {
             "config": data,
-            "secrets": [SecretStatus(**secret_status(r)).model_dump() for r in refs],
+            "secrets": [
+                SecretStatus(**secret_status(r, tenant_id=tenant_id)).model_dump() for r in refs
+            ],
             "path": str(tenants_root(settings.monny_tenants_dir) / tenant_id / "tenant.yaml"),
             "subscription": entitlement_summary(cfg),
+            "shopify_connector": _shopify_connector_status(cfg),
         }
 
     @app.put("/api/tenants/{tenant_id}")
@@ -651,7 +658,105 @@ def create_app() -> FastAPI:
         )
         return {"ok": True, "source": source.to_dict()}
 
+    # ----- Shopify OAuth connector -----
+
+    @app.get("/api/tenants/{tenant_id}/connectors/shopify")
+    def shopify_connector_get(tenant_id: str, _admin: AdminDep) -> dict[str, Any]:
+        _require_tenant(tenant_id)
+        cfg = load_tenant(tenant_id, Path(settings.monny_tenants_dir))
+        return _shopify_connector_status(cfg)
+
+    @app.post("/api/tenants/{tenant_id}/connectors/shopify/oauth/start")
+    def shopify_oauth_start(
+        tenant_id: str,
+        body: ShopifyOAuthStartRequest,
+        _admin: AdminDep,
+    ) -> dict[str, Any]:
+        """Begin Partner app OAuth — returns authorize_url for browser redirect."""
+        from monny.connectors import shopify_oauth
+
+        _require_tenant(tenant_id)
+        try:
+            result = shopify_oauth.start_oauth(
+                tenant_id=tenant_id,
+                shop_domain=body.shop_domain,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        append_audit(
+            settings.monny_data_dir,
+            tenant_id,
+            "shopify_oauth_start",
+            {"shop_domain": result.get("shop_domain"), "mode": result.get("mode")},
+        )
+        return result
+
+    @app.post("/api/tenants/{tenant_id}/connectors/shopify/disconnect")
+    def shopify_disconnect(tenant_id: str, _admin: AdminDep) -> dict[str, Any]:
+        from monny.connectors import shopify_oauth
+
+        _require_tenant(tenant_id)
+        result = shopify_oauth.disconnect(tenant_id=tenant_id)
+        append_audit(settings.monny_data_dir, tenant_id, "shopify_oauth_disconnect", {})
+        return result
+
+    @app.get("/api/connectors/shopify/mock-install")
+    def shopify_mock_install(state: str) -> RedirectResponse:
+        """Local/CI stand-in for Shopify authorize when Partner credentials are unset."""
+        from urllib.parse import urlencode
+
+        from monny.connectors import shopify_oauth
+
+        entry = shopify_oauth.peek_oauth_state(state)
+        if not entry:
+            return RedirectResponse(
+                shopify_oauth.app_redirect_url(status="error", error="state_expired"),
+                status_code=302,
+            )
+        shop = str(entry["shop_domain"])
+        code = shopify_oauth.mock_install_code(state)
+        q = {"code": code, "shop": shop, "state": state, "hmac": "mock"}
+        return RedirectResponse(
+            f"/api/connectors/shopify/callback?{urlencode(q)}",
+            status_code=302,
+        )
+
+    @app.get("/api/connectors/shopify/callback")
+    def shopify_oauth_callback(request: Request) -> RedirectResponse:
+        """Shopify (or mock) redirects here with code+shop+state."""
+        from monny.connectors import shopify_oauth
+
+        params = {k: v for k, v in request.query_params.items()}
+        try:
+            result = shopify_oauth.complete_oauth_callback(
+                code=str(params.get("code") or ""),
+                shop=str(params.get("shop") or ""),
+                state=str(params.get("state") or ""),
+                query=params,
+            )
+            append_audit(
+                settings.monny_data_dir,
+                result["tenant_id"],
+                "shopify_oauth_connected",
+                {
+                    "shop_domain": result.get("shop_domain"),
+                    "mode": result.get("mode"),
+                },
+            )
+            return RedirectResponse(result["redirect_url"], status_code=302)
+        except Exception:  # noqa: BLE001 — redirect with generic error for browser UX
+            return RedirectResponse(
+                shopify_oauth.app_redirect_url(status="error", error="oauth_failed"),
+                status_code=302,
+            )
+
     return app
+
+
+def _shopify_connector_status(cfg: TenantConfig) -> dict[str, Any]:
+    from monny.connectors import shopify_oauth
+
+    return shopify_oauth.connection_status(cfg)
 
 
 def _collect_secret_refs(cfg: TenantConfig) -> list[str]:

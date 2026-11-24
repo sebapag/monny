@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useState, type CSSProperties, type ReactNode } from 'react'
 import type {
   BillingConfig,
   DecisionAutonomy,
@@ -8,6 +8,7 @@ import type {
   TenantDetail,
   TenantListItem,
 } from './api'
+import { disconnectShopify, startShopifyOAuth } from './api'
 import {
   billingFromConfig,
   chargeExplainers,
@@ -20,6 +21,10 @@ import {
   adminSectionById,
   type AdminSectionId,
 } from './adminNav'
+import {
+  COMMERCE_CONNECTORS,
+  isShopifyConnected,
+} from './commerceConnectors'
 import {
   isPlusEntitled,
   mergeSkills,
@@ -49,6 +54,8 @@ type Props = {
   usersPanel: ReactNode
   saveNote: string | null
   error: string | null
+  onReloadTenant: () => Promise<void>
+  connectorFlash?: string | null
 }
 
 export function AdminWorkspace({
@@ -65,8 +72,12 @@ export function AdminWorkspace({
   usersPanel,
   saveNote,
   error,
+  onReloadTenant,
+  connectorFlash,
 }: Props) {
   const [cfg, setCfg] = useState<TenantConfig>(detail.config)
+  const [oauthBusy, setOauthBusy] = useState(false)
+  const [oauthError, setOauthError] = useState<string | null>(null)
   useEffect(() => setCfg(detail.config), [detail])
 
   const set = <K extends keyof TenantConfig>(key: K, value: TenantConfig[K]) =>
@@ -88,6 +99,53 @@ export function AdminWorkspace({
     section === 'plan' ||
     section === 'office' ||
     section === 'rules'
+
+  const connector = detail.shopify_connector
+  const shopifyLinked =
+    Boolean(connector?.connected) || isShopifyConnected(cfg.shopify)
+  const shopifySecretOk = Boolean(
+    connector?.token_configured ?? secretStatus(cfg.shopify.auth.secret_ref),
+  )
+  const shopName =
+    connector?.shop_name || cfg.shopify.oauth?.shop_name || cfg.display_name
+  const scopesGranted =
+    connector?.scopes_granted || cfg.shopify.oauth?.scopes_granted || []
+
+  const connectShopifyOAuth = async () => {
+    const domain = (cfg.shopify.shop_domain || '').trim()
+    if (!domain) return
+    setOauthBusy(true)
+    setOauthError(null)
+    try {
+      const result = await startShopifyOAuth(tenantId, domain)
+      if (result.completed) {
+        await onReloadTenant()
+        return
+      }
+      if (result.authorize_url) {
+        window.location.assign(result.authorize_url)
+        return
+      }
+      setOauthError('URL di autorizzazione Shopify assente.')
+    } catch (err) {
+      setOauthError(err instanceof Error ? err.message : 'OAuth Shopify non riuscito')
+    } finally {
+      setOauthBusy(false)
+    }
+  }
+
+  const disconnectShopifyOAuth = async () => {
+    setOauthBusy(true)
+    setOauthError(null)
+    try {
+      await disconnectShopify(tenantId)
+      await onReloadTenant()
+    } catch (err) {
+      setOauthError(err instanceof Error ? err.message : 'Disconnessione non riuscita')
+    } finally {
+      setOauthBusy(false)
+    }
+  }
 
   const saveBar = needsConfigSave ? (
     <div className="admin-save-bar">
@@ -414,6 +472,174 @@ export function AdminWorkspace({
                       })
                     }
                   />
+                </div>
+              </div>
+            )}
+
+            {section === 'connectors' && (
+              <div className="admin-block" data-testid="admin-commerce-connectors">
+                <FieldHelp>
+                  Shopify si collega con installazione OAuth dell’app Partner (nessun token da
+                  incollare). Dominio e access token restano portable per tenant. Gli altri store
+                  restano «Prossimamente».
+                </FieldHelp>
+                {connectorFlash ? (
+                  <p className="status-line" data-testid="connector-flash">
+                    {connectorFlash}
+                  </p>
+                ) : null}
+                {oauthError ? <p className="error">{oauthError}</p> : null}
+                <div className="connector-grid" data-testid="connector-grid">
+                  {COMMERCE_CONNECTORS.map((provider) => {
+                    const included = provider.status === 'included'
+                    const isShopify = provider.id === 'shopify'
+                    return (
+                      <article
+                        key={provider.id}
+                        className={`connector-card${included ? ' is-included' : ' is-soon'}${
+                          isShopify && shopifyLinked ? ' is-connected' : ''
+                        }`}
+                        data-testid={`connector-${provider.id}`}
+                        data-status={provider.status}
+                        aria-disabled={!included}
+                      >
+                        <div
+                          className="connector-logo"
+                          style={
+                            included
+                              ? ({ '--connector-brand': provider.brand } as CSSProperties)
+                              : undefined
+                          }
+                          aria-hidden
+                        >
+                          <svg viewBox="0 0 48 48" width="40" height="40">
+                            <path
+                              d={provider.mark}
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2.4"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                          </svg>
+                        </div>
+                        <div className="connector-body">
+                          <strong className="connector-name">{provider.name}</strong>
+                          <span className="connector-blurb">{provider.blurb}</span>
+                          {!included ? (
+                            <span
+                              className="connector-soon"
+                              data-testid={`connector-soon-${provider.id}`}
+                            >
+                              Prossimamente
+                            </span>
+                          ) : null}
+                        </div>
+                        {isShopify ? (
+                          <div className="connector-actions">
+                            {shopifyLinked ? (
+                              <div
+                                className="connector-connected-meta"
+                                data-testid="connector-shopify-meta"
+                              >
+                                <strong data-testid="connector-shopify-name">{shopName}</strong>
+                                <span className="muted" data-testid="connector-shopify-domain">
+                                  {cfg.shopify.shop_domain}
+                                </span>
+                                <div className="secret-status-row">
+                                  <span>Access token OAuth</span>
+                                  <span className={`pill ${shopifySecretOk ? 'ok' : 'miss'}`}>
+                                    {shopifySecretOk ? 'Attivo' : 'Mancante'}
+                                  </span>
+                                </div>
+                                {scopesGranted.length > 0 ? (
+                                  <p className="field-help" data-testid="connector-shopify-scopes">
+                                    Scope: {scopesGranted.join(', ')}
+                                  </p>
+                                ) : null}
+                              </div>
+                            ) : (
+                              <div className="field">
+                                <label htmlFor="connector-shop-domain">Dominio *.myshopify.com</label>
+                                <input
+                                  id="connector-shop-domain"
+                                  data-testid="connector-shop-domain"
+                                  value={cfg.shopify.shop_domain}
+                                  onChange={(e) =>
+                                    set('shopify', {
+                                      ...cfg.shopify,
+                                      shop_domain: e.target.value,
+                                    })
+                                  }
+                                  placeholder="mio-negozio.myshopify.com"
+                                />
+                              </div>
+                            )}
+                            <div className="connector-cta-row">
+                              {shopifyLinked ? (
+                                <>
+                                  <span
+                                    className="pill ok"
+                                    data-testid="connector-shopify-status"
+                                  >
+                                    Collegato
+                                  </span>
+                                  <button
+                                    type="button"
+                                    className="btn btn-ghost"
+                                    data-testid="connector-shopify-reconnect"
+                                    disabled={busy || oauthBusy}
+                                    onClick={() => void connectShopifyOAuth()}
+                                  >
+                                    Ricollega
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="btn btn-ghost"
+                                    data-testid="connector-shopify-disconnect"
+                                    disabled={busy || oauthBusy}
+                                    onClick={() => void disconnectShopifyOAuth()}
+                                  >
+                                    Disconnetti
+                                  </button>
+                                </>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className="btn btn-primary"
+                                  data-testid="connector-shopify-connect"
+                                  disabled={
+                                    busy ||
+                                    oauthBusy ||
+                                    !(cfg.shopify.shop_domain || '').trim()
+                                  }
+                                  onClick={() => void connectShopifyOAuth()}
+                                >
+                                  {oauthBusy ? 'Apertura Shopify…' : 'Collega con Shopify'}
+                                </button>
+                              )}
+                            </div>
+                            <p className="field-help">
+                              Installazione OAuth Partner app → access token salvato in{' '}
+                              <code>data/{'{tenant}'}/secrets.json</code> (ref{' '}
+                              <code>{cfg.shopify.auth.secret_ref}</code>). Nessun token da
+                              incollare in Admin.
+                            </p>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            className="btn connector-disabled-btn"
+                            disabled
+                            tabIndex={-1}
+                            aria-disabled="true"
+                          >
+                            Non disponibile
+                          </button>
+                        )}
+                      </article>
+                    )
+                  })}
                 </div>
               </div>
             )}

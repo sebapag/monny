@@ -9,6 +9,7 @@ shopify:
   - read_products
   - write_content
   - read_orders
+  connected: false
 ads:
   google:
     customer_id: 111-222-3333

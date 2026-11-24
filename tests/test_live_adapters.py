@@ -80,4 +80,35 @@ def test_apply_action_stub_when_not_live(monkeypatch):
         tenant, action_type="pause_campaign", entity_id="g-200", dry_run=True
     )
     assert result["status"] == "applied_stub"
+    meta = meta_ads.apply_action(
+        tenant, action_type="pause_campaign", entity_id="1200", dry_run=True
+    )
+    assert meta["status"] == "applied_stub"
+    get_settings.cache_clear()
+
+
+def test_meta_live_pause_posts(monkeypatch):
+    monkeypatch.setenv("MONNY_LIVE", "1")
+    monkeypatch.setenv("MONNY_DRY_RUN", "0")
+    monkeypatch.setenv("META_ADS_DEMO", "meta-token")
+    get_settings.cache_clear()
+    tenant = load_tenant("demo", ROOT / "tenants")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert "1200" in str(request.url)
+        assert request.url.params.get("status") == "PAUSED"
+        return httpx.Response(200, json={"success": True})
+
+    real_client = httpx.Client
+
+    def fake_client(*args, **kwargs):
+        kwargs["transport"] = httpx.MockTransport(handler)
+        return real_client(*args, **kwargs)
+
+    monkeypatch.setattr(meta_ads.httpx, "Client", fake_client)
+    result = meta_ads.apply_action(
+        tenant, action_type="pause_campaign", entity_id="1200", dry_run=False
+    )
+    assert result["status"] == "applied"
+    assert result["mode"] == "live"
     get_settings.cache_clear()

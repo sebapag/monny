@@ -828,6 +828,7 @@ function App() {
   const [error, setError] = useState<string | null>(null)
   const [tenantDetail, setTenantDetail] = useState<TenantDetail | null>(null)
   const [saveNote, setSaveNote] = useState<string | null>(null)
+  const [connectorFlash, setConnectorFlash] = useState<string | null>(null)
   const [latestReport, setLatestReport] = useState<Report | null>(null)
   /** Report shown in the dedicated popup after a run (not on artifact load). */
   const [reportPopup, setReportPopup] = useState<Report | null>(null)
@@ -854,6 +855,28 @@ function App() {
     }
     return () => window.removeEventListener('hashchange', onHash)
   }, [])
+
+  useEffect(() => {
+    const raw = window.location.hash.replace(/^#/, '')
+    const qIndex = raw.indexOf('?')
+    if (qIndex < 0) return
+    const params = new URLSearchParams(raw.slice(qIndex + 1))
+    const shopify = params.get('shopify')
+    if (!shopify) return
+    if (shopify === 'connected') {
+      setConnectorFlash('Shopify collegato con OAuth. Access token salvato nel tenant.')
+    } else if (shopify === 'error') {
+      setConnectorFlash('Collegamento Shopify non riuscito. Riprova «Collega con Shopify».')
+    }
+    // Clean query from hash without leaving the section
+    window.history.replaceState(null, '', `${window.location.pathname}#admin/connectors`)
+    setRoute({ mode: 'admin', section: 'connectors' })
+    if (authUser && canAccessAdmin(authUser.role)) {
+      getTenant(tenantId)
+        .then(setTenantDetail)
+        .catch(() => undefined)
+    }
+  }, [authUser, tenantId])
 
   useEffect(() => {
     if (isSupabaseRuntime()) {
@@ -1410,6 +1433,10 @@ function App() {
               tenantId={tenantId}
               onSwitchTenant={switchTenant}
               tenantLabel={tenantLabel}
+              onReloadTenant={async () => {
+                setTenantDetail(await getTenant(tenantId))
+              }}
+              connectorFlash={connectorFlash}
               knowledgePanel={<KnowledgeAdminPanel tenantId={tenantId} busy={busy} />}
               usersPanel={
                 <>

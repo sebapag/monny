@@ -687,10 +687,18 @@ Deno.serve(async (req) => {
       (req.method === "GET" && path === "/api/approvals") ||
       (req.method === "POST" && path.match(/^\/api\/approvals\/[^/]+\/decide$/)) ||
       (req.method === "POST" && (path === "/api/runs" || path === "/api/chat")) ||
-      (req.method === "GET" && path.match(/^\/api\/runs\/[^/]+$/))
+      (req.method === "GET" && path.match(/^\/api\/runs\/[^/]+$/)) ||
+      path.match(/^\/api\/tenants\/[^/]+\/connectors\//) ||
+      path.match(/^\/api\/connectors\/shopify\//)
     ) {
       const proxied = await proxyWorker(req, path);
       if (proxied) return proxied;
+      if (path.includes("/connectors/shopify")) {
+        return err(
+          "OAuth Shopify richiede il worker LangGraph (imposta WORKER_URL).",
+          503,
+        );
+      }
     }
 
     if (req.method === "GET" && path === "/api/approvals") {

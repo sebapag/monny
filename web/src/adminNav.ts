@@ -20,6 +20,12 @@ export const ADMIN_SECTIONS = [
     tint: 'lavender',
   },
   {
+    id: 'connectors',
+    title: 'Connettori commerce',
+    blurb: 'Shopify incluso; altri store in arrivo (grigio).',
+    tint: 'peach',
+  },
+  {
     id: 'plan',
     title: 'Piano e reparti',
     blurb: 'Quali reparti sono nel piano e partono nell’agent.',
@@ -61,12 +67,12 @@ export function adminSectionById(id: AdminSectionId) {
   return ADMIN_SECTIONS.find((s) => s.id === id)!
 }
 
-/** Parse `#admin` or `#admin/spend` (also tolerates `#/admin/...`). */
+/** Parse `#admin` or `#admin/spend` (also tolerates `#/admin/...` and `?query`). */
 export function parseAdminPath(raw: string): {
   mode: 'admin'
   section: AdminSectionId | null
 } | null {
-  const cleaned = raw.replace(/^\/+/, '')
+  const cleaned = raw.replace(/^\/+/, '').split('?')[0] ?? ''
   if (cleaned === 'admin') return { mode: 'admin', section: null }
   const m = cleaned.match(/^admin\/([a-z_]+)$/)
   if (!m) return null

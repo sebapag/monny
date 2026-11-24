@@ -64,5 +64,13 @@ export default defineConfig({
         viewport: { width: 1280, height: 800 },
       },
     },
+    {
+      name: 'desktop-commerce-connectors',
+      testMatch: /admin-commerce-connectors\.spec\.ts/,
+      use: {
+        browserName: 'chromium',
+        viewport: { width: 1280, height: 900 },
+      },
+    },
   ],
 })
